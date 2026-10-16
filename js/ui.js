@@ -48,14 +48,53 @@
     const p = v => (v < 10 ? '0' : '') + v;
     return p(h) + ':' + p(m) + ':' + p(s);
   }
+  /** Oynama süresi: 12 sa 30 dk · 45 dk · 1 dk'dan az. Veri yoksa tire. */
+  function fmtPlay(sec) {
+    if (sec == null || !isFinite(+sec) || +sec < 0) return '—';
+    sec = Math.floor(+sec);
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
+    if (h > 0) return h + ' sa' + (m ? ' ' + m + ' dk' : '');
+    if (m > 0) return m + ' dk';
+    return sec > 0 ? '1 dk\'dan az' : '0 dk';
+  }
+  /** "az önce" · "5 dk önce" · "2 sa önce" · "3 gün önce" (ms zaman damgasından) */
+  function fmtAgo(ms) {
+    if (!(+ms > 0)) return 'bilinmiyor';
+    const d = Math.max(0, (Date.now() - +ms) / 1000);
+    if (d < 90) return 'az önce';
+    if (d < 3600) return Math.round(d / 60) + ' dk önce';
+    if (d < 86400) return Math.round(d / 3600) + ' sa önce';
+    if (d < 86400 * 60) return Math.round(d / 86400) + ' gün önce';
+    return Math.round(d / 86400 / 30) + ' ay önce';
+  }
+  function fmtDate(ms) {
+    if (!(+ms > 0)) return '—';
+    try { return new Date(+ms).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return '—'; }
+  }
   function click() { try { if (FM.audio && typeof FM.audio.click === 'function') FM.audio.click(); } catch (e) { /* ses yok */ } }
   function sfx(name) { try { if (FM.audio && typeof FM.audio.play === 'function') FM.audio.play(name); } catch (e) { /* ses yok */ } }
-  function buzz(ms) {
+  /* ---------- ayarlar (tanımsız = varsayılan; eski kayıtlar yeni anahtarları bilmez) ---------- */
+  const SET_DEF = { haptic: true, shake: true, aimAssist: true, notify: false, lefty: false, btnSize: 'M' };
+  function setting(k) {
+    const s = (FM.save && FM.save.settings) || {};
+    const v = s[k];
+    return v === undefined || v === null ? SET_DEF[k] : v;
+  }
+  /* ---------- titreşim: FM.haptic(kind) — yalnızca ARAYÜZ tetikler (olaylar aşağıda) ---------- */
+  const HAP = {
+    pick: [14], ready: [20, 45, 34], hit: [28], death: [70, 45, 110], tap: [8], win: [34, 55, 34, 55, 120],
+    count: [14], aim: [5]
+  };
+  function vibrate(p) {
     try {
       const ua = navigator.userActivation;
-      if (navigator.vibrate && (!ua || ua.hasBeenActive)) navigator.vibrate(ms);
+      if (setting('haptic') === false) return false;
+      if (navigator.vibrate && (!ua || ua.hasBeenActive)) return !!navigator.vibrate(p);
     } catch (e) { /* titreşim yok */ }
+    return false;
   }
+  FM.haptic = function (kind) { return vibrate(HAP[kind] || HAP.tap); };
+  function buzz(ms) { vibrate(ms); }
   /** Öğe tam ekranı destekleniyor mu? (iPhone Safari'de yok: düğmeyi hiç gösterme) */
   function fsOK() {
     try {
@@ -75,7 +114,7 @@
   function lsSet(k, v) { try { if (window.localStorage) localStorage.setItem(k, v); } catch (e) { /* özel sekme vb. */ } }
   function $(sel, el) { return (el || root).querySelector(sel); }
   function $$(sel, el) { return Array.prototype.slice.call((el || root).querySelectorAll(sel)); }
-  function hashStr(s) { let h = 2166136261; s = String(s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; }
+  function hashStr(s) { let h = 2166136261; s = String(s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; }   // yalnızca çizim çeşitliliği için (sosyal veri UYDURMAZ)
 
   /* =====================================================================
      1) SVG İKON KÜTÜPHANESİ (kalın dış hatlı "oyun" ikonları)
@@ -161,7 +200,12 @@
     share: [['s', 'M5 12.6v6.2c0 1 .8 1.8 1.8 1.8h10.4c1 0 1.8-.8 1.8-1.8v-6.2'], ['f', 'M12 1.8l6 6h-4v7.4h-4V7.8H6z']],
     smile: [['a', circ(12, 12, 9.8)], ['d', ell(8.7, 9.6, 1.4, 1.8)], ['d', ell(15.3, 9.6, 1.4, 1.8)], ['ds', 'M7.4 13.6c1.1 2.3 2.7 3.5 4.6 3.5s3.5-1.2 4.6-3.5', 'stroke-width="2.3"']],
     wifi: [['s', 'M2.6 9.2a13.4 13.4 0 0 1 18.8 0M5.9 12.6a8.6 8.6 0 0 1 12.2 0M9.2 16a3.9 3.9 0 0 1 5.6 0'], ['f', circ(12, 19.4, 1.9)]],
-    halo: [['sa','M6.5 4.2c0-1 2.5-1.8 5.5-1.8s5.5.8 5.5 1.8-2.5 1.8-5.5 1.8-5.5-.8-5.5-1.8z'], ['f', circ(12, 14, 7.6)], ['d', circ(9.4, 13, 1.1)], ['d', circ(14.6, 13, 1.1)], ['ds', 'M9.2 16.6c1.6 1.4 4 1.4 5.6 0', 'stroke-width="1.8"']]
+    halo: [['sa','M6.5 4.2c0-1 2.5-1.8 5.5-1.8s5.5.8 5.5 1.8-2.5 1.8-5.5 1.8-5.5-.8-5.5-1.8z'], ['f', circ(12, 14, 7.6)], ['d', circ(9.4, 13, 1.1)], ['d', circ(14.6, 13, 1.1)], ['ds', 'M9.2 16.6c1.6 1.4 4 1.4 5.6 0', 'stroke-width="1.8"']],
+    aim: [['s', 'M12 2.6v4.8M12 16.6v4.8M2.6 12h4.8M16.6 12h4.8'], ['s', 'M12 6.8a5.2 5.2 0 1 0 .01 0z']],
+    shieldL: [['f', 'M12 2.2 3.6 5.2v6.2c0 5 3.5 8.6 8.4 10.4 4.9-1.8 8.4-5.4 8.4-10.4V5.2z'], ['d', starPath(12, 12.4, 4.6, 2, 5)]],
+    clock: [['f', circ(12, 12, 9.8)], ['ds', 'M12 6.4V12l3.8 2.3', 'stroke-width="2.3"']],
+    bell: [['f', 'M12 2.4c-3.5 0-6.2 2.7-6.2 6.2v4.2L3.6 16v1.8h16.8V16l-2.2-3.2V8.6c0-3.5-2.7-6.2-6.2-6.2z'], ['f', 'M9.4 19.4a2.6 2.6 0 0 0 5.2 0z']],
+    plug: [['f', 'M8 2.6h2.4v5H8zM13.6 2.6H16v5h-2.4z'], ['f', 'M5.6 7.4h12.8v4.2a6.4 6.4 0 0 1-12.8 0z'], ['f', 'M10.8 16.6h2.4v4.6h-2.4z']]
   };
   /* emoji -> vektör ikon (görev / geliştirme / ödül satırları) */
   const EMO = {
@@ -1746,13 +1790,15 @@
     try { return !!((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window)); } catch (e) { return false; }
   })();
   FM.isTouch = touchMode;
+  const aimMark = '<i class="tb-can" aria-hidden="true">' + svg('aim') + '</i><span class="tb-aim" aria-hidden="true"><i class="am-ln"></i><i class="am-hd"></i></span>';
   Ls.race.innerHTML =
     '<button class="rbtn b-purple pz-btn" data-act="pause" aria-label="Duraklat" title="Duraklat (Esc)">' + svg('pause') + '</button>' +
     '<div class="tc">' +
       '<div class="tbtn tb-slide" data-tc="slide" role="button" aria-label="Kay"><span class="tb-in">' + svg('down', 'tb-ico') + '<b>KAY</b></span></div>' +
-      '<div class="tbtn tb-item" data-tc="item" role="button" aria-label="Eşya"><span class="tb-in"><span class="tb-itm"></span><b>EŞYA</b></span></div>' +
-      '<div class="tbtn tb-power" data-tc="power" role="button" aria-label="Özel güç"><span class="tb-ring"></span><span class="tb-in"><span class="tb-pp"></span><b>GÜÇ</b></span></div>' +
+      '<div class="tbtn tb-item" data-tc="item" role="button" aria-label="Eşya"><span class="tb-in"><span class="tb-itm"></span><b class="tb-lb">EŞYA</b></span>' + aimMark + '</div>' +
+      '<div class="tbtn tb-power" data-tc="power" role="button" aria-label="Özel güç"><span class="tb-ring"></span><span class="tb-in"><span class="tb-pp"></span><b class="tb-lb">GÜÇ</b></span>' + aimMark + '</div>' +
       '<div class="tbtn tb-jump" data-tc="jump" role="button" aria-label="Zıpla"><span class="tb-in">' + svg('up', 'tb-ico') + '<b>ZIPLA</b></span></div>' +
+      '<div class="tc-hint" aria-hidden="true"><span class="th-t">Basılı tut, sürükle, bırak!</span><i class="th-fg"></i></div>' +
     '</div>' +
     '<button class="rbtn b-orange emo-btn" data-act="emotog" aria-label="Emoji gönder" title="Emoji gönder">' + svg('smile') + '</button>' +
     '<div class="emo emo-race">' + ['👍', '😂', '😎', '😡', '🔥', '💀', '👋', 'GG'].map(e => '<button class="emo-b" data-act="emo" data-e="' + e + '">' + e + '</button>').join('') + '</div>' +
@@ -1782,9 +1828,65 @@
     el.addEventListener('pointercancel', tcUp);
     el.addEventListener('pointerleave', tcUp);
     el.addEventListener('lostpointercapture', tcUp);
+    if (k === 'item' || k === 'power') el.addEventListener('pointermove', aimMove);
   }
   Ls.race.addEventListener('contextmenu', e => e.preventDefault());
   function raceInput() { return (S.mode === 'race' || S.mode === 'count') && !S.paused; }
+
+  /* ---------- yönlü atış (EŞYA / GÜÇ): bas → sürükle → bırak ----------
+     FM.game.aimable(kind) false (ya da yok) → eskisi gibi basınca hemen kullanılır.
+     true → basınca FM.input.aim = 'item'|'ab'; parmağın bastığı noktaya göre yönü (ax, ay birim vektör) güncellenir;
+     ~18 px'ten az hareket = ölü bölge (0, 0 = varsayılan yön). Bırakınca use/ab = true, aim = null (ax, ay son yönü tutar).
+     İptal (pointercancel) ateş ETMEZ. Bir anda tek nişan; ZIPLA/KAY'a başka parmakla basmak serbest. */
+  const AIM_DEAD = 18, AIM_MAX = 110;
+  const AIM = { k: null, id: -1, x0: 0, y0: 0, el: null, ax: 0, ay: 0, dz: true };
+  function aimable(kind) {
+    try { return !!(FM.game && typeof FM.game.aimable === 'function' && FM.game.aimable(kind)); } catch (e) { return false; }
+  }
+  function aimVis(on) {
+    const el = AIM.el; if (!el) return;
+    el.classList.toggle('aiming', !!on);
+    if (!on) { el.classList.remove('dz', 'armed'); el.style.removeProperty('--a'); el.style.removeProperty('--len'); }
+  }
+  function aimStart(el, kind, e) {
+    const I = FM.input; if (!I) return false;
+    AIM.k = kind; AIM.id = e.pointerId; AIM.x0 = e.clientX; AIM.y0 = e.clientY; AIM.el = el; AIM.ax = 0; AIM.ay = 0; AIM.dz = true;
+    try { el.setPointerCapture(e.pointerId); } catch (x) { /* yakalama yok: yine çalışır */ }
+    I.aim = kind; I.ax = 0; I.ay = 0;
+    el.classList.add('aiming', 'dz'); el.classList.remove('armed');
+    el.style.setProperty('--len', '0px');
+    FM.haptic('aim');
+    aimHintDone();
+    return true;
+  }
+  function aimMove(e) {
+    if (!AIM.k || e.pointerId !== AIM.id || e.currentTarget !== AIM.el) return;
+    const I = FM.input; if (!I) return;
+    const dx = e.clientX - AIM.x0, dy = e.clientY - AIM.y0, d = Math.sqrt(dx * dx + dy * dy);
+    const el = AIM.el;
+    if (d < AIM_DEAD) {
+      if (!AIM.dz) { AIM.dz = true; el.classList.add('dz'); el.classList.remove('armed'); }
+      AIM.ax = 0; AIM.ay = 0; I.ax = 0; I.ay = 0;
+      return;
+    }
+    if (AIM.dz) { AIM.dz = false; el.classList.remove('dz'); el.classList.add('armed'); FM.haptic('aim'); }
+    AIM.ax = Math.round(dx / d * 100) / 100; AIM.ay = Math.round(dy / d * 100) / 100;
+    I.ax = AIM.ax; I.ay = AIM.ay;
+    el.style.setProperty('--a', (Math.atan2(dy, dx) * 180 / Math.PI).toFixed(1) + 'deg');
+    el.style.setProperty('--len', (14 + Math.min(AIM_MAX, d - AIM_DEAD) * .8).toFixed(0) + 'px');
+  }
+  /** Nişanı bitir: fire = true → bırakıldı (ateş), false → iptal */
+  function aimEnd(fire) {
+    if (!AIM.k) return;
+    const I = FM.input, kind = AIM.k;
+    if (I) {
+      if (fire && raceInput()) { I.ax = AIM.ax; I.ay = AIM.ay; if (kind === 'item') I.use = true; else I.ab = true; FM.haptic('tap'); }
+      else { I.ax = 0; I.ay = 0; }
+      I.aim = null;
+    }
+    aimVis(false);
+    AIM.k = null; AIM.id = -1; AIM.el = null; AIM.ax = 0; AIM.ay = 0;
+  }
   function tcDown(e) {
     const el = e.currentTarget, k = el.getAttribute('data-tc'), set = TC[k];
     if (!set) return;
@@ -1795,16 +1897,25 @@
     el.classList.add('down');
     if (!first || !raceInput()) return;
     const I = FM.input; if (!I) return;
-    if (k === 'jump') { I.jp = true; I.jh = true; }
-    else if (k === 'slide') { I.dp = true; I.dh = true; }
-    else if (k === 'item') I.use = true;
-    else if (k === 'power') I.ab = true;
-    buzz(k === 'power' ? 18 : 8);
+    if (k === 'jump') { I.jp = true; I.jh = true; buzz(8); }
+    else if (k === 'slide') { I.dp = true; I.dh = true; buzz(8); }
+    else {
+      const kind = k === 'item' ? 'item' : 'ab', P = S.player;
+      // GÜÇ: yalnızca dolunca nişan alınır (dolmamışsa basış eskisi gibi motora gider → "hazır değil" geri bildirimi)
+      const ready = kind === 'item' ? !!(P && P.item) : !!(P && (+P.charge || 0) >= 100);
+      if (ready && aimable(kind)) {
+        if (!AIM.k) aimStart(el, kind, e);
+        return;                                  // nişan sürerken ikinci nişan düğmesi yok sayılır
+      }
+      if (kind === 'item') I.use = true; else I.ab = true;
+      buzz(kind === 'ab' ? 18 : 8);
+    }
   }
   function tcUp(e) {
     const el = e.currentTarget, k = el.getAttribute('data-tc'), set = TC[k];
     if (!set || !set.has(e.pointerId)) return;
     set.delete(e.pointerId);
+    if (AIM.k && AIM.el === el && e.pointerId === AIM.id) aimEnd(e.type === 'pointerup');
     if (set.size) return;
     el.classList.remove('down');
     const I = FM.input; if (!I) return;
@@ -1812,6 +1923,7 @@
     else if (k === 'slide') I.dh = false;
   }
   function releaseAllTouch() {
+    aimEnd(false);
     for (const k in TC) { TC[k].clear(); if (tcEls[k]) tcEls[k].classList.remove('down'); }
     const I = FM.input; if (I) { I.jh = false; I.dh = false; }
   }
@@ -1821,9 +1933,54 @@
     Ls.race.classList.toggle('touch', touchMode);
     checkRotate();
   }
+
+  /* ---------- ilk yönlü atış ipucu: "Basılı tut, sürükle, bırak!" (bir kez; FM.save.seen + yedek localStorage) ---------- */
+  function seenGet(k) { try { const s = FM.save && FM.save.seen; if (s && s[k]) return true; } catch (e) { /* yok say */ } return !!lsGet('fm-seen-' + k); }
+  function seenSet(k) {
+    try { if (FM.save) { FM.save.seen = FM.save.seen || {}; FM.save.seen[k] = 1; if (typeof FM.persist === 'function') FM.persist(); } } catch (e) { /* yok say */ }
+    lsSet('fm-seen-' + k, '1');
+  }
+  let hintT = 0;
+  function aimHint() {
+    if (seenGet('aimHint') || st.hintShown) return;
+    const h = $('.tc-hint', Ls.race); if (!h) return;
+    st.hintShown = true;
+    h.classList.add('on');
+    clearTimeout(hintT);
+    hintT = setTimeout(() => { h.classList.remove('on'); seenSet('aimHint'); }, 4600);
+  }
+  function aimHintDone() {
+    const h = $('.tc-hint', Ls.race);
+    if (h && h.classList.contains('on')) { h.classList.remove('on'); clearTimeout(hintT); }
+    seenSet('aimHint');
+  }
+
+  /** EŞYA / GÜÇ düğmesinin MANTIKSAL tuval birimindeki dikdörtgeni {x, y, w, h} (render-hud'un uçan eşya hedefi); görünmüyorsa null */
+  UI.slotRect = function (kind) {
+    const el = (kind === 'ab' || kind === 'power') ? tcEls.power : kind === 'item' ? tcEls.item : null;
+    const V = FM.view;
+    if (!el || !V || !(V.S > 0) || !touchMode || st.view !== 'race' || !Ls.race.classList.contains('live') || Ls.race.classList.contains('spec') || Ls.rot.classList.contains('on')) return null;
+    const r = el.getBoundingClientRect();
+    if (!(r.width > 0)) return null;
+    const k = (V.dpr || 1) / V.S;
+    return { x: r.left * k, y: r.top * k, w: r.width * k, h: r.height * k };
+  };
+  /** Eşya yuvaya uçup vardı (hud:arrive) → düğme zıplar */
+  function bumpSlot(kind) {
+    const el = kind === 'ab' ? tcEls.power : tcEls.item;
+    if (!el) return;
+    el.classList.remove('arrive'); void el.offsetWidth; el.classList.add('arrive');
+  }
+
   let tcRaf = 0;
-  const tcS = { item: undefined, pct: -1, full: null, ch: null, show: null, pz: null };
+  const tcS = { item: undefined, pct: -1, full: null, ch: null, show: null, pz: null, lefty: null, bs: null };
   function startTcLoop() { if (!tcRaf) tcRaf = requestAnimationFrame(tcLoop); }
+  /** Düğme boyutu (S/M/L) ve solak düzen ayarlarını katmana uygula */
+  function applyTcPrefs() {
+    const bs = String(setting('btnSize') || 'M').toUpperCase(), lf = !!setting('lefty');
+    if (bs !== tcS.bs) { tcS.bs = bs; Ls.race.classList.toggle('bs-s', bs === 'S'); Ls.race.classList.toggle('bs-l', bs === 'L'); }
+    if (lf !== tcS.lefty) { tcS.lefty = lf; Ls.race.classList.toggle('lefty', lf); }
+  }
   function tcLoop() {
     tcRaf = 0;
     if (st.view !== 'race') return;
@@ -1837,19 +1994,31 @@
     const mpc = !!(mpl && S.netRole);
     if (mpc !== tcS.mp) { tcS.mp = mpc; Ls.race.classList.toggle('mp', mpc); if (!mpc) Ls.race.classList.remove('emo-open'); }
     if (touchMode && P) {
+      applyTcPrefs();
       const it = P.item && FM.ITEMS && FM.ITEMS[P.item] ? P.item : null;
       if (it !== tcS.item) {
         tcS.item = it;
-        const box = $('.tb-itm', Ls.race);
-        if (box) box.innerHTML = it ? gi(it, 64, 'tb-gi') : '';
+        const box = $('.tb-itm', Ls.race), lb = $('.tb-lb', tcEls.item);
+        if (box) box.innerHTML = it ? gi(it, 80, 'tb-gi') : '<i class="tb-empty">' + svg('box') + '</i>';
+        if (lb) lb.textContent = it ? up(FM.ITEMS[it].n || 'EŞYA') : 'EŞYA';
         tcEls.item.classList.toggle('has', !!it);
+        tcEls.item.style.setProperty('--ic', it ? (FM.ITEMS[it].col || '#ffd23f') : '#ffd23f');
+        const ca = !!it && aimable('item');
+        tcEls.item.classList.toggle('can-aim', ca);
         if (it) { tcEls.item.classList.remove('pop'); void tcEls.item.offsetWidth; tcEls.item.classList.add('pop'); }
+        if (it && ca && !AIM.k) aimHint();
       }
       const pct = Math.round(clamp(+P.charge || 0, 0, 100));
       if (pct !== tcS.pct) { tcS.pct = pct; tcEls.power.style.setProperty('--p', String(pct)); }
       const full = pct >= 100;
-      if (full !== tcS.full) { tcS.full = full; tcEls.power.classList.toggle('full', full); }
-      if (P.id !== tcS.ch) { tcS.ch = P.id; const b = $('.tb-pp', Ls.race); if (b) b.innerHTML = pt(P.id, 64, { ring: false }); }
+      if (full !== tcS.full) {
+        tcS.full = full; tcEls.power.classList.toggle('full', full);
+        const lb = $('.tb-lb', tcEls.power); if (lb) lb.textContent = full ? 'HAZIR!' : 'GÜÇ';
+      }
+      if (P.id !== tcS.ch) {
+        tcS.ch = P.id; const b = $('.tb-pp', Ls.race); if (b) b.innerHTML = pt(P.id, 72, { ring: false });
+        tcEls.power.classList.toggle('can-aim', aimable('ab'));
+      }
     }
     tcRaf = requestAnimationFrame(tcLoop);
   }
@@ -1861,9 +2030,10 @@
     stopShowcases(); stopTicker();
     showLayer('scr', false); Ls.scr.innerHTML = '';
     clearResults(); clearFinal();
-    tcS.item = undefined; tcS.pct = -1; tcS.full = null; tcS.ch = null; tcS.show = null; tcS.spec = null; tcS.mp = null;
+    tcS.item = undefined; tcS.pct = -1; tcS.full = null; tcS.ch = null; tcS.show = null; tcS.spec = null; tcS.mp = null; tcS.lefty = null; tcS.bs = null;
     Ls.race.classList.remove('emo-open', 'spec');
     releaseAllTouch();
+    applyTcPrefs();
     Ls.race.classList.toggle('touch', touchMode);
     showLayer('race', true);
     startTcLoop();

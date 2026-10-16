@@ -1116,6 +1116,50 @@
     crackle(v.out, t + 0.05, 0.55, 14, 0.12, { bp: 3000, bq: 0.8 });
   });
 
+  /* ---------- 5. tur: yönlü atış, güç hazır, otomatik başlama geri sayımı, arkadaş bildirimi, kusursuz / kıl payı ---------- */
+  def('aimStart', 2, 1, 0.12, 0.12, 0, (v, t, k) => {          // nişan başladı: çok hafif "tık"
+    T(v.out, { w: 'sine', f: 720 * k, f2: 980 * k, pt: 0.04, t, a: 0.002, d: 0.07, g: 0.11 });
+    T(v.out, { w: 'triangle', f: 1900 * k, t, a: 0.001, d: 0.02, g: 0.03 });
+  });
+  def('aimRelease', 2, 2, 0.1, 0.32, 0.06, (v, t, k) => {      // bırakıldı: "fiyuv" fırlatma
+    N(v.out, { k: 'pink', t, a: 0.008, d: 0.18, g: 0.2, bp: 1900 * k, bp2: 600 * k, bq: 1.1, ft: 0.16 });
+    T(v.out, { w: 'triangle', f: 500 * k, f2: 190 * k, pt: 0.15, t, a: 0.003, d: 0.18, g: 0.17 });
+    T(v.out, { w: 'sine', f: 1500 * k, f2: 900 * k, pt: 0.05, t, a: 0.001, d: 0.05, g: 0.05 });
+  });
+  def('powerReady', 3, 1, 0.5, 0.95, 0.3, (v, t) => {          // özel güç doldu: parlak "ding-ding-dııng"
+    INS.pluck(v.out, t, mtof(72), 0.25, 0.1);
+    [84, 91, 96].forEach((m, i) => INS.bellS(v.out, t + 0.02 + i * 0.08, mtof(m), 0.14, 0.15 - i * 0.02));
+    N(v.out, { k: 'white', t: t + 0.05, a: 0.03, d: 0.35, g: 0.025, hp: 5200 });
+  });
+  def('mpTick', 3, 1, 0.3, 0.2, 0.05, (v, t, k, o) => {        // otomatik başlama geri sayımı: 5..1 yükselen tik
+    const n = clamp(o.n | 0, 1, 5), f = [1568, 1175, 988, 880, 784][n - 1];
+    T(v.out, { w: 'triangle', f, f2: f * 0.86, pt: 0.04, t, a: 0.001, d: 0.09, g: 0.2 });
+    T(v.out, { w: 'sine', f: f / 2, t, a: 0.001, d: 0.1, g: 0.12 });
+    if (n === 1) T(v.out, { w: 'sine', f: f * 2, t, a: 0.002, d: 0.16, g: 0.05 });
+  });
+  def('cdCancel', 2, 1, 0.5, 0.5, 0.12, (v, t) => {            // geri sayım iptal: inen iki nota
+    INS.bellS(v.out, t, mtof(74), 0.1, 0.12); INS.bellS(v.out, t + 0.11, mtof(67), 0.1, 0.12);
+  });
+  def('friendOn', 3, 1, 0.8, 1.1, 0.3, (v, t, k, o) => {       // arkadaş çevrimiçi / lobi kurdu: kapı zili + yükselen çan
+    const lob = !!o.lobby;
+    [76, 80, 83, lob ? 91 : 88].forEach((m, i) => INS.bellS(v.out, t + i * 0.075, mtof(m), 0.12, 0.13));
+    INS.pluck(v.out, t, mtof(64), 0.25, 0.08);
+    if (lob) DRUM.k && DRUM.k(v.out, t + 0.3, 0.35);
+  });
+  def('itemArrive', 2, 2, 0.1, 0.4, 0.1, (v, t, k) => {        // eşya yuvaya uçup yerleşti: "fiyuv-pop"
+    N(v.out, { k: 'pink', t, a: 0.04, d: 0.16, g: 0.12, bp: 700 * k, bp2: 2600 * k, bq: 1.1, ft: 0.14 });
+    T(v.out, { w: 'sine', f: 620 * k, f2: 1500 * k, pt: 0.06, t: t + 0.12, a: 0.002, d: 0.1, g: 0.2 });
+    T(v.out, { w: 'sine', f: 2200 * k, t: t + 0.16, a: 0.002, d: 0.14, g: 0.05 });
+  });
+  def('perfect', 2, 1, 0.3, 0.55, 0.22, (v, t) => {            // kusursuz iniş / zıplama: iki parlak ting
+    [88, 95].forEach((m, i) => INS.bellS(v.out, t + i * 0.07, mtof(m), 0.12, 0.13));
+    N(v.out, { k: 'white', t, a: 0.01, d: 0.18, g: 0.035, hp: 6200 });
+  });
+  def('nearmiss', 2, 1, 0.8, 0.5, 0.04, (v, t, k) => {         // kıl payı: yanından geçen "fiyuuv"
+    N(v.out, { k: 'pink', t, a: 0.05, d: 0.32, g: 0.2, bp: 3200 * k, bp2: 700 * k, bq: 1.4, ft: 0.3 });
+    T(v.out, { w: 'sine', f: 1300 * k, f2: 520 * k, pt: 0.25, t, a: 0.01, d: 0.3, g: 0.07 });
+  });
+
   /* ---------- arayüz ---------- */
   def('click', 3, 2, 0.06, 0.1, 0, (v, t) => {
     T(v.out, { w: 'sine', f: 1000, f2: 620, pt: 0.035, t, a: 0.002, d: 0.06, g: 0.2 });
@@ -2258,6 +2302,23 @@
   hook('match:end', d => { play(d && d.champion ? 'champion' : 'matchEnd', { exact: true }); duck(0.35, d && d.champion ? 4 : 2); });
   hook('meta:mission', () => play('mission', { when: 0.15, exact: true }));
   hook('meta:levelup', () => play('levelup', { when: 0.45, exact: true }));
+  // 5. tur: yönlü atış (MOTOR olayları), güç hazır, eşya yuvaya vardı, kusursuz / kıl payı (yalnız yerel oyuncu)
+  hook('aim:start', () => { if (!demo()) play('aimStart', { exact: true, vol: 0.8 }); });
+  hook('aim:end', d => { if (!demo() && d.fired) play('aimRelease', { vol: 0.9 }); });
+  hook('charge:full', d => { if (isP(d.r) && !demo()) play('powerReady', { exact: true }); });
+  hook('hud:arrive', () => { if (!demo()) play('itemArrive', { vol: 0.9 }); });
+  hook('perfect', d => { if (isP(d.r) && !demo()) play('perfect', { exact: true }); });
+  hook('nearmiss', d => { if (isP(d.r) && !demo()) play('nearmiss'); });
+  // otomatik başlama geri sayımı: her saniye tik; iptalde tek inen çan (geri sayım gerçekten sürüyorsa)
+  let cdOn = false;
+  hook('mp:countdown', d => {
+    const left = d.left == null ? null : (d.left | 0);
+    if (left != null && left >= 1) { cdOn = true; play('mpTick', { n: left, exact: true }); }
+    else { if (cdOn && d.reason && d.reason !== 'start') play('cdCancel', { exact: true }); cdOn = false; }
+  });
+  // arkadaş çevrimiçi oldu / açık lobi kurdu (uygulama içi bildirim sesi; ekranda kart ui.js'te)
+  hook('net:came', () => play('friendOn', { exact: true }));
+  hook('net:lobby-open', () => play('friendOn', { exact: true, lobby: true }));
 
   /* ---------- müzik olayları (ses kilitli olsa da istek kaydedilir) ---------- */
   function safeOn(ev, fn) { FM.on(ev, d => { try { fn(d || {}); } catch (e) { fail(e); } }); }

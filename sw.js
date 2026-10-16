@@ -111,3 +111,23 @@ self.addEventListener('fetch', ev => {
   if (isFresh(url, req)) { ev.respondWith(networkFirst(req, url)); return; }
   ev.respondWith(cacheFirst(req, CACHE));
 });
+
+/* Bildirime dokunma (arkadaş çevrimiçi oldu / lobi kurdu): açık oyun penceresini öne getir; kapalıysa oyunu aç.
+   Bildirimde oda kodu varsa (data.code): açık pencereye 'fm-join' mesajı gider (sayfa yenilenmez), kapalıysa ?oda=KOD ile açılır. */
+self.addEventListener('notificationclick', ev => {
+  ev.notification.close();
+  const data = ev.notification.data || {};
+  const code = String(data.code || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 12);
+  ev.waitUntil((async () => {
+    const scope = self.registration.scope;
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of list) {
+      if (c.url && c.url.indexOf(scope) === 0) {
+        try { await c.focus(); } catch (e) { }
+        if (code) { try { c.postMessage({ type: 'fm-join', code }); } catch (e) { } }
+        return;
+      }
+    }
+    try { await self.clients.openWindow(scope + (code ? '?oda=' + code : '')); } catch (e) { }
+  })());
+});

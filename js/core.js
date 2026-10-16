@@ -212,9 +212,14 @@ window.FM = window.FM || {};
   /* ---------------- kayıt sistemi ---------------- */
   const SAVE_KEY = 'fuatmorel_save_v2';
   FM.defaultSave = function () {
-    const trophies = {}; for (const k of FM.ORDER) trophies[k] = FM.CH[k].tr;
+    // Kupa sıfırlama (5. tur): herkes 0 kupayla başlar (FM.CH[k].tr artık yalnızca bilgi alanı, başlangıç değeri DEĞİL)
+    const trophies = {}; for (const k of FM.ORDER) trophies[k] = 0;
+    const now = Date.now();
     return {
       v: 2, coins: 500, gems: 10, xp: 0, level: 1,
+      trReset: 1,               // kupa sıfırlama göçü yapıldı işareti (normSave: !== 1 ise bir kerelik sıfırlanır)
+      created: now, since: now, // kaydın oluşturulma ve ilk oynama anı (ms); profil kartındaki "since"
+      h2h: {},                  // kafa kafaya: { pid: { nick, w, l, t } } (meta.js yönetir, en çok ~50 kişi)
       selChar: 'TAFTAF', rounds: 3,
       mode: 'classic',          // tek oyunculu son seçilen mod (FM.MODES id)
       map: 'random',            // tek oyunculu son seçilen harita: 'random' | FM.THEMES id
@@ -236,13 +241,24 @@ window.FM = window.FM || {};
     if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
     const obj = v => !!v && typeof v === 'object' && !Array.isArray(v);
     const num = (v, def) => (typeof v === 'number' && isFinite(v)) ? v : def;
+    // Göç bayrakları, varsayılan doldurma ÖNCE okunur (yoksa defaultSave'in trReset:1 / since:şimdi değeri eski kaydı "göçmüş" gösterirdi)
+    const needTrReset = s.trReset !== 1;
+    const hadSince = typeof s.since === 'number' && isFinite(s.since) && s.since > 0;
     // eksik alanları varsayılanla doldur (derin olmayan birleştirme + bilinen iç nesneler)
     for (const k in d) if (s[k] === undefined) s[k] = d[k];
     s.coins = Math.max(0, num(s.coins, d.coins)); s.gems = Math.max(0, num(s.gems, d.gems));
     s.xp = Math.max(0, num(s.xp, d.xp)); s.level = Math.max(1, Math.floor(num(s.level, d.level)));
     s.rounds = num(s.rounds, d.rounds);
-    if (!obj(s.trophies)) s.trophies = d.trophies;
-    for (const k of FM.ORDER) if (typeof s.trophies[k] !== 'number' || !isFinite(s.trophies[k])) s.trophies[k] = FM.CH[k].tr;
+    /* Kupa: 0..1e6 tam sayı. Eksik/bozuk değer 0 olur. BİR KEREYE MAHSUS göç: trReset !== 1 ise (eski kayıt, eski yedek,
+       içe aktarılan eski kayıt kodu) tüm karakter kupaları 0'lanır ve trReset = 1 yazılır; sonraki normSave kazanılan kupaya DOKUNMAZ. */
+    if (!obj(s.trophies)) s.trophies = {};
+    for (const k of FM.ORDER) {
+      const v = s.trophies[k];
+      s.trophies[k] = (!needTrReset && typeof v === 'number' && isFinite(v) && v > 0) ? Math.min(1e6, Math.round(v)) : 0;
+    }
+    for (const k of Object.keys(s.trophies)) if (FM.ORDER.indexOf(k) < 0) delete s.trophies[k];
+    s.trReset = 1;
+    if (!obj(s.h2h)) s.h2h = {};
     if (!obj(s.upgrades)) s.upgrades = {};
     if (!obj(s.stats)) s.stats = {};
     if (!obj(s.seen)) s.seen = {};
@@ -261,6 +277,8 @@ window.FM = window.FM || {};
     if (s.map !== 'random' && FM.themeIndex(s.map) < 0) s.map = 'random';
     s.rivals = Math.max(1, Math.min(FM.MAXR - 1, Math.round(num(s.rivals, d.rivals))));
     if (typeof s.created !== 'number' || !isFinite(s.created)) s.created = Date.now();   // kaydın ilk oluşturulma anı (bilgi)
+    // ilk oynama anı: eski kayıtta oluşturulma anı (o da yoksa şimdi) — bir kez yazılır, sonra değişmez
+    if (!hadSince) s.since = s.created > 0 ? s.created : Date.now();
     return s;
   };
   // Bozuk kayıt ASLA sessizce silinmez: üzerine varsayılan yazılmadan önce ham metin ayrı anahtara kopyalanır.

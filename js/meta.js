@@ -14,6 +14,8 @@
      daily      { last:'YYYY-MM-DD', streak }
      stats.mp*  çok oyunculu sayaçlar (mpRaces, mpWins, mpTop3, mpMatches, mpChamps); modeRaces{mod}, themeRaces{tema}
      Kayıt aktarma: exportCode / importCode / cloudSave / cloudLoad (en altta). pid ve cihaz ayarları içe aktarmada korunur.
+     5. tur (profil): trReset (1 = kupa sıfırlama göçü yapıldı; core.js normSave), since (ilk oynama ms), h2h { pid: {nick, w, l, t} },
+       stats.playSec (toplam oynama sn), stats.trBest (ulaşılan en yüksek toplam kupa). Profil kartı: FM.meta.card() + 'meta:card' olayı.
 
    Eşitlik notu: game.js botlara oyuncunun mods() değerlerini kopyalar; bu yüzden geliştirmeler yarışı adil tutar.
    mods() her zaman abLv ∈ [1,5], chargeMul ∈ [1, 1.24] ve geçerli bir başlangıç eşyası döndürür.
@@ -77,6 +79,22 @@
     { coins: 600, gems: 4, xp: 150 }
   ];
   const REROLL_GEMS = 5;              // günde 1 görev değiştirme ücretsiz, sonrakiler elmasla
+
+  // Ligler: TOPLAM kupaya (7 karakterin toplamı, hepsi 0'dan başlar) göre. min artan sırada olmalı.
+  const LEAGUES = [
+    { id: 'bronz',  n: 'Bronz',  col: '#cd7f32', min: 0 },
+    { id: 'gumus',  n: 'Gümüş',  col: '#c4ccd8', min: 300 },
+    { id: 'altin',  n: 'Altın',  col: '#ffd23f', min: 800 },
+    { id: 'elmas',  n: 'Elmas',  col: '#5fe0ff', min: 1600 },
+    { id: 'efsane', n: 'Efsane', col: '#ff4fa3', min: 3000 }
+  ];
+  // Oynama süresi sayacı
+  const PLAY_IDLE_MS = 90 * 1000;     // yarış dışında bu süre etkileşim yoksa süre işlemez
+  const PLAY_TICK_MS = 3000;          // toplu sayım aralığı
+  const PLAY_SAVE_MS = 30 * 1000;     // kaydı bu aralıktan sık yazma
+  const PLAY_MAX_DT = 6;              // tek sayımda en çok eklenecek sn (uyku / zamanlayıcı kısılması koruması)
+  const CARD_MIN_MS = 1000;           // 'meta:card' en sık bu aralıkla
+  const H2H_MAX = 50;                 // kafa kafaya listesinde en çok kişi
 
   // Elmas → altın bozdurma paketleri (elmasın harcanacağı yer)
   const PACKS = [
@@ -180,6 +198,10 @@
     { key: 'logins', icon: '📅', t: 'Sadık Üye', stat: 'dailyClaims', tiers: [3, 7, 30], ds: g => `${g} kez günlük ödül al` },
     { key: 'dailyDone', icon: '📋', t: 'Görev Adamı', stat: 'dailyDone', tiers: [5, 25, 100], ds: g => `${fmt(g)} günlük görev tamamla` },
     { key: 'earned', icon: '💰', t: 'Zengin', stat: 'earned', tiers: [2000, 10000, 50000], ds: g => `Toplam ${fmt(g)} altın kazan` },
+    // oynama süresi (ilerleme DAKİKA olarak sayılır) ve lig yolu (ulaşılan en yüksek toplam kupa; kupa kaybetmek ilerlemeyi geri almaz)
+    { key: 'playTime', icon: '⏱️', t: 'Maratoncu', stat: s => Math.floor(num0(s.stats.playSec) / 60), tiers: [60, 300, 1440],
+      ds: g => `Toplam ${g % 60 === 0 ? (g / 60) + ' saat' : fmt(g) + ' dakika'} oyna (${fmt(g)} dk)` },
+    { key: 'trophy', icon: '🏆', t: 'Lig Yolcusu', stat: 'trBest', tiers: [300, 800, 1600], ds: g => `Toplam ${fmt(g)} kupaya ulaş (${leagueOf(g).n} Ligi)` },
     // çok oyunculu ve modlar
     { key: 'mpRaces', icon: '🤝', t: 'Kanka', stat: 'mpRaces', tiers: [1, 10, 50], ds: g => g === 1 ? 'Arkadaşlarınla ilk yarışını yap' : `Arkadaşlarınla ${fmt(g)} yarış yap` },
     { key: 'mpWins', icon: '😎', t: 'Odanın Kralı', stat: 'mpWins', tiers: [1, 10, 30], ds: g => g === 1 ? 'Arkadaşlarına karşı bir yarış kazan' : `Arkadaşlarına karşı ${fmt(g)} yarış kazan` },
@@ -204,7 +226,7 @@
     'items', 'abilities', 'abHits', 'hitsDealt', 'hitsTaken', 'jumps', 'dbl', 'slides', 'slams', 'climbs', 'vaults', 'flaps', 'pads', 'mush', 'boxes',
     'blocks', 'blocksShield', 'blocksBalloon', 'earned', 'spent', 'gemsEarned', 'gemsSpent', 'dailyClaims', 'dailyDone', 'achDone',
     'upBought', 'skinsBought', 'styleBought', 'winStreak', 'bestStreak', 'time', 'xpTotal', 'rerolls', 'exchanges',
-    'mpRaces', 'mpWins', 'mpTop3', 'mpMatches', 'mpChamps', 'mpKills', 'elimTop3', 'elimWins', 'coinsBest', 'coinsWins', 'meteorDodge', 'gemCos', 'imports'];
+    'mpRaces', 'mpWins', 'mpTop3', 'mpMatches', 'mpChamps', 'mpKills', 'elimTop3', 'elimWins', 'coinsBest', 'coinsWins', 'meteorDodge', 'gemCos', 'imports', 'playSec', 'trBest'];
   const STAT_MAPS = ['charRaces', 'charWins', 'killsBy', 'itemsBy', 'best', 'modeRaces', 'themeRaces'];
 
   /* =====================================================================
@@ -228,6 +250,26 @@
   function charName(id) { return id; }   // karakter adları zaten görünen ad (TAFTAF, Caner, ...)
   function itemName(k) { return (FM.ITEMS && FM.ITEMS[k] && FM.ITEMS[k].n) || k; }
   function S() { return FM.save; }
+  /** Toplam kupa (7 karakterin toplamı; bozuk/eksik değer 0). */
+  function totalTrophies(sv) {
+    let tr = 0; const t = sv && sv.trophies;
+    if (isObj(t)) for (const k of FM.ORDER) tr += num0(t[k]);
+    return Math.round(tr);
+  }
+  /** Kupa → lig. min artan olduğundan son uygun olan seçilir. */
+  function leagueOf(tr) {
+    tr = num0(tr);
+    let i = 0; for (let j = 1; j < LEAGUES.length; j++) if (tr >= LEAGUES[j].min) i = j;
+    const L = LEAGUES[i], N = LEAGUES[i + 1] || null;
+    return { id: L.id, n: L.n, col: L.col, min: L.min, next: N ? N.min : null, nextN: N ? N.n : null, idx: i, pct: N ? Math.max(0, Math.min(1, (tr - L.min) / (N.min - L.min))) : 1 };
+  }
+  /** Takma adı ağdaki kuralla (net.js cleanNick) aynı biçimde temizler: kontrol karakterleri ve <>"'`\ atılır, en çok 14 karakter. */
+  function cleanNick(v) {
+    v = String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f-\u009f<>"'`\\]/g, '').replace(/\s+/g, ' ').trim();
+    return Array.from(v).slice(0, 14).join('').trim();
+  }
+  /** Oyuncu kimliği anahtarı (net.js pid biçimi + güvenli sınır) */
+  const PID_RE = /^[A-Za-z0-9_-]{1,24}$/;
 
   /* ---------------- tarih (yerel saat) ---------------- */
   function nowDate() { return new Date(); }
@@ -277,9 +319,33 @@
   /* =====================================================================
      KAYIT NORMALLEŞTİRME (eski / bozuk kayıtlarla uyum)
      ===================================================================== */
+  /** Kafa kafaya listesini doğrular: { pid: {nick, w, l, t} }; geçersiz/boş kayıtlar ve kendi pid'in atılır, en çok H2H_MAX kişi (en eski t önce düşer). */
+  function normH2h(src, ownPid) {
+    const out = {};
+    if (isObj(src)) {
+      for (const pid of Object.keys(src)) {
+        const e = src[pid];
+        if (!PID_RE.test(pid) || pid === ownPid || !isObj(e)) continue;
+        const w = clampInt(e.w, 0, 1e6, 0), l = clampInt(e.l, 0, 1e6, 0);
+        if (!w && !l) continue;
+        out[pid] = { nick: cleanNick(e.nick) || 'Oyuncu', w, l, t: clampInt(e.t, 0, 4e12, 0) };
+      }
+    }
+    trimH2h(out);
+    return out;
+  }
+  function trimH2h(o) {
+    const keys = Object.keys(o);
+    if (keys.length <= H2H_MAX) return o;
+    keys.sort((a, b) => o[b].t - o[a].t);
+    for (let i = H2H_MAX; i < keys.length; i++) delete o[keys[i]];
+    return o;
+  }
   function freshMissions() { return { v: 1, day: '', list: [], bonus: 0, bonusN: 0, rr: 0, ach: {}, achN: {} }; }
   function normalize() {
     if (!isObj(FM.save)) FM.save = FM.defaultSave();
+    // core.js normSave'den geçmemiş bir kayıt (kupa sıfırlama göçü yapılmamış) buraya gelirse aynı göçü uygula (yerinde değiştirir)
+    if (FM.save.trReset !== 1) { try { FM.normSave(FM.save); } catch (e) { } }
     const s = FM.save, d = FM.defaultSave();
     // bakiyeler
     s.coins = clampInt(s.coins, 0, MAX_BAL, d.coins);
@@ -343,6 +409,10 @@
       const m = s.stats[k];
       for (const kk of Object.keys(m)) { if (!isNum(m[kk]) || m[kk] < 0) delete m[kk]; }
     }
+    s.stats.trBest = Math.max(s.stats.trBest, totalTrophies(s));      // ulaşılan en yüksek toplam kupa (Lig Yolcusu başarımı)
+    // profil: ilk oynama anı + kafa kafaya listesi
+    if (!isNum(s.since) || s.since <= 0) s.since = isNum(s.created) && s.created > 0 ? s.created : Date.now();
+    s.h2h = normH2h(s.h2h, s.pid);
     // görevler
     if (!isObj(s.missions) || s.missions.v !== 1) s.missions = freshMissions();
     const M = s.missions;
@@ -1067,6 +1137,11 @@
         if (rank <= 2) st('mpTop3');
         if (kills) st('mpKills', kills);
       }
+      // profil: kafa kafaya (yalnızca çok oyunculu, gerçek insanlara karşı), ulaşılan en yüksek kupa, lig değişimi
+      if (mp) recordH2h(res.ranking, P, rank);
+      const trNow = totalTrophies(s), lgNow = leagueOf(trNow), lgPrev = leagueOf(trSeen);
+      trSeen = trNow;
+      if (trNow > num0(stt.trBest)) stt.trBest = trNow;
       if (mode === 'elim') { if (rank <= 2) { st('elimTop3'); bump('elimtop3', 1); } if (win) st('elimWins'); }
       if (mode === 'coins') { if (coinsGot > num0(stt.coinsBest)) stt.coinsBest = coinsGot; if (coinsGot) bump('huntcoin', coinsGot); if (win) st('coinsWins'); }
       if (fin && mode === 'classic' && num0(P.ftime) > 0 && res.theme && res.theme.id) {
@@ -1109,7 +1184,8 @@
       const out = {
         kind: 'race', coins: g.coins, gems: g.gems, xp: g.xp, lines, levelUp: g.levelUp, levels: g.levels,
         missionsDone: raceDone.slice(), place: rank + 1, finished: fin, round: res.round | 0, rounds: res.rounds | 0,
-        kills, coinsGot, deaths, char: cid, last: !!res.last, level: meta.levelInfo(), n, mode, mp, humans, win
+        kills, coinsGot, deaths, char: cid, last: !!res.last, level: meta.levelInfo(), n, mode, mp, humans, win,
+        league: { id: lgNow.id, n: lgNow.n, col: lgNow.col, tr: trNow, up: lgNow.idx > lgPrev.idx, down: lgNow.idx < lgPrev.idx }
       };
       raceDone = [];
       matchTotals.coins += out.coins; matchTotals.gems += out.gems; matchTotals.xp += out.xp; matchTotals.races++;
@@ -1118,6 +1194,7 @@
       persist();
       FM.emit('meta:rewards', { rewards: out, kind: 'race' });
       FM.emit('meta:change', { reason: 'race' });
+      if (out.league.up) FM.emit('meta:league', { league: lgNow, prev: lgPrev, up: true });     // lige yükseldi (arayüz kutlayabilir)
     } catch (e) { console.error('[meta race:end]', e); }
   });
 
@@ -1187,6 +1264,156 @@
   } catch (e) { }
 
   /* =====================================================================
+     PROFİL: OYNAMA SÜRESİ, LİG, KAFA KAFAYA, PROFİL KARTI
+     ===================================================================== */
+  let trSeen = 0;           // son yarış sonunda (ya da kayıt yüklenince) görülen toplam kupa: lige yükselişi bulmak için
+  let lastTick = Date.now(), lastInput = Date.now(), playPend = 0, playSavedAt = Date.now(), playDirty = false;
+
+  function pageHidden() { try { return typeof document !== 'undefined' && !!document && document.hidden === true; } catch (e) { return false; } }
+  /** Yarış sürüyor mu (geri sayım / yarış / tur sonu; duraklatılmış yarış sayılmaz) */
+  function racing() { const M = FM.S; return !!M && !M.paused && (M.mode === 'count' || M.mode === 'race' || M.mode === 'end'); }
+
+  /** [son sayım, şimdi] aralığını oynama süresine ekler: sayfa GÖRÜNÜRKEN ve (yarış sürüyor YA DA son 90 sn'de etkileşim var).
+      Yalnızca TAM saniyeler stats.playSec'e yazılır, kesir bellekte kalır. visible verilmezse sayfanın şimdiki durumu. */
+  function playAccount(visible) {
+    const t = Date.now();
+    const dt = (t - lastTick) / 1000;
+    lastTick = t;
+    if (!(dt > 0)) return 0;                                   // saat geri alındı / aynı ms
+    if (visible === undefined) visible = !pageHidden();
+    if (!visible || !FM.save || !isObj(FM.save.stats)) return 0;
+    if (!(racing() || t - lastInput <= PLAY_IDLE_MS)) return 0;
+    playPend += Math.min(dt, PLAY_MAX_DT);                     // uyku / kısılmış zamanlayıcı yüzünden dev sıçrama eklenmez
+    const w = Math.floor(playPend);
+    if (w < 1) return 0;
+    playPend -= w;
+    const st = FM.save.stats;
+    st.playSec = Math.min(1e12, num0(st.playSec) + w);
+    playDirty = true; dirty = true;
+    return w;
+  }
+  /** Toplam oynama süresi (sn). Çağrıldığı an sayacı da günceller. */
+  meta.playTime = function () { try { playAccount(); } catch (e) { } return Math.floor(num0(S().stats && S().stats.playSec)); };
+  /** Süreyi kısa Türkçe yazar: 45 → "45 sn", 750 → "12 dk", 45000 → "12 sa 30 dk", 7200 → "2 sa" */
+  meta.fmtDur = function (sec) {
+    sec = Math.floor(num0(sec));
+    if (sec < 60) return sec + ' sn';
+    const m = Math.floor(sec / 60);
+    if (m < 60) return m + ' dk';
+    const h = Math.floor(m / 60), mm = m % 60;
+    return fmt(h) + ' sa' + (mm ? ' ' + mm + ' dk' : '');
+  };
+
+  function onInput() {
+    const t = Date.now();
+    // uzun boşluktan sonraki ilk etkileşim: boşta geçen aralık sayılmasın
+    if (t - lastInput > PLAY_IDLE_MS && !racing()) lastTick = t;
+    lastInput = t;
+  }
+  /** Her PLAY_TICK_MS'de: süreyi topla, kaydı seyrek yaz (30 sn), kart değiştiyse bildir. */
+  function profileTick() {
+    try {
+      playAccount();
+      const t = Date.now();
+      if (playDirty && t - playSavedAt >= PLAY_SAVE_MS) { playSavedAt = t; playDirty = false; persist(); }
+      cardCheck();
+    } catch (e) { }
+  }
+  /** Sayfa gizlenirken / kapanırken son görünür aralığı ekle ve HEMEN yaz (core.js'in yazımı bu eklemeden önce çalışmış olabilir). */
+  function playFlush() {
+    try { playAccount(true); playSavedAt = Date.now(); playDirty = false; persist(true); } catch (e) { }
+  }
+
+  /* ---------------- lig ---------------- */
+  /** league(tr?) → {id:'bronz'|'gumus'|'altin'|'elmas'|'efsane', n, col, min, next (sonraki ligin kupası | null), nextN, idx, pct (0..1 ilerleme)}.
+      tr verilmezse kendi toplam kupan. Başkasının kartındaki kupayla da çağrılabilir: FM.meta.league(card.tr). */
+  meta.league = function (tr) { return leagueOf(tr == null ? totalTrophies(S()) : tr); };
+  meta.LEAGUES = LEAGUES.map(l => Object.assign({}, l));
+  /** Toplam kupa (7 karakterin toplamı) */
+  meta.totalTrophies = function () { return totalTrophies(S()); };
+
+  /* ---------------- kafa kafaya (yalnızca çok oyunculu, gerçek insanlara karşı) ---------------- */
+  /** race:end: sıralamada kendinden önce/sonra biten her İNSAN için w/l artır. Botlar (bot/nbot), izleyiciler ve kopanlar sayılmaz. */
+  function recordH2h(rk, P, rank) {
+    if (!Array.isArray(rk) || !P) return;
+    let me = rk.indexOf(P); if (me < 0) me = rank;
+    const sv = S(); if (!isObj(sv.h2h)) sv.h2h = {};
+    const H = sv.h2h, t = Date.now(); let any = false;
+    for (let i = 0; i < rk.length; i++) {
+      const r = rk[i];
+      if (!r || r === P || i === me) continue;
+      if (r.ctrl !== 'remote' || r.nbot || r.bot || r.ghost || r.off || r.spec) continue;
+      const pid = r.pid;
+      if (typeof pid !== 'string' || !PID_RE.test(pid) || pid === sv.pid || pid === P.pid) continue;
+      const e = H[pid] || (H[pid] = { nick: '', w: 0, l: 0, t: 0 });
+      if (me < i) e.w = Math.min(1e6, num0(e.w) + 1); else e.l = Math.min(1e6, num0(e.l) + 1);
+      e.nick = cleanNick(r.nick || r.name) || e.nick || 'Oyuncu';
+      e.t = t; any = true;
+    }
+    if (any) trimH2h(H);
+  }
+  /** h2h() → {pid: {nick, w, l, t}} (w = onu geçtiğin, l = seni geçtiği yarış sayısı; t = son yarış ms). h2h(pid) → tek kayıt | null. */
+  meta.h2h = function (pid) {
+    const H = S().h2h, out = {};
+    if (isObj(H)) for (const k of Object.keys(H)) { const e = H[k]; if (isObj(e)) out[k] = { nick: e.nick, w: e.w | 0, l: e.l | 0, t: e.t || 0 }; }
+    return pid === undefined ? out : (out[pid] || null);
+  };
+
+  /* ---------------- profil kartı ---------------- */
+  /** En çok yarışılan karakter (eşitlikte seçili karakter, yarış yoksa seçili karakter) */
+  function bestChar(sv) {
+    const m = sv.stats && sv.stats.charRaces, sel = charOr(sv.selChar);
+    let best = '', bn = 0;
+    for (const k of FM.ORDER) {
+      const n = isObj(m) ? num0(m[k]) : 0;
+      if (n > bn || (n === bn && n > 0 && k === sel)) { best = k; bn = n; }
+    }
+    return best || sel;
+  }
+  /** card() → {nick, char, skin, lvl, tr, play, races, wins, kills, best, since, lg}. Hepsi düz JSON sayı/metin (ağda paylaşılır).
+      tr = toplam kupa, play = oynama sn, best = en çok yarışılan karakter, since = ilk oynama ms, lg = lig id'si. */
+  meta.card = function () {
+    const sv = S(), st = isObj(sv.stats) ? sv.stats : {}, ch = charOr(sv.selChar), tr = totalTrophies(sv);
+    return {
+      nick: cleanNick(sv.nick) || ch, char: ch, skin: meta.equipped('skins', ch), lvl: clampInt(sv.level, 1, MAX_LEVEL, 1), tr,
+      play: meta.playTime(), races: Math.floor(num0(st.races)), wins: Math.floor(num0(st.wins)), kills: Math.floor(num0(st.kills)),
+      best: bestChar(sv), since: Math.floor(num0(sv.since)), lg: leagueOf(tr).id
+    };
+  };
+  /* 'meta:card' yalnızca kart DEĞİŞİNCE ve en sık ~1 sn'de bir yayınlanır. Oynama süresi dakikaya yuvarlanarak karşılaştırılır
+     (sürekli artan sayı kartı her saniye değiştirmesin; AĞ kartı en fazla dakikada bir yeniden yayınlar). */
+  let cardSig = null, cardLast = 0, cardTimer = null;
+  function cardSigOf(c) { return [c.nick, c.char, c.skin, c.lvl, c.tr, Math.floor(c.play / 60), c.races, c.wins, c.kills, c.best, c.since, c.lg].join('|'); }
+  function cardCheck(force) {
+    let c; try { c = meta.card(); } catch (e) { return; }
+    const sig = cardSigOf(c);
+    if (sig === cardSig) return;
+    const t = Date.now();
+    if (!force && cardSig !== null && t >= cardLast && t - cardLast < CARD_MIN_MS) {          // çok sık: kısa süre sonra yeniden bak
+      if (!cardTimer && typeof setTimeout === 'function') cardTimer = setTimeout(() => { cardTimer = null; cardCheck(); }, CARD_MIN_MS - (t - cardLast) + 30);
+      return;
+    }
+    cardSig = sig; cardLast = t;
+    FM.emit('meta:card', { card: c });
+  }
+  meta._cardCheck = cardCheck;
+  // kart değiştiren her şey zaten meta:change yayınlar (yarış sonu, seviye, kostüm/kuşanma, satın alma, içe aktarma). Karakter seçimi (ui.js) olay
+  // yayınlamıyor: bu yüzden periyodik sayımda (3 sn) imza karşılaştırılır.
+  FM.on('meta:change', () => cardCheck());
+  FM.on('meta:levelup', () => cardCheck());
+  FM.on('save:reset', () => { trSeen = totalTrophies(S()); cardCheck(); });
+
+  try {
+    if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+      for (const ev of ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel']) window.addEventListener(ev, onInput, { passive: true, capture: true });
+      window.addEventListener('pagehide', playFlush);
+    }
+    if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => { if (document.hidden) playFlush(); else { lastTick = Date.now(); } });
+    }
+  } catch (e) { }
+
+  /* =====================================================================
      ÇOK OYUNCULU İSTATİSTİK
      ===================================================================== */
   /** mpStats() → {races, wins, top3, matches, champs, kills, winPct, byMode: {modId: yarış}, byTheme: {temaId: yarış}} */
@@ -1247,7 +1474,7 @@
   /** exportCode() → Promise<string|null>: 'FM1.<gzip+base64url>.<sağlama>' (CompressionStream yoksa 'FM0.' sıkıştırmasız). Asla reddetmez. */
   meta.exportCode = function () {
     let raw;
-    try { flush(); raw = enc(JSON.stringify(exportObj())); } catch (e) { return Promise.resolve(null); }
+    try { playAccount(); flush(); raw = enc(JSON.stringify(exportObj())); } catch (e) { return Promise.resolve(null); }
     const plain = () => { const b = 'FM0.' + b64u(raw); return b + '.' + fnv(b); };
     if (!canZip()) { try { return Promise.resolve(plain()); } catch (e) { return Promise.resolve(null); } }
     return zpipe(raw, CompressionStream).then(z => { const b = 'FM1.' + b64u(z); return b + '.' + fnv(b); }).catch(() => { try { return plain(); } catch (e) { return null; } });
@@ -1275,12 +1502,14 @@
   function summary(sv, t) {
     sv = isObj(sv) ? sv : {};
     const st = isObj(sv.stats) ? sv.stats : {};
-    let tr = 0; if (isObj(sv.trophies)) for (const k of FM.ORDER) tr += num0(sv.trophies[k]);
+    // kupa sıfırlama göçünden geçmemiş (eski) kayıt/yedek uygulanınca kupaları 0 olacak: özet de 0 göstermeli
+    const tr = sv.trReset === 1 ? totalTrophies(sv) : 0;
     let skins = 0; try { skins = ownedSkinCount(sv); } catch (e) { skins = 0; }
     return {
       nick: typeof sv.nick === 'string' ? sv.nick.slice(0, 14) : '', level: clampInt(sv.level, 1, MAX_LEVEL, 1),
       coins: clampInt(sv.coins, 0, MAX_BAL, 0), gems: clampInt(sv.gems, 0, MAX_BAL, 0), trophies: Math.round(tr),
-      races: Math.floor(num0(st.races)), wins: Math.floor(num0(st.wins)), skins, savedAt: num0(t) || num0(sv.savedAt) || 0
+      races: Math.floor(num0(st.races)), wins: Math.floor(num0(st.wins)), skins, play: Math.floor(num0(st.playSec)),
+      savedAt: num0(t) || num0(sv.savedAt) || 0
     };
   }
   let pending = null;
@@ -1300,7 +1529,7 @@
 
   /** importCode(metin) → Promise<{ok:true, src:'code'|'cloud', preview, current, apply()} | {ok:false, err}>.
       Uzun kodu da 8 karakterli bulut kodunu da kabul eder. HİÇBİR ŞEYİ DEĞİŞTİRMEZ: kullanıcıya preview/current
-      (nick, level, coins, gems, trophies, races, wins, skins, savedAt) gösterilip onaylanınca apply() çağrılır. */
+      (nick, level, coins, gems, trophies, races, wins, skins, play (sn), savedAt) gösterilip onaylanınca apply() çağrılır. */
   meta.importCode = function (str) {
     try {
       const t = String(str == null ? '' : str).trim();
@@ -1341,7 +1570,7 @@
       return true;
     } catch (e) { console.error('[meta import]', e); return false; }
   };
-  /** backupInfo() → içe aktarmadan önceki kaydın özeti {nick, level, coins, gems, trophies, races, wins, skins, savedAt} ya da null */
+  /** backupInfo() → içe aktarmadan önceki kaydın özeti {nick, level, coins, gems, trophies, races, wins, skins, play, savedAt} ya da null */
   meta.backupInfo = function () {
     try { const o = JSON.parse(localStorage.getItem(XKEY_BACKUP) || 'null'); return isObj(o) && isObj(o.s) ? summary(o.s, o.t) : null; } catch (e) { return null; }
   };
@@ -1482,4 +1711,11 @@
     checkMissions(true);     // eski kayıtta zaten tamamlanmış olanları sessizce işaretle
     persist();
   } catch (e) { console.error('[meta init]', e); }
+  try {
+    trSeen = totalTrophies(S());
+    lastTick = lastInput = playSavedAt = Date.now();
+    if (typeof setInterval === 'function') setInterval(profileTick, PLAY_TICK_MS);
+    // ilk kart bildirimi: AĞ, meta'dan önce yüklendiği için olayı kaçırmasın (kendisi de meta.card()'ı çağırabilir)
+    if (typeof setTimeout === 'function') setTimeout(() => cardCheck(true), 1500);
+  } catch (e) { console.error('[meta profil]', e); }
 })(window.FM);

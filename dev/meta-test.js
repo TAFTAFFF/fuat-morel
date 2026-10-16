@@ -1,6 +1,7 @@
 // Kullanım: node dev/meta-test.js [bulut]
 // meta.js + core.js kayıt testleri (tarayıcısız): eski kayıt göçü, n kişilik ödül, elmaslı kozmetik, mod/çok oyunculu
-// sayaçları, uzun kodla dışa/içe aktarma (yedek + geri alma), FM.inAppBrowser. 'bulut' verilirse gerçek MQTT aracısına
+// sayaçları, uzun kodla dışa/içe aktarma (yedek + geri alma), FM.inAppBrowser, 5. tur profil: kupa sıfırlama göçü, oynama
+// süresi (sanal saat/görünürlük/etkileşim), profil kartı + 'meta:card', lig, kafa kafaya. 'bulut' verilirse gerçek MQTT aracısına
 // bulut kodu yazıp geri okur (internet gerekir).
 try { require('os').setPriority(0, require('os').constants.priority.PRIORITY_LOW); } catch (e) { }
 const fs = require('fs'), vm = require('vm'), path = require('path');
@@ -8,15 +9,40 @@ const root = path.resolve(__dirname, '..');
 function stubEl() { return { style: {}, classList: { add() { }, remove() { }, toggle() { }, contains() { return false } }, addEventListener() { }, appendChild() { }, setAttribute() { }, querySelector() { return null }, querySelectorAll() { return [] }, getContext() { return new Proxy({}, { get: (t, p) => p in t ? t[p] : (() => ({ addColorStop() { } })), set: (t, p, v) => (t[p] = v, true) }) }, dataset: {} }; }
 let fails = 0, oks = 0;
 function ok(c, m) { if (c) oks++; else { fails++; console.log('HATA: ' + m); } }
-function boot(store) {
-  const sb = { console, Math, Date, JSON, setTimeout, clearTimeout, performance: { now: () => Date.now() }, requestAnimationFrame() { },
-    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v) }, removeItem: k => { delete store[k] } },
+/* Sanal ortam: sahte Date/zamanlayıcı/olay dinleyicileri/sayfa görünürlüğü. advance(ms) zamanı ilerletir ve vadesi gelen zamanlayıcıları sırayla çalıştırır. */
+function virt(t0) {
+  const v = { t: t0, timers: [], nid: 1, hidden: false, W: {}, D: {} };
+  class FDate extends Date { constructor(...a) { if (a.length) super(...a); else super(v.t); } static now() { return v.t; } }
+  v.Date = FDate;
+  v.setTimeout = (fn, ms) => { const id = v.nid++; v.timers.push({ id, at: v.t + (ms || 0), fn, ev: 0 }); return id; };
+  v.setInterval = (fn, ms) => { const id = v.nid++; v.timers.push({ id, at: v.t + ms, fn, ev: ms }); return id; };
+  v.clear = id => { v.timers = v.timers.filter(x => x.id !== id); };
+  v.advance = ms => {
+    const end = v.t + ms;
+    for (let g = 0; g < 1e6; g++) {
+      let n = null; for (const x of v.timers) if (x.at <= end && (!n || x.at < n.at || (x.at === n.at && x.id < n.id))) n = x;
+      if (!n) break;
+      v.t = Math.max(v.t, n.at);
+      if (n.ev) n.at += n.ev; else v.timers = v.timers.filter(x => x !== n);
+      try { n.fn(); } catch (e) { console.log('zamanlayıcı hatası ' + (e && e.stack || e)); }
+    }
+    v.t = end;
+  };
+  v.on = which => (ev, fn) => { (v[which][ev] = v[which][ev] || []).push(fn); };
+  v.fire = (which, ev) => { for (const f of (v[which][ev] || []).slice()) f({}); };
+  return v;
+}
+function boot(store, v) {
+  const sb = { console, Math, Date: v ? v.Date : Date, JSON, setTimeout: v ? v.setTimeout : setTimeout, clearTimeout: v ? v.clear : clearTimeout, performance: { now: () => v ? v.t : Date.now() }, requestAnimationFrame() { },
+    localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, val) => { store[k] = String(val) }, removeItem: k => { delete store[k] } },
     location: { search: '', protocol: 'file:' }, URLSearchParams, navigator: { maxTouchPoints: 0, userAgent: 'node' }, matchMedia: () => ({ matches: false, addEventListener() { } }),
-    innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1, addEventListener() { },
-    document: { getElementById: () => stubEl(), createElement: () => stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [], addEventListener() { }, body: stubEl(), fonts: null, readyState: 'complete' },
-    TextEncoder, TextDecoder, btoa, atob, Blob, Response, CompressionStream, DecompressionStream, WebSocket: globalThis.WebSocket, crypto: globalThis.crypto, Uint8Array };
+    innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1, addEventListener: v ? v.on('W') : () => { },
+    document: { getElementById: () => stubEl(), createElement: () => stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [], addEventListener: v ? v.on('D') : () => { }, body: stubEl(), fonts: null, readyState: 'complete', get hidden() { return v ? v.hidden : false; } },
+    TextEncoder, TextDecoder, btoa, atob, Blob, Response, CompressionStream, DecompressionStream, WebSocket: v ? undefined : globalThis.WebSocket, crypto: globalThis.crypto, Uint8Array };
+  if (v) { sb.setInterval = v.setInterval; sb.clearInterval = v.clear; }
   sb.window = sb; vm.createContext(sb);
-  for (const f of ['core', 'gfx', 'net', 'level', 'game', 'meta', 'netgame']) vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), sb, { filename: f + '.js' });
+  // sanal ortamda ağ katmanı yüklenmez (gerçek WebSocket / zamanlayıcı karışmasın); meta testleri için gerekmez
+  for (const f of (v ? ['core', 'gfx', 'level', 'game', 'meta'] : ['core', 'gfx', 'net', 'level', 'game', 'meta', 'netgame'])) vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), sb, { filename: f + '.js' });
   return sb.FM;
 }
 (async function () {

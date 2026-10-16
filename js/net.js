@@ -29,16 +29,22 @@
   const PREF = [1, 0, 2];          // oda kurarken deneme sırası ve yedekleme sırası
   // Geliştirici/test: ?brokerUrl=ws://127.0.0.1:PORT/mqtt → TÜM aracılar bu adrese gider (yerel test aracısı dev/broker.js).
   // Yalnızca parametre açıkça verilince; ?dev=1 yoksa yalnız yerel ağ adresleri kabul edilir (yabancı bir linkle oyun başka aracıya yönlenmesin).
+  // 'ws://a/mqtt|ws://b/mqtt|ws://c/mqtt' → aracı 0/1/2 ayrı adreslere (en hızlı aracı seçimini yerelde denemek için)
   const OVR = (function () {
     try {
-      const u = FM.params && FM.params.brokerUrl; if (typeof u !== 'string' || !u || u.length > 300) return null;
-      const x = new URL(u); if (x.protocol !== 'ws:' && x.protocol !== 'wss:') return null;
-      const h = x.hostname.replace(/^\[|\]$/g, '');
-      const local = h === 'localhost' || h === '::1' || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
-      return (FM.DEV || local) ? x.href : null;
+      const u = FM.params && FM.params.brokerUrl; if (typeof u !== 'string' || !u || u.length > 900) return null;
+      const out = [];
+      for (const part of u.split('|').slice(0, 3)) {
+        const x = new URL(part); if (x.protocol !== 'ws:' && x.protocol !== 'wss:') return null;
+        const h = x.hostname.replace(/^\[|\]$/g, '');
+        const local = h === 'localhost' || h === '::1' || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+        if (!FM.DEV && !local) return null;
+        out.push(x.href);
+      }
+      return out.length ? out : null;
     } catch (e) { return null; }
   })();
-  if (OVR) for (const b of BROKERS) { b.url = OVR; b.n = 'Yerel'; b.win = 40; b.res = 3; b.stMs = 100; }
+  if (OVR) BROKERS.forEach((b, i) => { b.url = OVR[i % OVR.length]; b.n = OVR.length > 1 ? 'Yerel ' + (i + 1) : 'Yerel'; b.win = 40; b.res = 3; b.stMs = 100; });
   const ROOT = 'fuatmorel/v1/';
   const MAXP = 10;                 // odadaki en fazla insan oyuncu
   const KEEP = 20;                 // MQTT keepalive (sn)
@@ -238,7 +244,8 @@
     } else if (type === 9) {                            // SUBACK
       for (let i = 2; i < b.length; i++) if (b[i] === 0x80) log('abonelik reddedildi');
     }
-    // 11 UNSUBACK, 13 PINGRESP: lastRx güncellendi, başka iş yok
+    else if (type === 13 && this.o.onPong) { try { this.o.onPong(); } catch (e) { } }   // PINGRESP (aracı yoklaması)
+    // 11 UNSUBACK: lastRx güncellendi, başka iş yok
   };
   Mq.prototype.nextId = function () { this.pid = (this.pid % 65535) + 1; return new Uint8Array([this.pid >> 8, this.pid & 255]); };
   Mq.prototype.publish = function (topic, payload, retain, droppable) {
@@ -454,9 +461,12 @@
 
   /* ---------------- durum bildirimleri ---------------- */
   function statusObj() {
+    const links = R.phase === 'in' ? linksList() : [];
     return {
       conn: C.conn, phase: R.phase, room: R.code, role: R.role, inRoom: R.phase === 'in',
-      host: R.hostPid, me: myPid(), broker: C.bi, brokerName: C.bi >= 0 ? BROKERS[C.bi].n : '', rtt: Math.round(R.rtt)
+      host: R.hostPid, me: myPid(), broker: C.bi, brokerName: C.bi >= 0 ? BROKERS[C.bi].n : '', rtt: Math.round(R.rtt),
+      // teşhis: aracıya rtt, oda kurulurken yoklanan aracılar, doğrudan bağlantı desteği ve eş başına yol
+      brokerRtt: R.rttN ? Math.round(R.rtt) : null, probe: lastProbe, rtc: RTC_OK, p2p: links.filter(x => x.link === 'p2p').length, peers: links.length, links
     };
   }
   function statusChanged() {
@@ -467,13 +477,17 @@
   }
   function playersList() {
     const L = R.lob; if (!L) return [];
-    const me = myPid();
+    const me = myPid(), t = now();
     return L.p.map((p, i) => {
-      const inf = R.info[p.id];
+      const inf = R.info[p.id], mine = p.id === me, X = PEERS[p.id], p2p = !mine && rtcFresh(X, t);
+      const bro = mine ? (R.rttN ? Math.round(R.rtt) : null) : (inf && typeof inf.rtt === 'number' ? Math.round(inf.rtt) : null);
       return {
         pid: p.id, nick: p.n, char: p.c, skin: p.sk, trail: p.tr, plate: p.pl, hat: p.ht || 'none', win: p.wn || 'none', death: p.dt || 'none',
-        ready: !!p.rd, waiting: !!p.w, off: !!p.o, host: p.id === R.hostPid, me: p.id === me,
-        alive: alive(p.id), ping: p.id === me ? (R.rttN ? Math.round(R.rtt) : null) : (inf && typeof inf.rtt === 'number' ? Math.round(inf.rtt) : null), idx: i
+        ready: !!p.rd, waiting: !!p.w, off: !!p.o, host: p.id === R.hostPid, me: mine, alive: alive(p.id),
+        // ping: SEN ↔ O gidiş-dönüş (doğrudan: ölçülen; aracı: senin + onun aracı rtt'si). Kendin: aracıya rtt. brokerPing: onun aracıya rtt'si
+        link: mine ? null : (p2p ? 'p2p' : 'mqtt'),
+        ping: mine ? bro : (p2p ? (X.rtt != null ? Math.round(X.rtt) : null) : (bro != null && R.rttN ? Math.round(bro + R.rtt) : null)),
+        brokerPing: bro, idx: i
       };
     });
   }
@@ -485,7 +499,7 @@
   function emitPlayers(force) {
     if (R.phase !== 'in') return;
     const pl = playersList();
-    const sig = pl.map(p => [p.pid, p.nick, p.char, p.skin, p.trail, p.plate, p.hat, p.win, p.death, p.ready, p.waiting, p.off, p.host, p.alive, p.ping == null ? '-' : Math.round(p.ping / 25)].join(',')).join(';');
+    const sig = pl.map(p => [p.pid, p.nick, p.char, p.skin, p.trail, p.plate, p.hat, p.win, p.death, p.ready, p.waiting, p.off, p.host, p.alive, p.link, p.ping == null ? '-' : Math.round(p.ping / 25)].join(',')).join(';');
     const t = now();
     if (!force && (sig === R.plSig || t - R.plT < 450)) return;
     R.plSig = sig; R.plT = t;
@@ -502,10 +516,13 @@
       phase: null, role: null, code: null, base: null, rand4: null, everIn: false, lob: null, hostPid: null, kSeq: 0, provT: 0,
       seen: {}, info: {}, lastPing: 0, joinT0: 0, joinLast: 0, pingSeen: false, sawRetained: false, settleUntil: 0, codeBi: -1, joinRetry: 0,
       pubTimer: null, lastPub: 0, lastContest: 0, ctlSeen: [], pendLocal: {}, ready: false, pend: null, stTimer: null, lastState: 0,
-      suspended: false, plSig: '', statusSig: R.statusSig, needPub: false, cfg0: null, rejoin: false, reclaim: null, reclaimT: 0, otherMe: 0, rjT: 0
+      suspended: false, plSig: '', statusSig: R.statusSig, needPub: false, cfg0: null, rejoin: false, reclaim: null, reclaimT: 0, otherMe: 0, rjT: 0,
+      lastStMq: -1e9, pendDc: null, probeId: 0
     });
     for (const k in bufs) delete bufs[k];
     for (const k in offs) delete offs[k];
+    rtcCloseAll();
+    evSeen.clear();
   }
   function startTick() {
     if (R.tickTimer || typeof setInterval !== 'function') return;
@@ -578,9 +595,11 @@
   }
   function graceAll() { const t = now(); for (const k in R.seen) R.seen[k] = Math.max(R.seen[k], t - DROP_MS + 3500); if (R.hostPid) R.seen[R.hostPid] = Math.max(R.seen[R.hostPid] || 0, t - DROP_MS + 3500); }
 
+  // ping SIRAYA GİRMEZ: bütçe doluysa atlanır, tik 0.5 sn sonra yeniden dener (sırada bekleyen ping rtt'yi şişirip yanlış "yüksek ping" gösteriyordu)
   function sendPing() {
-    R.lastPing = now();
-    pub('ping', { f: myPid(), sn: SN, cn: C.cn, t: Math.round(now() * 10) / 10, r: R.rttN ? Math.round(R.rtt) : -1 });
+    const m = { f: myPid(), sn: SN, cn: C.cn, t: Math.round(now() * 10) / 10, r: R.rttN ? Math.round(R.rtt) : -1 };
+    if (RTC_OK) m.w = 1;
+    if (pub('ping', m, false, 'st')) R.lastPing = now();
   }
   function sendJoin(re) {
     R.joinLast = now();
@@ -621,6 +640,7 @@
     else if (sub === 'ev') onEv(m);
     else if (sub === 'ctl') onCtl(m);
     else if (sub === 'join') onJoin(m);
+    else if (sub === 'rtc') onRtc(m);
     else if (sub.indexOf('bye/') === 0) onBye(sub.slice(4), m);
   }
 
@@ -727,6 +747,7 @@
     const inf = R.info[id] || (R.info[id] = {});
     if (typeof m.r === 'number' && m.r >= 0 && m.r < 60000) inf.rtt = m.r;
     inf.cn = tok(m.cn, inf.cn); inf.sn = tok(m.sn, inf.sn);
+    if (m.w === 1) inf.w = 1;                                        // doğrudan bağlantı (WebRTC) destekliyor
   }
   function onJoin(m) {
     if (R.role !== 'host' || R.phase !== 'in' || !R.lob) return;
@@ -797,11 +818,18 @@
     fireCtl(t, d);
   }
 
-  function onEv(m) {
+  const evSeen = new Map();          // gönderen pid → {sn, set, q}: iki yoldan (doğrudan + aracı) gelen olayın tekrarı atılır
+  function onEv(m, via) {
     const f = tok(m.f, null); if (!f || f === myPid()) return;
     const type = tok(m.e, null); if (!type) return;
     seen(f);
-    const lat = latencyFrom(f, m.t);
+    if (typeof m.i === 'number' && isFinite(m.i) && typeof m.sn === 'string') {
+      let D = evSeen.get(f); if (!D || D.sn !== m.sn) { D = { sn: m.sn, set: new Set(), q: [] }; evSeen.set(f, D); }
+      if (D.set.has(m.i)) { RS.evDup++; return; }
+      D.set.add(m.i); D.q.push(m.i); if (D.q.length > 400) D.set.delete(D.q.shift());
+    }
+    if (via) RS.evDc++; else RS.evMq++;
+    const lat = latencyFrom(f, m.t, via);
     if (type === 'emoji') {
       const e = cleanEmoji(m.d && m.d.e); if (!e) return;
       emit('net:emoji', { from: f, e, me: false, lat });
@@ -809,9 +837,9 @@
     }
     emit('net:event', { from: f, type, data: isObj(m.d) ? m.d : {}, lat });
   }
-  function latencyFrom(f, st) {
+  function latencyFrom(f, st, via) {
     const inf = R.info[f], o = offs[f];
-    const base = ((inf && typeof inf.rtt === 'number') ? inf.rtt : (R.rtt || 100)) / 2 + (R.rtt || 100) / 2;
+    const base = via && via.rtt != null ? via.rtt / 2 : ((inf && typeof inf.rtt === 'number') ? inf.rtt : (R.rtt || 100)) / 2 + (R.rtt || 100) / 2;
     let extra = 0; if (o && typeof st === 'number') extra = Math.max(0, now() - (st + o.off));
     return Math.round(base + extra);
   }
@@ -837,17 +865,20 @@
   }
 
   /* ---------------- durum anlık görüntüleri ---------------- */
-  function onState(id, m) {
+  function onState(id, m, via) {
     const me = myPid();
-    if (!tok(id, null) || typeof m.t !== 'number') return;
+    if (!tok(id, null) || typeof m.t !== 'number' || !isFinite(m.t)) return;
     if (id === me) { if (m.sn === SN && m.cn === C.cn && typeof m.p === 'number') rttSample(now() - m.p); return; }
     seen(id);
     if (typeof m.cn === 'string') metaFrom(id, m);
     if (R.phase === 'joining') R.pingSeen = true;
     const t = now();
     let o = offs[id];
+    // aynı anlık görüntü iki yoldan (doğrudan + aracı yedeği) ya da sırasız eski: tamamen yok say (gecikme/titreme tahminini bozmasın)
+    if (o && m.t <= o.lastSt) { RS.stDup++; return; }
+    if (via) { RS.stDc++; } else RS.stMq++;
     const sample = t - m.t;
-    if (!o) o = offs[id] = { off: sample, jit: 0, iv: STATE_MS, dly: 130, lastSt: m.t, n: 0 };
+    if (!o) o = offs[id] = { off: sample, jit: 0, iv: STATE_MS, dly: 130, lastSt: m.t, n: 0, dcT: 0 };
     else {
       if (sample < o.off || sample - o.off > 1500) o.off = sample; else o.off += (sample - o.off) * 0.01;
       // tepe izleyen (hızlı yükselen, yavaş inen) tahminler: tampon boşalıp öngörüye düşmeyelim
@@ -855,9 +886,11 @@
       const dst = m.t - o.lastSt;
       if (dst > 0 && dst < 1000) { const g = Math.min(500, Math.max(30, dst)); o.iv += (g - o.iv) * (g > o.iv ? 0.25 : 0.03); }
       o.lastSt = m.t;
-      const target = Math.min(450, Math.max(80, o.iv + o.jit + 10));
+      // ara değerleme gecikmesi = gönderim aralığı + titreme + pay; doğrudan bağlantıda (20 Hz, düşük titreme) taban 55 ms, aracıda 80 ms
+      const target = Math.min(450, Math.max(o.dcT && t - o.dcT < 1500 ? DLY_MIN_DC : DLY_MIN, o.iv + o.jit + 10));
       o.dly += (target - o.dly) * (o.n < 12 ? 0.3 : 0.05); o.n++;   // ilk mesajlarda hızlı otur, sonra yumuşak izle
     }
+    if (via) o.dcT = t;
     const lt = m.t + o.off;
     if (isObj(m.s)) pushBuf(id, id, lt, m.s, t);
     if (isObj(m.b)) { let n = 0; for (const bid in m.b) { if (++n > 12) break; if (tok(bid, null) && bid !== me && isObj(m.b[bid])) pushBuf(bid, id, lt, m.b[bid], t); } }
@@ -901,16 +934,26 @@
     return out;
   }
   function pruneBufs(t) { for (const k in bufs) if (t - bufs[k].last > 60000) delete bufs[k]; }
+  // durum: doğrudan bağlantısı açık eşlere her seferinde (~20 Hz) veri kanalından; aracıya ise doğrudan bağlanamayan eş varsa
+  // normal hızda (~10 Hz), herkes doğrudansa yalnız 1 Hz yedek (kopan kanalda hareket donmasın; ping alanlarını da taşır)
   const flushState = guard(function () {
     R.stTimer = null;
     const p = R.pend; if (!p) return;
-    if (!connected()) { R.pend = null; return; }
-    const t = now();
+    const t = now(), dc = rtcOpenPeers(t), needMq = rtcNeedMqtt(t);
+    if (!connected() && !dc.length) { R.pend = null; return; }
     const m = { t: Math.round(p.t * 10) / 10, s: p.s }; if (p.b) m.b = p.b;
-    const meta = t - R.lastPing >= PING_MS;          // yayın sürerken ayrı ping yerine durum mesajı ping alanlarını taşır
-    if (meta) { m.sn = SN; m.cn = C.cn; m.p = Math.round(t * 10) / 10; m.r = R.rttN ? Math.round(R.rtt) : -1; }
-    if (!pub('s/' + myPid(), m, false, 'st')) { R.stTimer = setTimeout(flushState, 40); return; }   // bütçe yok: az sonra en güncelini dene
-    R.pend = null; R.lastState = t; if (meta) R.lastPing = t;
+    if (dc.length && R.pendDc !== p) {
+      R.pendDc = p;
+      const ds = JSON.stringify(Object.assign({ k: 's' }, m));
+      for (const X of dc) rtcSendTo(X, X.st, ds);
+    }
+    if (connected() && t - R.lastStMq >= (needMq ? bk().stMs : MQ_SAFE_MS) - 4) {
+      const meta = t - R.lastPing >= PING_MS;          // yayın sürerken ayrı ping yerine durum mesajı ping alanlarını taşır
+      if (meta) { m.sn = SN; m.cn = C.cn; m.p = Math.round(t * 10) / 10; m.r = R.rttN ? Math.round(R.rtt) : -1; if (RTC_OK) m.w = 1; }
+      if (pub('s/' + myPid(), m, false, 'st')) { R.lastStMq = t; if (meta) R.lastPing = t; }
+      else if (needMq) { R.stTimer = setTimeout(flushState, 40); return; }   // bütçe yok: az sonra en güncelini dene
+    }
+    R.pend = null; R.lastState = t;
   }, 'flushState');
 
   /* ---------------- zamanlayıcı: ping, canlılık, göç, katılma ---------------- */
@@ -919,6 +962,7 @@
     if (gap > 3000 && R.phase) onResume('tik boşluğu ' + Math.round(gap));
     if (C.mq) C.mq.tick(t);
     if (!R.phase) return;
+    rtcTick(t);                                      // doğrudan bağlantılar aracı kopukken de sürer
     if (!connected()) return;
     if ((R.phase === 'in' || R.phase === 'joining') && C.mq && t - C.mq.lastRx > SILENT_MS && t - C.openAt > SILENT_MS) { reconnectNow('sessiz bağlantı'); return; }
     if (t - R.lastPing >= PING_MS) sendPing();
@@ -932,7 +976,7 @@
     if (t - R.joinLast >= JOIN_RESEND) sendJoin();
     // eski ev sahibi oturumumuz yanıt vermiyor (yenileme / uygulama kapandı) → odayı geri al. Yarış sürerken başkaları canlıysa
     // geri ALMA: onlar birazdan aralarından yeni ev sahibi seçer (botları o devralır), biz üye olarak aynı yarışçıya döneriz.
-    if (R.reclaim && t - R.reclaimT > RECLAIM_MS && t - (R.otherMe || -1e9) > DROP_MS && (R.reclaim.st === 'lobby' || !R.pingSeen)) { reclaimHost(); return; }
+    if (R.reclaim && t - R.reclaimT > RECLAIM_MS && t - (R.otherMe || -1e9) > DROP_MS && ((R.lob && R.lob.st === 'lobby') || !R.pingSeen)) { reclaimHost(); return; }
     // hiç ping yok + retain lobi yok → oda yok (canlı odada ev sahibi 2 sn'de bir pingler); retain var ama yanıt yok → biraz daha bekle
     const lim = R.pingSeen ? JOIN_TIMEOUT_ALIVE : (R.sawRetained ? JOIN_TIMEOUT : JOIN_TIMEOUT_EMPTY);
     if (R.joinT0 && t - R.joinT0 > lim) {
@@ -1053,6 +1097,249 @@
     if (typeof e !== 'string') return '';
     const s = Array.from(e.replace(/[\u0000-\u001f<>"'`\\]/g, '')).slice(0, 8).join('');
     return s.trim();
+  }
+
+  /* =================== DOĞRUDAN BAĞLANTI: oyuncular arası WebRTC veri kanalları (P2P) ===================
+     Neden: aracı yolunda her paket telefon → yurt dışındaki herkese açık aracı → telefon gider (iki aracı ayağı + aracı kuyruğu).
+     Odadaki her oyuncu çifti doğrudan bağlanmayı dener: sinyal (teklif/cevap, adaylar SDP içinde) MQTT oda konusu 'rtc' ile; yalnız
+     herkese açık STUN (TURN yok). Açılınca yüksek hızlı durum ~20 Hz sırasız/güvenilmez 'st' kanalından, olaylar sıralı/güvenilir
+     'ev' kanalından gider. Aracıya: lobi/kontrol/katılma/ping/varlık + olayların yedeği + doğrudan bağlanamayan eş varsa normal durum,
+     herkes doğrudansa yalnız 1 Hz yedek durum. Kurulamayan / kopan eş için kendiliğinden aracı (oyun bozulmaz), sonra yeniden denenir.
+     Aynı mesaj iki yoldan gelirse tekrar atılır (durum: gönderenin zaman damgası, olay: gönderen oturumu + sıra no).
+     Eski sürümler (ping'de w yok) ve WebRTC'siz tarayıcılar yalnız aracıyla konuşur. Roller sabit: küçük pid teklif eder (çakışma yok). */
+  const RTC_OK = (function () { try { return typeof RTCPeerConnection === 'function' && !(FM.params && FM.params.rtc === '0'); } catch (e) { return false; } })();
+  const RTC_ICE = (FM.params && FM.params.stun === '0') ? [] : [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+  const RTC_PEND_MAX = 2, RTC_ANS_MAX = 4, RTC_GAP_MS = 400;   // aynı anda en çok 2 kurulum (cevaplarda 4), kurulumlar arası 0.4 sn
+  const RTC_SETUP_MS = 12000;      // bu sürede açılmayan bağlantı başarısız (aracıyla devam, sonra yeniden dene)
+  const RTC_STALE_MS = 2000;       // açık kanaldan bu kadar ses yoksa o eşe aracıdan da yolla (sessiz kopma)
+  const RTC_DEAD_MS = 8000;        // bu kadar ses yoksa kapat ve yeniden dene
+  const RTC_PING_MS = 700;         // kanal pingi (rtt + canlılık)
+  const RTC_RETRY = [2000, 8000, 30000, 90000];
+  const DC_ST_MS = 50;             // doğrudan durum aralığı (~20 Hz; aracı bütçesi yok)
+  const MQ_SAFE_MS = 1000;         // herkes doğrudanken aracıya yedek durum aralığı
+  const DLY_MIN = 80, DLY_MIN_DC = 55;   // ara değerleme gecikmesi tabanı (aracı / doğrudan)
+  const PEERS = {};                // pid → bağlantı {pid, sn, role, id, pc, st, ev, open, t0, lastRx, pingT, rtt}
+  const RT = {};                   // pid → {sn, tries, next} yeniden deneme
+  const RS = { stDc: 0, stMq: 0, stDup: 0, evDc: 0, evMq: 0, evDup: 0, opened: 0, failed: 0, sigIn: 0, sigOut: 0, lastStart: -1e9, block: false };
+  const rtcFresh = (X, t) => !!X && X.open && (t || now()) - X.lastRx < RTC_STALE_MS;
+  function rtcOpenPeers(t) {
+    const out = []; if (!RTC_OK || RS.block) return out;
+    for (const pid in PEERS) { const X = PEERS[pid]; if (rtcFresh(X, t)) out.push(X); }
+    return out;
+  }
+  function rtcAnyOpen() { const t = now(); for (const pid in PEERS) if (rtcFresh(PEERS[pid], t)) return !RS.block; return false; }
+  // aracıdan normal hızda durum gerekir mi? (doğrudan bağlı OLMAYAN canlı bir oda üyesi varsa ya da odada başka kimse yoksa)
+  function rtcNeedMqtt(t) {
+    if (!RTC_OK || RS.block || R.phase !== 'in' || !R.lob) return true;
+    const me = myPid(); let n = 0;
+    for (const p of R.lob.p) {
+      if (p.id === me || p.o || !alive(p.id)) continue;
+      n++;
+      if (!rtcFresh(PEERS[p.id], t)) return true;
+    }
+    return n === 0;
+  }
+  function rtcSendTo(X, ch, data) {
+    if (RS.block || !X || !X.open || !ch || ch.readyState !== 'open') return false;
+    if (ch === X.st && ch.bufferedAmount > 32768) return false;      // yavaş hat: durum paketini at (olay değil)
+    try { ch.send(typeof data === 'string' ? data : JSON.stringify(data)); return true; } catch (e) { rtcFail(X.pid, X, 'gönderilemedi'); return false; }
+  }
+  function rtcSig(to, ts, c, y, d) { RS.sigOut++; pub('rtc', { f: myPid(), fs: SN, to, ts, c, y, d }); }
+  function rtcNew(pid, sn, role, id) {
+    const pc = new RTCPeerConnection({ iceServers: RTC_ICE });
+    const st = pc.createDataChannel('st', { negotiated: true, id: 0, ordered: false, maxRetransmits: 0 });
+    const ev = pc.createDataChannel('ev', { negotiated: true, id: 1, ordered: true });
+    const X = { pid, sn, role, id, pc, st, ev, open: false, t0: now(), lastRx: 0, pingT: 0, rtt: null, cands: 0, srflx: 0, onCand: null, answered: false };
+    PEERS[pid] = X;
+    const live = () => PEERS[pid] === X;
+    const opened = guard(function () {
+      if (!live() || X.open || st.readyState !== 'open' || ev.readyState !== 'open') return;
+      X.open = true; X.lastRx = now(); RS.opened++;
+      RT[pid] = { sn, tries: 0, next: 0 };
+      log('doğrudan bağlantı açıldı', pid, role === 'o' ? '(teklif)' : '(cevap)', Math.round(now() - X.t0) + ' ms');
+      X.pingT = now(); rtcSendTo(X, st, { k: 'p', t: Math.round(now() * 10) / 10 });
+      emitPlayers(true);
+    }, 'rtc.open');
+    st.onopen = opened; ev.onopen = opened;
+    const onm = guard(function (e) { if (live()) rtcRecv(X, e.data); }, 'rtc.msg');
+    st.onmessage = onm; ev.onmessage = onm;
+    const down = guard(function () { if (live()) rtcFail(pid, X, 'kanal kapandı'); }, 'rtc.close');
+    st.onclose = down; ev.onclose = down;
+    st.onerror = function () { }; ev.onerror = function () { };
+    pc.onconnectionstatechange = guard(function () { if (live() && (pc.connectionState === 'failed' || pc.connectionState === 'closed')) rtcFail(pid, X, 'bağlantı ' + pc.connectionState); }, 'rtc.state');
+    pc.onicecandidate = guard(function (e) {
+      if (e && e.candidate) { X.cands++; if (/ typ (srflx|relay)/.test(e.candidate.candidate || '')) X.srflx++; }
+      if (X.onCand) X.onCand(!(e && e.candidate));
+    }, 'rtc.ice');
+    return X;
+  }
+  // adayları bekle (SDP'ye girsin; tek mesajda gider → QoS0 kaybına dayanıklı, az mesaj): toplama bitince, ilk STUN adayından
+  // 250 ms sonra, yalnız yerel adaylar varsa 1.5 sn sonra (STUN yoksa 0.3 sn), en geç 3 sn
+  function rtcGather(X) {
+    return new Promise(res => {
+      let done = false, tq = null, sx = false;
+      const fin = () => { if (done) return; done = true; clearTimeout(tA); clearTimeout(tq); X.onCand = null; res(); };
+      const tA = setTimeout(fin, 3000);
+      X.onCand = end => {
+        if (end || X.pc.iceGatheringState === 'complete') { fin(); return; }
+        if (X.srflx && !sx) { sx = true; clearTimeout(tq); tq = setTimeout(fin, 250); }
+        else if (X.cands && !tq) tq = setTimeout(fin, RTC_ICE.length ? 1500 : 300);
+      };
+      X.onCand(false);
+    });
+  }
+  function rtcOffer(pid, sn) {
+    const id = rnd(6); let X;
+    try { X = rtcNew(pid, sn, 'o', id); } catch (e) { log('WebRTC kurulamadı: ' + (e && e.message)); RT[pid] = { sn, tries: 9, next: now() + 120000 }; return; }
+    X.pc.createOffer().then(o => X.pc.setLocalDescription(o)).then(() => rtcGather(X)).then(() => {
+      if (PEERS[pid] !== X) return;
+      const d = X.pc.localDescription && X.pc.localDescription.sdp;
+      if (!d) throw new Error('SDP yok');
+      rtcSig(pid, sn, id, 'o', d);
+    }).catch(e => { if (PEERS[pid] === X) rtcFail(pid, X, 'teklif: ' + (e && e.message)); });
+  }
+  function rtcAnswer(pid, sn, id, sdp) {
+    let X;
+    try { X = rtcNew(pid, sn, 'a', id); } catch (e) { log('WebRTC kurulamadı: ' + (e && e.message)); return; }
+    X.pc.setRemoteDescription({ type: 'offer', sdp }).then(() => X.pc.createAnswer()).then(a => X.pc.setLocalDescription(a)).then(() => rtcGather(X)).then(() => {
+      if (PEERS[pid] !== X) return;
+      const d = X.pc.localDescription && X.pc.localDescription.sdp;
+      if (!d) throw new Error('SDP yok');
+      rtcSig(pid, sn, id, 'a', d);
+    }).catch(e => { if (PEERS[pid] === X) rtcFail(pid, X, 'cevap: ' + (e && e.message)); });
+  }
+  const okSdp = d => typeof d === 'string' && d.length > 20 && d.length < 16000 && d.indexOf('v=0') === 0;
+  // sinyal mesajı: {f, fs (gönderen oturumu), to, ts (alıcı oturumu), c (bağlantı kimliği), y: 'o' teklif | 'a' cevap | 'x' kapat, d: SDP}
+  function onRtc(m) {
+    if (!RTC_OK || RS.block || R.phase !== 'in') return;
+    const me = myPid(), f = tok(m.f, null);
+    if (!f || f === me || m.to !== me || (m.ts && m.ts !== SN)) return;   // bize değil / eski oturumumuza
+    const fs = tok(m.fs, null), c = tok(m.c, null);
+    if (!fs || !c || !inLobby(f)) return;
+    RS.sigIn++;
+    const inf = R.info[f] || (R.info[f] = {}); inf.sn = fs; inf.w = 1;
+    const X = PEERS[f];
+    if (m.y === 'o') {
+      if (me < f || !okSdp(m.d)) return;                                  // teklifi küçük pid yapar
+      let busy = 0; for (const k in PEERS) if (!PEERS[k].open) busy++;
+      if (X) rtcClose(f, 'yeni teklif', true); else if (busy >= RTC_ANS_MAX) return;   // teklif eden sonra yeniden dener
+      rtcAnswer(f, fs, c, m.d);
+    } else if (m.y === 'a') {
+      if (!X || X.role !== 'o' || X.id !== c || X.answered || !okSdp(m.d)) return;
+      X.answered = true;
+      X.pc.setRemoteDescription({ type: 'answer', sdp: m.d }).catch(e => { if (PEERS[f] === X) rtcFail(f, X, 'cevap uygulanamadı: ' + (e && e.message)); });
+    } else if (m.y === 'x') { if (X && X.id === c) rtcFail(f, X, 'eş kapattı'); }
+  }
+  function rtcRecv(X, data) {
+    if (RS.block || typeof data !== 'string' || data.length > 32768) return;
+    let m; try { m = JSON.parse(data); } catch (e) { return; }
+    if (!isObj(m)) return;
+    const t = now(); X.lastRx = t;
+    if (m.k === 's') onState(X.pid, m, X);
+    else if (m.k === 'e') { m.f = X.pid; onEv(m, X); }                 // gönderen = kanalın sahibi (başkası adına olay yollanamaz)
+    else if (m.k === 'p') { if (typeof m.t === 'number') rtcSendTo(X, X.st, { k: 'P', t: m.t }); }
+    else if (m.k === 'P') { if (typeof m.t === 'number') { const r = t - m.t; if (r >= 0 && r < 10000) X.rtt = X.rtt == null ? r : X.rtt + (r - X.rtt) * 0.3; } }
+  }
+  function rtcClose(pid, why, quiet) {
+    const X = PEERS[pid]; if (!X) return;
+    delete PEERS[pid];
+    X.onCand = null;
+    for (const ch of [X.st, X.ev]) { try { ch.onopen = ch.onmessage = ch.onclose = null; ch.close(); } catch (e) { } }
+    try { X.pc.onconnectionstatechange = X.pc.onicecandidate = null; X.pc.close(); } catch (e) { }
+    if (!quiet) log('doğrudan bağlantı kapandı', pid, why || '');
+    if (X.open) emitPlayers(true);
+  }
+  function rtcFail(pid, X, why) {
+    if (PEERS[pid] !== X) return;
+    RS.failed++;
+    const was = X.open;
+    rtcClose(pid, why);
+    if (X.role === 'o') {                                                // yeniden denemeyi teklif eden yönetir
+      const r = RT[pid] && RT[pid].sn === X.sn ? RT[pid] : (RT[pid] = { sn: X.sn, tries: 0, next: 0 });
+      r.next = now() + (was ? 1000 : RTC_RETRY[Math.min(r.tries, RTC_RETRY.length - 1)]); r.tries++;
+    }
+  }
+  function rtcCloseAll() { for (const pid in PEERS) rtcClose(pid, 'oda kapandı', true); for (const k in RT) delete RT[k]; }
+  // 0.5 sn'lik oda tikinde: istenen eşler = odada, canlı, WebRTC destekli, oturumu bilinen herkes
+  function rtcTick(t) {
+    if (!RTC_OK) return;
+    if (R.phase !== 'in' || !R.lob) { if (R.phase !== 'joining') rtcCloseAll(); return; }
+    const me = myPid(), want = {};
+    for (const p of R.lob.p) {
+      if (p.id === me || p.o || !alive(p.id)) continue;
+      const inf = R.info[p.id]; if (!inf || inf.w !== 1 || !inf.sn) continue;
+      want[p.id] = inf.sn;
+    }
+    let pend = 0;
+    for (const pid in PEERS) {
+      const X = PEERS[pid];
+      if (!want[pid]) { rtcClose(pid, 'eş odada değil'); continue; }
+      if (want[pid] !== X.sn) { rtcClose(pid, 'eşin oturumu değişti'); continue; }
+      if (!X.open) { if (t - X.t0 > RTC_SETUP_MS) { rtcFail(pid, X, 'kurulum zaman aşımı'); continue; } pend++; continue; }
+      if (t - X.lastRx > RTC_DEAD_MS) { rtcFail(pid, X, 'eşten ses yok'); continue; }
+      if (t - X.pingT >= RTC_PING_MS) { X.pingT = t; rtcSendTo(X, X.st, { k: 'p', t: Math.round(t * 10) / 10 }); }
+    }
+    if (RS.block || !connected()) return;                               // sinyal aracı ister
+    for (const pid in want) {
+      if (PEERS[pid] || me > pid) continue;
+      const r = RT[pid]; if (r && r.sn === want[pid] && t < r.next) continue;
+      if (pend >= RTC_PEND_MAX || t - RS.lastStart < RTC_GAP_MS) break;
+      RS.lastStart = t; pend++;
+      rtcOffer(pid, want[pid]);
+    }
+  }
+  // eş başına yol: [{pid, nick, link: 'p2p'|'mqtt', rtt (sen↔o), brokerRtt (onun aracıya), dly (ara değerleme gecikmesi), age}]
+  function linksList() {
+    const L = R.lob; if (!L) return [];
+    const me = myPid(), t = now(), out = [];
+    for (const p of L.p) {
+      if (p.id === me) continue;
+      const X = PEERS[p.id], inf = R.info[p.id], o = offs[p.id], p2p = rtcFresh(X, t), b = bufs[p.id];
+      const bro = inf && typeof inf.rtt === 'number' ? Math.round(inf.rtt) : null;
+      out.push({ pid: p.id, nick: p.n, link: p2p ? 'p2p' : 'mqtt', rtt: p2p ? (X.rtt != null ? Math.round(X.rtt) : null) : (bro != null && R.rttN ? Math.round(bro + R.rtt) : null),
+        brokerRtt: bro, dly: o ? Math.round(o.dly) : null, age: b ? Math.round(t - b.last) : null, setup: X && !X.open ? 1 : 0 });
+    }
+    return out;
+  }
+  // tek yön gecikme tahmini (ms): doğrudan → rtt/2, aracı → (onun + benim aracı rtt'si)/2
+  function oneWay(id) {
+    const X = PEERS[id];
+    if (rtcFresh(X) && X.rtt != null) return X.rtt / 2;
+    const inf = R.info[id], my = R.rttN ? R.rtt : 100;
+    return ((inf && typeof inf.rtt === 'number') ? inf.rtt : my) / 2 + my / 2;
+  }
+
+  /* =================== en hızlı aracı: oda kurarken yokla (TUR6) ===================
+     Aracılara aynı anda bağlanıp 2 PINGREQ ile gidiş-dönüşü ölçer; en düşük olanda oda kurulur (kod aracı indeksini taşır →
+     katılanlar da oraya gider). İlk yanıttan sonra en çok 0.7 sn, toplam en çok 3.5 sn bekler; ~15 ms içinde eşitse tercih sırası.
+     Hiçbiri yanıt vermezse eski sıra (PREF). Sonuç: FM.net.status().probe = {aracı adı: ms | null}. */
+  let lastProbe = null, probeSeq = 0;
+  function probeBrokers(cb) {
+    const res = {}, ms = [], byUrl = {};
+    let pending = 0, first = 0, done = false, tB = null;
+    const finish = () => {
+      if (done) return; done = true; clearTimeout(tA); clearTimeout(tB);
+      for (const m of ms) m.end('yoklama bitti', true);
+      let best = -1;
+      for (const i of PREF) { const v = res[byUrl[BROKERS[i].url]]; if (typeof v === 'number' && (best < 0 || v < res[byUrl[BROKERS[best].url]] - 15)) best = i; }
+      lastProbe = {}; for (const i of PREF) { const v = res[byUrl[BROKERS[i].url]]; lastProbe[BROKERS[i].n + (OVR ? '#' + i : '')] = typeof v === 'number' ? v : null; }
+      log('aracı yoklaması', JSON.stringify(lastProbe), '→', best >= 0 ? BROKERS[best].n : 'yanıt yok');
+      cb(best >= 0 ? best : PREF[0]);
+    };
+    const one = () => { pending--; if (!first) { first = now(); tB = setTimeout(finish, 700); } if (pending <= 0) finish(); };
+    const tA = setTimeout(finish, 3500);
+    for (const i of PREF) {
+      const url = BROKERS[i].url; if (byUrl[url] != null) continue;
+      byUrl[url] = i; pending++;
+      let t1 = 0, n = 0, best = Infinity, fin1 = false;
+      const end1 = () => { if (fin1) return; fin1 = true; one(); };
+      const m = new Mq(url, { cid: 'fm' + myPid() + 'y' + rnd(4), keep: KEEP, will: null, onMsg() { },
+        onOpen: () => { t1 = now(); m.ping(); },
+        onPong: () => { best = Math.min(best, now() - t1); if (++n < 2) { t1 = now(); m.ping(); } else { res[i] = Math.round(best); m.end('ölçüldü', true); end1(); } },
+        onClose: () => end1() });
+      ms.push(m); m.open();
+    }
+    if (!pending) finish();
   }
 
   /* =================== VARLIK: çevrimiçi listesi + profil kartları (TUR5 §8) ===================
@@ -1494,10 +1781,12 @@
     if (isObj(opts.profile)) R.prof = Object.assign({}, opts.profile);
     R.cfg0 = isObj(opts.cfg) ? clone(opts.cfg) : {};
     R.phase = 'creating'; R.rand4 = rnd(4, ALPHA);
-    const pref = (typeof opts.broker === 'number' && opts.broker >= 0 && opts.broker < BROKERS.length) ? opts.broker | 0 : PREF[0];
     startTick();
-    statusChanged();
-    startConnect(pref, 1, false);
+    if (typeof opts.broker === 'number' && opts.broker >= 0 && opts.broker < BROKERS.length) { statusChanged(); startConnect(opts.broker | 0, 1, false); return true; }
+    // aracı verilmediyse: en hızlısını yokla (yanıt yoksa tercih sırası), sonra o aracıda kur
+    const pid = R.probeId = ++probeSeq;
+    setConn('connecting'); statusChanged();
+    probeBrokers(guard(function (bi) { if (R.phase !== 'creating' || R.probeId !== pid) return; startConnect(bi, 1, false); }, 'probe'));
     return true;
   }
 
@@ -1591,9 +1880,11 @@
     }, 'kick', false),
     // Kendi durumunu (ve ev sahibiyse botlarınkini: {botId: durum}) yayınla. Her karede çağrılabilir; ~10 Hz'e kısılır.
     sendState: guard(function (s, bots) {
-      if (R.phase !== 'in' || !connected() || !isObj(s)) return false;
+      if (R.phase !== 'in' || !isObj(s)) return false;
+      const dc = rtcAnyOpen();
+      if (!connected() && !dc) return false;
       R.pend = { t: now(), s, b: isObj(bots) ? bots : null };
-      const el = now() - R.lastState, iv = bk().stMs;
+      const el = now() - R.lastState, iv = dc ? DC_ST_MS : bk().stMs;   // doğrudan bağlantıda ~20 Hz, aracıda ~10 Hz (EMQX 6.7)
       if (R.stTimer) return true;                     // zaten planlı: o anda en güncel durum gider
       if (el >= iv - 4) flushState();
       else R.stTimer = setTimeout(flushState, iv - el);
@@ -1604,14 +1895,24 @@
     buffer: guard(function (id) { const b = bufs[id]; return b ? b.arr.map(e => ({ t: e.t, d: e.d })) : []; }, 'buffer', []),
     delay: guard(function (id) { const b = bufs[id], o = b && offs[b.src]; return o ? Math.round(o.dly) : 130; }, 'delay', 130),
     // Olay kanalı (eşya, güç, ölüm, bitiş, kapı...). Saniyede ~20 ile sınırlı.
+    // Olaylar doğrudan bağlı eşlere 've' kanalından (hızlı), ayrıca aracıdan (yedek: kopan kanal olay kaybettirmesin); alıcı tekrarı atar.
     sendEvent: guard(function (type, data) {
-      if (R.phase !== 'in' || !connected() || !tok(type, null)) return false;
-      const t = now(); R.evTok = Math.min(30, R.evTok + (t - R.evT) / 50); R.evT = t;
+      if (R.phase !== 'in' || !tok(type, null)) return false;
+      const t = now(), dc = rtcOpenPeers(t);
+      if (!connected() && !dc.length) return false;
+      R.evTok = Math.min(30, R.evTok + (t - R.evT) / 50); R.evT = t;
       if (R.evTok < 1) return false; R.evTok -= 1;
-      const m = { f: myPid(), e: type, t: Math.round(t * 10) / 10, d: isObj(data) ? data : {} };
+      R.evSeq = (R.evSeq | 0) + 1;
+      const m = { f: myPid(), e: type, t: Math.round(t * 10) / 10, d: isObj(data) ? data : {}, i: R.evSeq, sn: SN };
       const s = JSON.stringify(m); if (s.length > 8192) return false;
-      return pub('ev', s);
+      let ok = false;
+      if (dc.length) { const ds = JSON.stringify(Object.assign({ k: 'e' }, m)); for (const X of dc) ok = rtcSendTo(X, X.ev, ds) || ok; }
+      if (connected()) ok = pub('ev', s) || ok;
+      return ok;
     }, 'sendEvent', false),
+    // teşhis: eş başına yol ve gecikme; tek yön gecikme tahmini (netgame saat eşitlemesi)
+    links: guard(linksList, 'links', []),
+    lat: guard(function (id) { return Math.round(oneWay(id)); }, 'lat', 100),
     emoji: guard(function (e) {
       const c = cleanEmoji(e); if (!c || R.phase !== 'in' || !connected()) return false;
       const t = now(); if (t - R.emoT < 700) return false; R.emoT = t;
@@ -1628,6 +1929,9 @@
       kill: guard(function () { const m = C.mq; if (m) m.end('test: ani kopma'); return !!m; }, 'kill', false),
       // varlığın KENDİ bağlantısını ani kopar (paylaşılan oda bağlantısına dokunmaz)
       pkill: guard(function () { const m = P.mq; if (m) m.end('test: ani kopma'); return !!m; }, 'pkill', false),
+      // doğrudan bağlantı testleri: block(true) = veri kanalları sessizce ölür (gönderim/alım yok) → eşler aracıya düşer
+      rtc: { PEERS, RS, block: guard(function (on) { RS.block = !!on; return RS.block; }, 'rtc.block', false), ok: () => RTC_OK,
+        stats: () => Object.assign({}, RS, { peers: Object.keys(PEERS).map(k => ({ pid: k, open: PEERS[k].open, rtt: PEERS[k].rtt, role: PEERS[k].role })) }) },
       // sayfa kapanma / gizlenme benzetimi (node testleri; tarayıcıda gerçek olaylar)
       pagehide: guard(function () { emit('net:pagehide', { persisted: false }); pPageHide(); if (R.phase === 'in') rjWrite({ closed: Date.now() }); if (R.phase) leave(false, true); return true; }, 'pagehide', false),
       hidden: guard(function (h) { pHidden(!!h); return true; }, 'hidden', false),

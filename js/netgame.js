@@ -257,8 +257,10 @@
     const b = FM.net.buffer(h), e = b.length ? b[b.length - 1] : null;
     if (!e || !e.d || !num(e.d.L) || e.d.q !== K.q || e.t === K.lastT) return;
     K.lastT = e.t;
-    let hp = null; for (const p of FM.net.players()) if (p.pid === h) hp = p.ping;
-    const my = FM.net.rtt() || 100, lat = ((num(hp) ? hp : my) + my) / 2;
+    // ev sahibinden bana tek yön gecikme: doğrudan bağlantıda ölçülen rtt/2, aracıda (onun + benim aracı rtt'si)/2
+    let lat;
+    if (typeof FM.net.lat === 'function') lat = FM.net.lat(h);
+    else { let hp = null; for (const p of FM.net.players()) if (p.pid === h) hp = p.brokerPing != null ? p.brokerPing : p.ping; const my = FM.net.rtt() || 100; lat = ((num(hp) ? hp : my) + my) / 2; }
     const est = e.t - lat - e.d.L * 1000;
     const first = !K.ok;
     if (first || Math.abs(est - K.t0) > 400) K.t0 = est; else K.t0 += (est - K.t0) * .15;

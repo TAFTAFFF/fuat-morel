@@ -10,6 +10,9 @@
 //   varlık listesi + profil kartları, ikisi HAZIR → 5 sn geri sayım → yarış, hazırı geri alma iptali, yarış ortasında katılan sayfayı
 //   YENİDEN YÜKLER (otomatik geri dönüş, aynı yarışçı kaldığı yerden), turlar arası otomatik geçiş (üyede autoLeft), final → ikisi de
 //   AYNI odada lobide (hazırlar sıfır), lobide yeniden yükleme → otomatik geri dönüş. Örn: node dev/mp-browser.js --yerel --tur5
+// --p2p: doğrudan bağlantı (WebRTC) akışı: iki yönde P2P, durum/olay veri kanalından + aracı durumu ~1 Hz'e iner, tekrar atma,
+//   kanal sessizce ölünce aracıya düşüş (oyun bozulmaz), yarışta yenileme → yeniden P2P, ev sahibi donunca göç; --rtcfail: katılanda
+//   WebRTC kurulamaz (yalnız TURN politikası) → o eş için aracıyla sorunsuz yarış. Örn: node dev/mp-browser.js --yerel --p2p
 'use strict';
 try { require('os').setPriority(0, require('os').constants.priority.PRIORITY_LOW); } catch (e) { }
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -17,6 +20,7 @@ const { spawn } = require('child_process');
 const { ghost, sleep, waitFor, endSig, setBroker } = require('./mp-bots.js');
 let BURL = process.env.NET_BROKER || null, LOCAL = null;
 const TUR5 = process.argv.includes('--tur5');
+const P2P = process.argv.includes('--p2p'), RTCFAIL = process.argv.includes('--rtcfail');
 const root = path.resolve(__dirname, '..');
 const chromePath = [process.env.CHROME, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p => p && fs.existsSync(p));
 if (!chromePath) { console.error('Chrome/Edge bulunamadı'); process.exit(1); }
@@ -225,6 +229,139 @@ async function tur5Flow(pass, fail) {
   if (caught.length) fail('net.js yakalanan hata: ' + caught.slice(0, 3).join(' | '));
   A.close(); B.close();
 }
+/* ---- TUR6: doğrudan bağlantı (WebRTC) ---- */
+// katılan sayfada WebRTC bağlantısı KURULAMASIN (TURN yok + yalnız relay politikası → aday yok, ICE başarısız)
+const RTC_BREAK = `(function () { const O = window.RTCPeerConnection; if (!O) return; window.RTCPeerConnection = function (cfg) { return new O(Object.assign({}, cfg || {}, { iceServers: [], iceTransportPolicy: 'relay' })); }; window.RTCPeerConnection.prototype = O.prototype; })();`;
+async function p2pFlow(pass, fail) {
+  const q = 'dev=1&mobile=1';
+  const step = async (name, fn) => { try { await fn(); } catch (e) { fail(name + ' — ' + (e && e.message)); } };
+  const A = await openPage('evsahibi', q + '&mp=host&want=99&wait=99999&mode=classic&theme=0&rounds=2&fill=3&mpauto=6');
+  await waitFor(() => A.eval('FM.net.inRoom()'), 30000, 'ev sahibi odayı kurdu');
+  const code = await A.eval('FM.net.code()');
+  let B;
+  if (RTCFAIL) {
+    // katılan: WebRTC kırık sayfa (betik sayfa betiklerinden önce)
+    B = await openPage('katilan', q);
+    await B.send('Page.addScriptToEvaluateOnNewDocument', { source: RTC_BREAK });
+    await B.send('Page.navigate', { url: pageUrl(q + '&mp=join&room=' + code) });
+    await sleep(500);
+    await waitFor(() => B.eval('!!(window.FM && FM.netgame && FM.S && FM.S.mode !== "boot" && window.__mp)'), 25000, 'katılan (kırık WebRTC) yüklendi');
+  } else B = await openPage('katilan', q + '&mp=join&room=' + code);
+  await waitFor(async () => (await B.eval('FM.net.inRoom()')) && (await A.eval('FM.net.players().length')) === 2, 30000, 'katılan odada');
+  const pidA = await A.eval('FM.net.pid()'), pidB = await B.eval('FM.net.pid()');
+  console.log(`oda ${code} — P2P akışı${RTCFAIL ? ' (katılanda WebRTC kırık)' : ''}; ev sahibi ${pidA}, katılan ${pidB} (teklif eden: ${pidA < pidB ? 'ev sahibi' : 'katılan'})`);
+  const link = (P, pid) => P.eval(`(FM.net.players().find(p => p.pid === ${JSON.stringify(pid)}) || {}).link || null`);
+  const stats = P => P.eval('FM.net._dbg.rtc.stats()');
+  // uzak oyuncunun ekrandaki gecikmesi (ms): gerçek x ile karşı ekrandaki x farkı / hız
+  const lagSample = async (from, to, pid) => {
+    const [real, seen] = await Promise.all([from.eval('({x: FM.S.player.x, vx: FM.S.player.vx, dead: FM.S.player.dead > 0 || FM.S.player.finished})'), to.eval(`(() => { const r = FM.netgame.racer(${JSON.stringify(pid)}); return r ? {x: r.x} : null; })()`)]);
+    if (!real || !seen || real.dead || Math.abs(real.vx) < 200) return null;
+    return Math.round((real.x - seen.x) / real.vx * 1000);
+  };
+  const med = a => { const b = a.filter(v => v != null).sort((x, y) => x - y); return b.length ? b[b.length >> 1] : null; };
+  const rates = async (P, ms) => { const s0 = await stats(P); await sleep(ms); const s1 = await stats(P); return { dc: Math.round((s1.stDc - s0.stDc) / ms * 10000) / 10, mq: Math.round((s1.stMq - s0.stMq) / ms * 10000) / 10, dup: s1.stDup - s0.stDup, evDup: s1.evDup - s0.evDup }; };
+
+  await step('lobide doğrudan bağlantı', async () => {
+    const t0 = Date.now();
+    if (RTCFAIL) {
+      await sleep(16000);
+      const la = await link(A, pidB), lb = await link(B, pidA), sa = await stats(A);
+      if (la === 'mqtt' && lb === 'mqtt' && sa.failed >= 1) pass(`katılanda WebRTC kurulamadı → ${Math.round((Date.now() - t0) / 1000)} sn sonra iki tarafta da "mqtt" (deneme başarısız sayıldı: ${sa.failed}, sonra yeniden denenecek)`);
+      else fail('kırık WebRTC: ' + JSON.stringify({ la, lb, sa }));
+      return;
+    }
+    await waitFor(async () => (await link(A, pidB)) === 'p2p' && (await link(B, pidA)) === 'p2p', 20000, 'iki yönde p2p');
+    await sleep(2500);
+    const pa = await A.eval(`FM.net.players().find(p => p.pid === ${JSON.stringify(pidB)})`), st = await A.eval('FM.net.status()');
+    pass(`lobide doğrudan bağlantı iki yönde ${((Date.now() - t0) / 1000).toFixed(1)} sn içinde açıldı; ev sahibinde katılan: link=${pa.link}, ping=${pa.ping} ms (aracı ${pa.brokerPing} ms); status: p2p ${st.p2p}/${st.peers}, aracı rtt ${st.brokerRtt} ms`);
+  });
+
+  await step('yarış: durum/olay veri kanalından', async () => {
+    await A.eval('FM.net.setReady(true)'); await B.eval('FM.net.setReady(true)');
+    await waitFor(async () => (await A.eval('FM.netgame.state().phase')) === 'race' && (await B.eval('FM.netgame.state().phase')) === 'race', 15000, 'yarış başladı');
+    for (const P of [A, B]) await P.eval('FM.netgame.autopilot = true; if (FM.S.player) FM.S.player.bot = true; true');
+    await waitFor(() => B.eval('FM.S.mode === "race" && FM.S.raceT > 3'), 15000, 'yarış ilerledi');
+    const [ra, rb] = await Promise.all([rates(A, 4000), rates(B, 4000)]);
+    const lags = []; for (let i = 0; i < 12; i++) { lags.push(await lagSample(B, A, pidB)); await sleep(150); }
+    const dly = await A.eval(`FM.net.delay(${JSON.stringify(pidB)})`);
+    const lag = med(lags);
+    console.log('    ara değerleme tahmini (ev sahibinde katılan): ' + await A.eval(`(o => o ? JSON.stringify({iv: Math.round(o.iv), jit: Math.round(o.jit), dly: Math.round(o.dly)}) : '-')(FM.net._dbg.offs[${JSON.stringify(pidB)}])`) + ', kare süresi ' + await A.eval('(() => { const t = []; let l = performance.now(); return new Promise(r => { const f = () => { const n = performance.now(); t.push(n - l); l = n; if (t.length < 30) requestAnimationFrame(f); else r(Math.round(t.reduce((a, b) => a + b) / t.length)); }; requestAnimationFrame(f); }); })()') + ' ms');
+    if (RTCFAIL) {
+      if (ra.dc === 0 && ra.mq >= 7 && rb.mq >= 7 && lag != null && lag < 400) pass(`WebRTC'siz eş: durum aracıdan (ev sahibi ${ra.mq} Hz, katılan ${rb.mq} Hz), uzak oyuncu ekranda ~${lag} ms geride (ara değerleme ${dly} ms) — oyun sorunsuz`);
+      else fail('aracıyla yarış: ' + JSON.stringify({ ra, rb, lag, dly }));
+      return;
+    }
+    if (ra.dc >= 14 && ra.mq <= 1.6 && rb.dc >= 14 && rb.mq <= 1.6 && dly <= 90 && lag != null && lag < 200)
+      pass(`durum veri kanalından ~${ra.dc}/${rb.dc} Hz, aracıdan yalnız ${ra.mq}/${rb.mq} Hz yedek (tekrar atılan ${ra.dup + rb.dup}); ara değerleme ${dly} ms, uzak oyuncu ekranda ~${lag} ms geride`);
+    else fail('DC akışı: ' + JSON.stringify({ ra, rb, dly, lag, lags }));
+    A.lagDc = lag;
+    // tekrar atma: katılanın testeresi ev sahibinde TAM BİR KEZ uygulanır (olay iki yoldan gelir)
+    await A.eval(`window.__its = 0; FM.on('item:use', d => { if (d.net && d.r && d.r.pid === ${JSON.stringify(pidB)} && d.item === 'saw') __its++; }); true`);
+    const e0 = (await stats(A)).evDup;
+    const thrown = await B.eval('(() => { const P = FM.S.player; if (!P || P.dead > 0 || P.finished || P.out) return false; P.item = "saw"; FM.game.useItem(P, 1, 0); return true; })()');
+    await sleep(1500);
+    const its = await A.eval('__its'), e1 = (await stats(A)).evDup;
+    if (thrown && its === 1 && e1 > e0) pass(`olay iki yoldan geldi, tekrar atıldı: testere ev sahibinde 1 kez (atılan tekrar ${e1 - e0})`);
+    else if (!thrown) console.log('    (testere denemesi atlandı: oyuncu ölü/bitirmiş)');
+    else fail('tekrar atma: ' + JSON.stringify({ its, e0, e1 }));
+  });
+
+  if (!RTCFAIL) await step('kanal sessizce ölür → aracıya düşüş', async () => {
+    await B.eval('FM.net._dbg.rtc.block(true)');
+    const t0 = Date.now();
+    await waitFor(async () => (await link(A, pidB)) === 'mqtt', 6000, 'ev sahibi aracıya düştü');
+    const ms = Date.now() - t0;
+    const ra = await rates(A, 3000);
+    const lags = []; for (let i = 0; i < 10; i++) { lags.push(await lagSample(B, A, pidB)); await sleep(150); }
+    const stale = await A.eval(`(FM.netgame.racer(${JSON.stringify(pidB)}) || {}).stale`);
+    if (ra.mq >= 7 && ra.dc === 0 && !stale && med(lags) != null && med(lags) < 500) pass(`katılanın kanalı sessizce öldü → ${(ms / 1000).toFixed(1)} sn içinde aracıya düştü, durum aracıdan ${ra.mq} Hz, uzak oyuncu donmadı (ekranda ~${med(lags)} ms geride; doğrudanken ~${A.lagDc} ms)`);
+    else fail('düşüş: ' + JSON.stringify({ ra, lags, stale }));
+    await B.eval('FM.net._dbg.rtc.block(false)');
+    const t1 = Date.now();
+    await waitFor(async () => (await link(A, pidB)) === 'p2p' && (await link(B, pidA)) === 'p2p', 45000, 'yeniden p2p').then(() => pass(`kanal geri gelince ${((Date.now() - t1) / 1000).toFixed(1)} sn içinde yeniden doğrudan bağlantı`)).catch(e => fail(e.message));
+  });
+
+  if (!RTCFAIL) await step('yarışta yenileme → yeniden P2P', async () => {
+    await waitFor(() => B.eval('FM.S.mode === "race"'), 30000, 'yarışta');
+    await B.send('Page.navigate', { url: pageUrl(q) });
+    await sleep(400);
+    await waitFor(() => B.eval('!!(window.FM && FM.netgame && FM.S && FM.S.mode !== "boot" && window.__mp)'), 25000, 'katılan yeniden yüklendi');
+    const t0 = Date.now();
+    await waitFor(async () => (await B.eval('FM.netgame.state().phase')) !== 'off' && (await link(A, pidB)) === 'p2p' && (await link(B, pidA)) === 'p2p', 20000, 'yeniden p2p');
+    await B.eval('FM.netgame.autopilot = true; if (FM.S.player && FM.S.player.ctrl === "local") FM.S.player.bot = true; true');
+    pass(`yarışta yenilendi → odaya döndü, doğrudan bağlantı ${((Date.now() - t0) / 1000).toFixed(1)} sn içinde yeniden kuruldu (yeni oturum)`);
+  });
+
+  if (!RTCFAIL) await step('ev sahibi donar → göç', async () => {
+    await waitFor(async () => (await A.eval('FM.netgame.state().phase')) === 'race' || (await A.eval('FM.netgame.state().round')) === 2, 120000, 'yarış');
+    const fr = await A.send('Page.setWebLifecycleState', { state: 'frozen' });
+    if (fr.error) throw new Error('dondurma desteklenmedi');
+    const t0 = Date.now();
+    await waitFor(() => B.eval('FM.net.isHost()'), 15000, 'katılan ev sahibi oldu');
+    const ms = Date.now() - t0;
+    await sleep(1500);
+    await A.send('Page.setWebLifecycleState', { state: 'active' });
+    await waitFor(async () => (await A.eval('FM.net.inRoom() && !FM.net.isHost()')) && (await B.eval('FM.net.isHost()')), 20000, 'eski ev sahibi üye oldu');
+    await waitFor(async () => (await link(A, pidB)) === 'p2p' && (await link(B, pidA)) === 'p2p', 30000, 'göçten sonra p2p');
+    pass(`ev sahibi dondu → ${(ms / 1000).toFixed(1)} sn sonra katılan ev sahibi oldu; eski ev sahibi uyanınca üye, doğrudan bağlantı yine iki yönde`);
+  });
+
+  await step('tur sonu herkeste aynı', async () => {
+    await waitFor(async () => (await evsOf(A, 'mp:end')).length >= 1 && (await evsOf(B, 'mp:end')).length >= 1, 200000, 'tur sonu');
+    const ea = (await evsOf(A, 'mp:end')).map(x => endSig(x.d)), eb = (await evsOf(B, 'mp:end')).map(x => endSig(x.d));
+    const last = ea[ea.length - 1];
+    if (eb.indexOf(last) >= 0) pass('tur sonucu iki tarafta aynı'); else fail('sonuç farklı: ' + ea.join(' | ') + ' // ' + eb.join(' | '));
+  });
+
+  const errs = A.errs.concat(B.errs);
+  if (!errs.length) pass('konsol hatası yok'); else { fail(errs.length + ' konsol hatası'); for (const e of errs.slice(0, 10)) console.log('      ' + e.slice(0, 300)); }
+  const caught = (await A.eval('FM.net.log().filter(l => l.indexOf("HATA") >= 0)')).concat(await B.eval('FM.net.log().filter(l => l.indexOf("HATA") >= 0)'));
+  if (caught.length) fail('net.js yakalanan hata: ' + caught.slice(0, 3).join(' | '));
+  console.log('    ev sahibi bağlantı günlüğü: ' + (await A.eval('FM.net.log().filter(l => /doğrudan|aracı yoklaması/.test(l)).slice(-8).join(" | ")')));
+  console.log('    katılan  bağlantı günlüğü: ' + (await B.eval('FM.net.log().filter(l => /doğrudan/.test(l)).slice(-8).join(" | ")')));
+  A.close(); B.close();
+}
+const evsOf = (P, e) => P.eval('__mp.filter(x => x.e === ' + JSON.stringify(e) + ')');
 function killAll() {
   for (const p of procs) { try { p.ch.kill(); } catch (e) { } }
   setTimeout(() => { for (const p of procs) { try { fs.rmSync(p.profile, { recursive: true, force: true }); } catch (e) { } } }, 800);
@@ -241,6 +378,7 @@ process.on('exit', killAll);
     if (BURL) setBroker(BURL);
     main: {
     if (TUR5) { await tur5Flow(pass, fail); break main; }
+    if (P2P) { await p2pFlow(pass, fail); break main; }
     if (LATE) { await lateFlow(pass, fail, ghosts); break main; }
     const want = 2 + NG;
     const A = await openPage('evsahibi', `dev=1&mp=host&mobile=1&want=${want}&wait=90&mode=${MODE}&theme=${THEME}&rounds=${ROUNDS}&fill=${FILL}&mpauto=6`);

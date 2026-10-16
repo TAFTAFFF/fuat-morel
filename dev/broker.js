@@ -152,7 +152,7 @@ function start(opts) {
         c.sendRaw(packet(0xB0, [pid]));
         break;
       }
-      case 12: c.sendRaw(Buffer.from([0xD0, 0])); break;               // PINGREQ → PINGRESP
+      case 12: c.deliver(Buffer.from([0xD0, 0])); break;               // PINGREQ → PINGRESP (--delay burada da: aracı yoklaması gecikmeyi ölçsün)
       case 14: c.clean = true; c.close(false, 'DISCONNECT'); break;   // temiz çıkış: will yok
       default: break;                                                  // PUBACK/PUBREC/PUBCOMP vb.: yok say
     }

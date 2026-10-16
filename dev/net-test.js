@@ -1,7 +1,7 @@
 // Kullanım: node dev/net-test.js [aracı: 0 | 1 | 2 | all | cerceve | yerel]   (0 EMQX, 1 Mosquitto, 2 HiveMQ; varsayılan all; cerceve = yalnız çevrimdışı)
 //   yerel = dev/broker.js ile bu süreçte yerel aracı başlatır (herkese açık aracıya ulaşılamayan ortamlar); ya da NET_BROKER=ws://.../mqtt
 //   verilirse tüm istemciler (?brokerUrl=) o aracıya bağlanır. Yerel aracıyla oda testlerine ek olarak VARLIK testleri de koşar.
-//   varlik = yalnız varlık testleri (yerel aracı başlatılır).
+//   varlik = yalnız varlık testleri (yerel aracı başlatılır); yoklama = yalnız en hızlı aracı seçimi (3 yerel aracı, farklı gecikme).
 // Ortam: NET_TEST_DUMP=1 → başarısız adımda istemci durumları + net.log() kuyruğu; NET_TEST_OUT=dosya.json → ölçümleri yaz.
 // js/core.js + js/net.js'i her sahte oyuncu için ayrı bir vm bağlamında yükler (Node 24 global WebSocket) ve GERÇEK
 // herkese açık MQTT aracısına karşı oda akışını uçtan uca dener: kurma, katılma, lobi eşitlemesi, ayarlar, hazır,
@@ -377,6 +377,30 @@ async function runBroker(bi) {
   return res;
 }
 
+// EN HIZLI ARACI (TUR6): üç yerel aracı farklı gecikmeyle; oda aracı verilmeden kurulunca en hızlısında kurulmalı, katılan da oraya gitmeli.
+async function probeTest() {
+  const res = { broker: 'yoklama', ok: [], fail: [], olc: {} };
+  console.log('\n=== En hızlı aracı yoklaması ===');
+  const B = require('./broker.js');
+  const brs = [await B.start({ port: 0, delay: 12 }), await B.start({ port: 0, delay: 150 }), await B.start({ port: 0, delay: 80 })];
+  const prev = BURL; BURL = brs.map(b => b.url).join('|');
+  const A = client('Yoklayan'), J = client('Katılan'); BURL = prev;
+  try {
+    const t0 = performance.now();
+    A.net.createRoom({ cfg: {} });
+    await waitFor(() => A.net.inRoom(), 15000, 'oda kuruldu');
+    const ms = Math.round(performance.now() - t0), st = A.net.status(), pc = A.net.parseCode(A.net.code());
+    J.net.joinRoom(A.net.code());
+    await waitFor(() => J.net.inRoom(), 15000, 'katılan odada');
+    if (pc.broker === 0 && st.broker === 0 && J.net.status().broker === 0 && st.probe && st.probe['Yerel 1#0'] < st.probe['Yerel 3#2'] && st.probe['Yerel 3#2'] < st.probe['Yerel 2#1']) {
+      res.ok.push('yoklama'); console.log('  ✓ aracılar yoklandı ' + JSON.stringify(st.probe) + ' → en hızlısında (0) kuruldu (' + ms + ' ms), kod aracıyı taşıdı, katılan da oraya gitti');
+    } else { res.fail.push('yoklama'); console.log('  ✗ yoklama: ' + JSON.stringify({ code: pc, broker: st.broker, probe: st.probe, joiner: J.net.status().broker })); }
+  } catch (e) { res.fail.push('yoklama ' + e.message); console.log('  ✗ yoklama — ' + e.message); }
+  A.net.leaveRoom(); J.net.leaveRoom();
+  await sleep(300); for (const b of brs) await b.close();
+  return res;
+}
+
 // VARLIK (TUR5 §8): çevrimiçi listesi + profil kartları. Yalnız yerel/özel aracıyla (herkese açık aracıya test kartı yazılmasın).
 async function presenceTest() {
   const res = { broker: 'varlık', ok: [], fail: [], olc: {} };
@@ -555,13 +579,14 @@ function frameTest() {
   const arg = process.argv[2] || (BURL ? 'yerel' : 'all');
   let broker = null;
   if ((arg === 'yerel' || arg === 'varlik') && !BURL) { broker = await require('./broker.js').start({ port: 0, delay: +(process.env.NET_DELAY || 0) }); BURL = broker.url; console.log('Yerel aracı: ' + BURL); }
-  const list = arg === 'yerel' ? [1] : arg === 'all' ? [0, 1, 2] : arg === 'cerceve' ? [] : [+arg];
+  const list = arg === 'yerel' ? [1] : arg === 'all' ? [0, 1, 2] : (arg === 'cerceve' || arg === 'yoklama') ? [] : [+arg];
   const out = [];
   console.log('=== Çevrimdışı ===');
   const frameFail = frameTest();
   if (frameFail) out.push({ broker: 'çerçeve', ok: [], fail: ['çerçeve ayrıştırıcı'], olc: {} });
   if (arg !== 'varlik') for (const bi of list) { out.push(await runBroker(bi)); await sleep(1500); }
   if (BURL && (arg === 'yerel' || arg === 'varlik')) out.push(await presenceTest());
+  if (arg === 'yerel' || arg === 'yoklama') out.push(await probeTest());
   console.log('\n=== ÖZET ===');
   let fails = 0;
   for (const r of out) { fails += r.fail.length; console.log(r.broker + ': ' + r.ok.length + ' geçti, ' + r.fail.length + ' kaldı ' + JSON.stringify(r.olc)); for (const f of r.fail) console.log('   ✗ ' + f); }

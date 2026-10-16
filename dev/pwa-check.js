@@ -16,14 +16,14 @@ const srv = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'max-age=600' });
   fs.createReadStream(f).pipe(res);
 });
-const chromePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(p => fs.existsSync(p));
+const chromePath = [process.env.CHROME, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(p => p && fs.existsSync(p));
 const profile = path.join(os.tmpdir(), 'fm-pwa-' + process.pid);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 let chrome = null, fails = 0;
 function ok(c, m) { console.log((c ? 'OK   ' : 'HATA ') + m); if (!c) fails++; }
 (async () => {
   await new Promise(r => srv.listen(PORT, '127.0.0.1', r));
-  chrome = spawn(chromePath, ['--headless=new', '--disable-gpu', '--mute-audio', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profile,
+  chrome = spawn(chromePath, ['--headless=new', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []), '--disable-gpu', '--mute-audio', '--no-first-run', '--hide-scrollbars', '--user-data-dir=' + profile,
     '--remote-debugging-port=' + DBG, '--window-size=844,390', 'about:blank'], { stdio: 'ignore' });
   let list = null;
   for (let i = 0; i < 50 && !list; i++) { await wait(200); try { list = await (await fetch('http://127.0.0.1:' + DBG + '/json/list')).json(); } catch (e) { } }

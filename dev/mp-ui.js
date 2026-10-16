@@ -11,7 +11,7 @@ const fs = require('fs'), path = require('path'), os = require('os');
 const { spawn } = require('child_process');
 const { sleep, waitFor } = require('./mp-bots.js');
 const root = path.resolve(__dirname, '..');
-const chromePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));
+const chromePath = [process.env.CHROME, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p => p && fs.existsSync(p));
 if (!chromePath) { console.error('Chrome/Edge bulunamadı'); process.exit(1); }
 const ARGS = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const opt = k => { const a = process.argv.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=')[1] : null; };
@@ -46,7 +46,7 @@ process.on('exit', killAll);
 async function openPage(name, query) {
   const profile = path.join(os.tmpdir(), 'fm-mpui-' + name + '-' + process.pid);
   const url = 'file:///' + root.split(path.sep).join('/') + '/index.html?' + query;
-  const ch = spawn(chromePath, ['--headless=new', '--disable-gpu', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-allow-origins=*',
+  const ch = spawn(chromePath, ['--headless=new', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []), '--disable-gpu', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-allow-origins=*',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--user-data-dir=' + profile, '--window-size=844,390', url], { stdio: 'ignore' });
   procs.push({ ch, profile });
   const portFile = path.join(profile, 'DevToolsActivePort');

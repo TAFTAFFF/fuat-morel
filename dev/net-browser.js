@@ -10,7 +10,7 @@ const { spawn } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const coreSrc = fs.readFileSync(path.join(root, 'js', 'core.js'), 'utf8');
 const netSrc = fs.readFileSync(path.join(root, 'js', 'net.js'), 'utf8');
-const chromePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));
+const chromePath = [process.env.CHROME, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p => p && fs.existsSync(p));
 if (!chromePath) { console.error('Chrome/Edge bulunamadı'); process.exit(1); }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function waitFor(fn, ms, what) {
@@ -58,7 +58,7 @@ function cdp(wsUrl) {
 (async () => {
   const profile = path.join(os.tmpdir(), 'fm-netb-' + process.pid);
   const url = 'file:///' + root.split(path.sep).join('/') + '/index.html?mobile=1';
-  const ch = spawn(chromePath, ['--headless=new', '--disable-gpu', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-allow-origins=*',
+  const ch = spawn(chromePath, ['--headless=new', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []), '--disable-gpu', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-allow-origins=*',
     '--user-data-dir=' + profile, '--window-size=844,390', url], { stdio: 'ignore' });
   const killChrome = () => { try { ch.kill(); } catch (e) { } };
   process.on('exit', killChrome);

@@ -9,18 +9,38 @@ const fs = require('fs');
 const q = process.argv[2] || 'scene=race&t=8';
 const out = path.resolve(process.argv[3] || 'shot.png');
 const W = +(process.argv[4] || 1280), H = +(process.argv[5] || 720);
-const candidates = [
+const candidates = [process.env.CHROME, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'
 ];
-const chrome = candidates.find(p => fs.existsSync(p));
+const chrome = candidates.find(p => p && fs.existsSync(p));
 if (!chrome) { console.error('Chrome/Edge bulunamadı'); process.exit(1); }
 const root = path.resolve(__dirname, '..').split(path.sep).join('/');
 const url = 'file:///' + root + '/index.html?dev=1&' + q;
 const profile = path.join(require('os').tmpdir(), 'fm-shot-' + process.pid);
 if (fs.existsSync(out)) fs.unlinkSync(out);
-const res = spawnSync(chrome, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--mute-audio', '--no-first-run',
+// Playwright varsa onu kullan: görüntü alanı tam W×H olur (headless --window-size'da tarayıcı çubuğu payı ~90 px yer) ve dokunmatik açılır.
+let pw = null;
+for (const m of [process.env.PLAYWRIGHT, 'playwright', '/opt/node22/lib/node_modules/playwright']) { if (!m) continue; try { pw = require(m); break; } catch (e) { } }
+if (pw && !process.env.NO_PW) {
+  (async () => {
+    const b = await pw.chromium.launch({ executablePath: chrome, args: ['--mute-audio', '--disable-dev-shm-usage', '--autoplay-policy=no-user-gesture-required'] });
+    try {
+      const touch = /(^|&)(touch|mobile)=1/.test(q);
+      const page = await (await b.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, hasTouch: touch })).newPage();
+      page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log('[tarayici] CONSOLE ' + m.type() + ': ' + m.text().slice(0, 500)); });
+      page.on('pageerror', e => console.log('[tarayici] Uncaught ' + String(e && e.message || e).slice(0, 500)));
+      await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+      await page.waitForTimeout(+(process.env.SHOT_WAIT || 2500));
+      await page.screenshot({ path: out });
+    } catch (e) { console.log('playwright hata: ' + e.message); }
+    await b.close();
+    console.log(fs.existsSync(out) ? 'OK ' + out : 'BASARISIZ');
+  })();
+  return;
+}
+const res = spawnSync(chrome, ['--headless=new', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []), '--disable-gpu', '--hide-scrollbars', '--mute-audio', '--no-first-run',
   '--user-data-dir=' + profile, '--window-size=' + W + ',' + H, '--virtual-time-budget=4000',
   '--enable-logging=stderr', '--v=0',
   '--screenshot=' + out, url], { encoding: 'utf8', timeout: 90000 });

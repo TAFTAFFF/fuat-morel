@@ -58,6 +58,14 @@
     if (m > 0) return m + ' dk';
     return sec + ' sn';
   }
+  /** Satırlarda kompakt süre: "12 sa" (≥1 saat) · "45 dk" · "30 sn". Tam metin (12 sa 30 dk) profil sayfasında. */
+  function fmtPlayShort(sec) {
+    if (sec == null || sec === '' || !isFinite(+sec) || +sec < 0) return '—';
+    sec = Math.floor(+sec);
+    if (sec >= 3600) return Math.floor(sec / 3600) + ' sa';
+    if (sec >= 60) return Math.floor(sec / 60) + ' dk';
+    return sec + ' sn';
+  }
   /** Son görülme: "az önce" (<1 dk) · "5 dk önce" · "2 sa önce" · "dün" · "3 gün önce" · "2 ay önce" (ms zaman damgasından) */
   function fmtAgo(ms) {
     if (!(+ms > 0)) return 'bilinmiyor';
@@ -1698,7 +1706,7 @@
       '<span class="cm-pt">' + pt(ch, 64, { skin: p.skin }) + '<i class="on-dot ' + dotCls(p) + '"></i></span>' +
       '<span class="cm-id"><b><span class="cm-n">' + esc(p.nick || ch) + '</span>' + (p.me ? '<em class="you">SEN</em>' : '') + '</b>' + statusLine(p) + '</span>' +
       '<span class="cm-lgc">' + (p.tr != null ? lgBadge(L, 'sm') : '') + '</span>' +
-      '<span class="cm-play" title="Oynama süresi">' + svg('clock', 'cm-ci') + '<b>' + esc(fmtPlay(p.play)) + '</b></span>' +
+      '<span class="cm-play" title="Oynama süresi: ' + esc(fmtPlay(p.play)) + '">' + svg('clock', 'cm-ci') + '<b>' + esc(fmtPlayShort(p.play)) + '</b></span>' +
       '<span class="cm-tr" title="Toplam kupa">' + trophyI(32, 'cm-tri') + '<b>' + (p.tr != null ? fmtN(p.tr) : '—') + '</b></span>' +
       (joinable(p) ? '<button class="btn sm b-green cm-join" data-act="joinroom" data-code="' + esc(p.code) + '">KATIL</button>' : '<span class="cm-chev">' + svg('chevR') + '</span>') +
     '</div>';
@@ -3663,7 +3671,7 @@
     return { lob: { code: 'K7MXQ', isHost: host, max: 10, st: 'lobby', cfg: { mode: FM.params.mode || 'elim', map: FM.params.map || 'desert', rounds: 3, bots: true, fill: 4 } }, pl, stt: { conn: 'open', rtt: 84, phase: 'in' } };
   }
   /** Geliştirici: sahte varlık verisi (yalnızca ?dev=1&fakenet=1 ekran görüntüleri için; oyunda HİÇ kullanılmaz) */
-  function devFakeNet() {
+  function devFakeNet(long) {
     const now = Date.now(), H = 3600e3, D = 24 * H;
     const online = [
       { pid: 'me0', nick: myNick(), char: selChar(), st: 'menu', me: true },
@@ -3685,6 +3693,10 @@
       pr('p8', 'Morel', 'Kral', 95, 1500, 2, 9, 0, 'Kral', now - 5 * D),
       pr('p9', 'Emir', 'Nuss', 0, 300, 1, 2, 0, 'Nuss', now - 40 * 60000)
     ];
+    if (long) {   // en kötü durum: 14 harfli takma ad, 5 haneli kupa, uzun süre
+      online[1].nick = 'UzunTakmaAdli14'.slice(0, 14); profiles[0].nick = online[1].nick; profiles[0].tr = 12345; profiles[0].play = 3600 * 987 + 1800;
+      profiles[1].nick = 'MMMMMMMMMMMMMM'; online[2].nick = profiles[1].nick; profiles[1].tr = 54321;
+    }
     return { online, profiles, h2h: { p1: { nick: 'Kral', w: 12, l: 8 } } };
   }
   function devOpen() {
@@ -3695,7 +3707,7 @@
       else if ((P.scene || 'race') === 'race' && touchMode) { st.devForce = true; enterRace(); }
       return;
     }
-    if (P.fakenet === '1') st.fakeNet = devFakeNet();
+    if (P.fakenet === '1' || P.fakenet === '2') st.fakeNet = devFakeNet(P.fakenet === '2');
     if (P.tab && st.tabs[u] !== undefined) st.tabs[u] = P.tab;
     if (P.cv && FM.CH[P.cv]) st.cview = P.cv;
     switch (u) {

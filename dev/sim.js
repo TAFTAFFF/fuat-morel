@@ -9,7 +9,7 @@ const sb = { console, Math, Date, JSON, setTimeout: () => 0, clearTimeout() { },
   location: { search: '' }, URLSearchParams, navigator: { maxTouchPoints: 0 }, matchMedia: () => ({ matches: false, addEventListener() { } }), innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1, addEventListener() { },
   document: { getElementById: () => stubEl(), createElement: () => stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [], addEventListener() { }, body: stubEl(), fonts: null } };
 sb.window = sb; vm.createContext(sb);
-for (const f of ['core', 'gfx', 'level', 'game', 'meta']) { const p = path.join(root, 'js', f + '.js'); if (fs.existsSync(p)) vm.runInContext(fs.readFileSync(p, 'utf8'), sb, { filename: f + '.js' }); }
+for (const f of ['core', 'gfx', 'net', 'level', 'game', 'meta']) { const p = path.join(root, 'js', f + '.js'); if (fs.existsSync(p)) vm.runInContext(fs.readFileSync(p, 'utf8'), sb, { filename: f + '.js' }); }
 const FM = sb.FM; FM.view.VW = 1000;
 const N = +(process.argv[2] || 10); let allFin = 0, errors = 0; const deaths = {}; const times = []; let nDeath = 0, nUse = 0, sumT = 0;
 FM.on('item:use', () => nUse++);

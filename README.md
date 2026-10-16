@@ -40,4 +40,6 @@ Hepsinin hızı, zıplaması ve güç dolumu aynı; fark sadece görünüş ve �
 ## Geliştirici
 - `node dev/sim.js 8` — oyun mantığını tarayıcısız simüle eder.
 - `node dev/shot.js "scene=race&t=8&theme=0" cikti.png 1280 720` — headless Chrome ile ekran görüntüsü (scene: race | podium | menu, theme: 0 orman, 1 şeker, 2 kar, 3 kale).
-- Modül sözleşmesi: `docs/CONTRACT.md`.
+- `node dev/net-test.js 1` — çok oyunculu ağ katmanını gerçek MQTT aracısına karşı sahte oyuncularla dener (0 EMQX, 1 Mosquitto, 2 HiveMQ, all).
+- `node dev/net-browser.js` — oyunu headless Chrome'da ev sahibi yapıp node oyuncularla aynı odada dener.
+- Modül sözleşmesi: `docs/CONTRACT.md`; çok oyunculu tasarım ve `FM.net` API'si: `docs/MULTIPLAYER.md`.

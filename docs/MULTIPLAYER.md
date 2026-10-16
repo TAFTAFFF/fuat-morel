@@ -11,7 +11,7 @@ Test edildi (2026-10-16, bu bilgisayardan):
 - `wss://test.mosquitto.org:8081/mqtt` — ~0.8 sn, ~80 ms
 - `wss://broker.hivemq.com:8884/mqtt` — ~2.7 sn, ~350 ms
 - (public.mqtthq.com çalışmadı)
-Sıra: emqx → mosquitto → hivemq; bağlantı kopar/açılmazsa sıradakine geç. **Odadaki herkes aynı aracıda olmalı**: oda kodu aracı indeksini de taşır (ör. kodun son karakteri) ya da lobi mesajı hangi aracıda olduğunu yayınlar; katılan önce koddaki aracıyı dener.
+Sıra: emqx → mosquitto → hivemq (UYGULAMADA mosquitto → emqx → hivemq oldu; gerekçe ve ölçüm: "Uygulama Notları"); bağlantı kopar/açılmazsa sıradakine geç. **Odadaki herkes aynı aracıda olmalı**: oda kodu aracı indeksini de taşır (ör. kodun son karakteri) ya da lobi mesajı hangi aracıda olduğunu yayınlar; katılan önce koddaki aracıyı dener.
 
 `js/net.js`: Harici kütüphane YOK — kendi minimal MQTT 3.1.1 istemcimiz (WebSocket alt protokolü `mqtt`, ikili çerçeveler): CONNECT (clean session, keepalive 20 sn, Last Will), CONNACK, SUBSCRIBE/SUBACK, UNSUBSCRIBE, PUBLISH QoS 0 (+ retain bayrağı), PINGREQ/PINGRESP, DISCONNECT; kısmi çerçeve birleştirme; otomatik yeniden bağlanma (üstel bekleme); aracı yedeklemesi. dev/ altında node ile gerçek aracıya karşı test edilebilir (Node 24'te global WebSocket var).
 
@@ -86,3 +86,91 @@ Ev sahibi haritayı seçer (veya "Rastgele"), tur sayısı 1/3/5, mod, bot doldu
 ## 7. Test
 - `dev/net-test.js`: node ile gerçek aracıya bağlanan 3-9 sahte oyuncu (durum yayınlar, olay yollar) → tarayıcıdaki oyunun odasına katılır.
 - Headless Chrome iki sekme (ev sahibi + katılan) aynı odada yarış (YAVAŞ MOD: aynı anda en fazla 2 Chrome).
+
+## Uygulama Notları (ajanlar)
+
+### net.js — `FM.net` ağ katmanı (ağ ajanı)
+Yükleme: `core.js → gfx.js → net.js → level.js → game.js …` (index.html; `dev/sim.js` de yükler). WebSocket yoksa (node sim) etkisizdir: oda çağrıları `false` döner + `net:error {code:'nows'}`. Oda işlemi yapılmadıkça bağlantı/zamanlayıcı AÇMAZ. Her giriş noktası try/catch korumalı, exception sızdırmaz. Teşhis: `FM.net.log()` (son 250 satır), `FM.net.debug = true` (konsola yazar).
+
+**Kimlik.** `FM.save.pid` ('p' + 9 karakter [a-z0-9], kalıcı; `FM.resetSave()` sonrası aynı pid geri yazılır). `FM.save.nick` (yoksa seçili karakter adı) ve `FM.save.nickSet` (`false` = kullanıcı henüz takma ad seçmedi → UI ilk çok oyunculu girişte sorsun). `FM.net.setNick(s)` temizler (≤14 karakter), kaydeder, `nickSet=true` yapar, odadaysa herkese yayar. Kayıt içe aktarma (bölüm 5) `pid`'i ÜZERİNE YAZMAMALI (iki cihaz aynı pid → `dup`).
+
+**Aracılar ve oda kodu.** `BROKERS` dizisinin sırası (0 EMQX, 1 Mosquitto, 2 HiveMQ) koda gömülüdür, değiştirme. Tercih/yedek sırası `FM.net.PREF = [1, 0, 2]` → **Mosquitto → EMQX → HiveMQ**. *Tasarımdan bilinçli sapma:* ölçümde herkese açık EMQX istemci başına 1 sn'de ~10 yayından fazlasını SESSİZCE atıyor ve gecikmesi ~2 kat (aşağıdaki tablo). net.js her aracı için kayan 1 sn pencereli yayın bütçesi uygular (EMQX ≤9/sn, durum 6.7 Hz; diğerlerinde durum 10 Hz); önemli mesajlar (ctl/ev/lobby/join/ping) bütçe dolunca sıraya girer, kaybolmaz. Odadaki herkes odanın aracısında kalır; aracı ~27 sn erişilemezse herkes aynı sırayla bir sonrakine geçer. Kod: 5 karakter, alfabe `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`; ilk 4 rastgele, 5. karakter = sağlama (3 bit) × 4 + aracı indeksi (2 bit). `parseCode()` linki, küçük harfi, boşluk/tireyi kabul eder; yazım hatalarının çoğu anında `badcode` olur.
+
+**API (`FM.net`)**
+
+| Çağrı | Dönüş / not |
+|---|---|
+| `available()` | WebSocket var mı |
+| `pid()`, `nick()`, `setNick(s)` | kimlik |
+| `createRoom({cfg?, profile?, broker?})` | `true` = başladı. Bağlanınca kod üretilir; `net:status` (phase `creating`→`in`) ve `net:lobby` gelir; kod `code()` |
+| `joinRoom(kodYaDaLink, {profile?})` | geçersiz kodsa `false` + `net:error badcode`. Kabul edilince phase `in`, `net:lobby` |
+| `leaveRoom()` | ev sahibiysen odayı canlı en küçük pid'e devreder; son kişiysen retain lobiyi siler (oda kapanır) |
+| `inRoom()`, `busy()` (kurulum/katılma dahil), `isHost()`, `code()`, `host()` (ev sahibi pid), `rtt()` | durum sorguları; rtt = kendi↔aracı gidiş-dönüş ms |
+| `status()` | `{conn: 'idle'/'connecting'/'open'/'reconnecting', phase: null/'creating'/'joining'/'in', room, role: 'host'/'member'/null, inRoom, host, me, broker, brokerName, rtt}` |
+| `statusText()` | Türkçe kısa durum ("Bağlantı koptu, yeniden bağlanılıyor…" vb.) |
+| `lobby()` | `{code, host, me, isHost, st: 'lobby'/'race'/'results', cfg, epoch, v, players, max: 10}` |
+| `players()` | `[{pid, nick, char, skin, trail, plate, ready, waiting, off, host, me, alive, ping, idx}]` lobi sırasıyla. `waiting` = yarış sürerken katıldı (bu turu izler, sonraki start/next'te katılır); `off` = yarış/sonuç sırasında düştü (geri gelirse temizlenir, lobiye dönünce silinir); `ping` = o oyuncunun kendi↔aracı rtt'si (ms ya da null) |
+| `config()` | cfg kopyası |
+| `setProfile({nick?, char?, skin?, trail?, plate?})` | varsayılanlar FM.save'den (selChar, equipped). Lobide karakter/kostüm değişince çağır |
+| `setReady(bool)` | toLobby'de herkesinki sıfırlanır |
+| `setConfig(obj)` | yalnız ev sahibi; sığ birleştirme, `null` anahtarı siler. Öneri: `{mode: 'classic'/'elim'/'coins'/'pure'/'chaos', map: 'random'/temaId, rounds: 1/3/5, bots: true}`. cfg SÜZÜLMEZ → UI'da `FM.esc` ile göster |
+| `start(d)`, `next(d)`, `end(d)`, `toLobby(d?)` | yalnız ev sahibi, `bool`. `d` (JSON nesnesi) herkese AYNEN `net:start/next/end/toLobby` olarak gider — ev sahibine de (aracıdan dönen yankıyla, herkesle aynı anda; yankı 1 sn gelmezse yerelde). Lobi `st`: start/next → race, end → results, toLobby → lobby (çevrimdışılar silinir, hazırlar sıfırlanır) |
+| `kick(pid)` | yalnız ev sahibi; atılan bu odaya tekrar giremez |
+| `sendState(s, bots?)` | her karede çağrılabilir; aracıya göre ~10 Hz (EMQX 6.7 Hz) kısılır, o anki EN GÜNCEL durum gider. `bots` = `{botId: durum}` (yalnız ev sahibi) aynı mesajda. `s` her seferinde yeni nesne olmalı (`packRacer`) |
+| `sample(id, delayMs?)` | id = pid ya da bot id. Ara değerlenmiş durum kopyası (x, y, vx, vy doğrusal; diğer alanlar eski örnekten) + `_age` (son mesajdan beri ms), `_stale` (1 = 1.5 sn'dir veri yok), `_ex` (1 = en fazla 90 ms doğrusal öngörü). Veri yoksa `null`. delay verilmezse göndericiye göre uyarlamalı (~130 ms) |
+| `latest(id)`, `buffer(id)`, `delay(id)` | ham son örnek / tampon `[{t: yerel ms, d}]` (son ~1 sn) / uyarlamalı gecikme ms |
+| `sendEvent(type, data)` | type `[A-Za-z0-9_-]{1,24}`, data JSON ≤ ~8 KB; KENDİNE GELMEZ; ~20/sn sınır |
+| `emoji(e)` | ≤ 8 karakter, 0.7 sn'de bir |
+| `packRacer(r, extra?)`, `applyRacer(r, d)`, `FIELDS` | yarışçı ↔ kısa anahtar dönüştürücü (aşağıda) |
+| `shareLink(code?)` | sayfa adresi (diğer parametreler atılır) + `?oda=KOD` |
+| `codeFromUrl()`, `clearUrlCode()` | açılış linkindeki geçerli kod (yoksa null) / adres çubuğundan `oda` parametresini sil (katıldıktan sonra) |
+| `parseCode(s)` | `{code, broker}` ya da null |
+| `alive(pid)`, `now()` | canlılık; `performance.now()` |
+| `_dbg` | YALNIZ testler (kill, freeze, iç durum) — oyun kullanmaz |
+
+**Olaylar (`FM.on`)**
+- `net:status` → `status()` nesnesi (yalnız değişince).
+- `net:lobby` → `lobby()` nesnesi (her lobi değişiminde).
+- `net:players` → `{code, players}` (liste/canlılık/ping değişince, ≤ 2/sn).
+- `net:start` → ev sahibinin start yükü. Yarış sürerken katılan (ya da sayfayı yenileyen) oyuncuya son start/next yükü **`late: true`** eklenmiş olarak gelir → aynı haritayı kur, bu turu izleyici olarak göster.
+- `net:next`, `net:end`, `net:toLobby` → yük aynen. Maç başlamamış istemciye `net:next` gelirse start gibi ele al. Bağlantı koptuğu sırada kaçırılan kontrol mesajı, retain lobideki son kontrolle (`cl`) bir kez telafi edilir; aynı mesaj iki kez gelmez.
+- `net:event` → `{from: pid, type, data, lat}` (`lat` ≈ tahmini tek yön gecikme ms; mermi vb. için ileri sarmada kullanılabilir).
+- `net:emoji` → `{from, e, me, lat}` (kendi emojin de `me: true` ile hemen gelir).
+- `net:host` → `{pid, me, prev, pending?}`. `me: true` → artık SEN ev sahibisin: botları son uzak durumlarından devralıp simüle et, `sendState(s, bots)` ile yayınla, sıralama/end senin işin. `pending: true` = geçici aday (onay lobiyle gelir). Eski ev sahibi geri dönünce `me: false` ile üye olur.
+- `net:error` → `{code, msg, wasIn?}`; code ∈ `badcode | noroom | full | ver | conn | nows | dup | kicked`. `msg` Türkçe, doğrudan gösterilebilir. Hatadan sonra oda durumu sıfırlanmıştır.
+- `net:kicked` → `{by, msg}` (odadan atıldın; oda durumu sıfırlandı).
+
+**Davranış**
+- Canlılık: 2 sn'de bir ping (durum akarken ping alanları durum mesajına eklenir, ayrı ping gitmez); 6 sn sessizlik = düştü. Lobi aşamasında düşen listeden çıkar; yarış/sonuçta `off` olur, aynı sayfa geri gelince otomatik yeniden katılır.
+- Ev sahibi göçü: ev sahibi 6 sn susarsa (açıkça ayrılırsa hemen) canlı oyuncular arasında en küçük pid ev sahibi olur, `epoch` +1. Çatışmada büyük epoch, eşitse küçük pid kazanır. Yarış sürer.
+- Kısa kopma: Last Will 5 sn toleranslı; ev sahibi kısa koparsa göç olmaz. Sayfa gizlenip dönünce / zamanlayıcı boşluğunda bağlantı yoklanır, retain lobi yeniden alınır, diğerlerine 3.5 sn tolerans verilir — oyun tarafında ek iş gerekmez.
+- Aynı pid ikinci sekmede/cihazda odaya girerse eski oturum `net:error dup` alır; ev sahibinin kopyası reddedilir.
+- Çok oyunculuda DURAKLATMA YOK: main.js `visibilitychange`'de `ui:pause {force: true}` yayıyor; game/ui ajanı çok oyunculu yarışta bunu duraklatmaya çevirmemeli.
+- Mesajlar herkese açık aracıdan geçer: sır taşımaz; gelen her alan net.js'te tip/uzunluk süzgecinden geçer (cfg ve olay `data` hariç → bunları kullanan taraf doğrulasın).
+
+**Konular** (`fuatmorel/v1/<KOD>/…`, kısa anahtarlı JSON)
+- `lobby` (retain): `{v, h, e, st, cfg, p: [{id, n, c, sk, tr, pl, rd, w, o, sn}], x: [atılan pid], ck, cl: {t, d}, ts}`
+- `join`: `{f, sn, v, n, c, sk, tr, pl, rd, re}` (profil/hazır güncellemesi de bu konudan)
+- `ctl`: `{t: start/next/end/lobby/kick/rej, h, e, k, d}` (rej: `d = {to, sn, why}`)
+- `s/<pid>`: `{t, s: {durum}, b?: {botId: {durum}}, sn?, cn?, p?, r?}`
+- `ev`: `{f, e: tür, t, d}` · `ping`: `{f, sn, cn, t, r}` · `bye/<pid>`: `{f, sn, cn, w?}` (w = Last Will)
+
+**Durum anahtarları** (`packRacer`/`applyRacer`; varsayılan 0/false/null GÖNDERİLMEZ; x, y, vx, vy, h hep gider; x/y 0.1, süreler 0.01 hassasiyet):
+x→x, y→y, vx→vx, vy→vy, h→h, face→fc, onGround→g, slide→sl, climb→cl, slam→sm, jumps→ju, fly→fl, dash→da, sled→se, shield→sh, balloon→bl, boost→bo, padT→pd, frozen→fr, stun→st, netted→nt, dead→dd, inv→iv, inked→ik, slowT→sw, pull→pu, finished→fi, place→pc, ftime→ft, item→it, charge→ch, coins→co, kills→k, deaths→de, tp→j, elim→el, spec→sp.
+- `tp` (ışınlanma sayacı): yeniden doğma/portal gibi ani konum değişiminde oyun `r.tp++` yapmalı → o aralıkta ara değerleme kaydırmaz (>400 px sıçrama da kaydırılmaz).
+- `ph`, `land`, `jumpT` gönderilmez: uzak yarışçıda yerelde üret (koşu fazı vx'ten; `jumps` artınca jumpT = 1; `onGround` 0→1 olunca land = 1).
+- skin/trail/plate durumda yok → roster / `players()`.
+- Ek alan: `packRacer(r, {ek: 1})`; `sample()` aynen döndürür.
+- Önerilen olay türleri (game ajanı kesinleştirsin): `item {k, x, y, vx, vy, tgt?}`, `ab {id, x, y, tgt?}`, `death {r, by, cause}`, `fin {r, time}`, `gate {r, g}`, `coin {r, i}`; ev sahibi botlar adına yollarken `r` = bot id.
+
+**Ölçümler** (2026-10-16, bu bilgisayar, `dev/net-test.js`, 4 sahte oyuncu)
+
+| Aracı | Oda kurma | Durum hızı | Durum gecikmesi (tek yön, ort.) | Görsel gecikme (ara değerlemeli) | Olay gecikmesi | Yeniden bağlanma | Göç |
+|---|---|---|---|---|---|---|---|
+| Mosquitto | 0.6–0.7 sn | ~9 Hz | 90–105 ms | ~200 ms | ~75 ms | ~0.85 sn | ~6.1–6.4 sn |
+| EMQX | 0.6–1.1 sn | ~6 Hz | 180–240 ms | ~350 ms | 150–215 ms | 0.9–1.3 sn | ~6.3 sn |
+| HiveMQ | ~0.7 sn (bazı denemeler askıda kalıyor → 6 sn zaman aşımı + yeniden deneme) | ~9 Hz | ~85 ms | ~190 ms | ~60 ms | ~0.85 sn | ~6.0 sn |
+
+Start mesajı herkese 3–6 ms farkla ulaştı (ev sahibi dahil).
+
+**Testler.** `node dev/net-test.js [0|1|2|all|cerceve]` — node sahte oyuncular, gerçek aracı: kurma, katılma, lobi eşitlemesi, ayar/hazır/profil, start, durum akışı + ara değerleme, olay/emoji, yok oda, sürüm, üye kopması, ev sahibi kısa kopması, ev sahibi düşüp göç, eski ev sahibinin dönüşü, end/next/toLobby, aynı pid ikinci oturum, atma, 10 kişilik dolu oda, retain temizliği (+ çevrimdışı MQTT çerçeve testi). `node dev/net-browser.js [aracı]` — gerçek oyun sayfası headless Chrome'da (1 Chrome) ev sahibi + 2 node oyuncu; sayfa dondurma (telefon arka planı) → göç → geri dönüş, `?oda=` linki, konsol hataları.

@@ -685,7 +685,7 @@
         r.vy = 0;
       }
     }
-    if (r.onGround || r.climb) r.ph += (r.climb ? CLIMB : Math.abs(r.vx)) * dt * .05;
+    if (r.onGround || r.climb) r.ph += (r.climb ? CLIMB : Math.abs(r.vx)) * dt * .066;   // koşu adımı hıza göre: Fun Run gibi çevik bacaklar (eskiden ağır çekim gibi)
     else r.ph += dt * 4;
     // zemin öğeleri
     r.onMud = false; r.onBelt = false; r.onIce = false; r.onSand = false;

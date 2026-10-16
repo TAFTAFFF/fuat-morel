@@ -9,14 +9,14 @@
 
   /* ---------- uyarlanır çözünürlük ----------
      Herkes YÜKSEK çözünürlükte oynar: varsayılan cihazın kendi DPR'si (en çok 3). Telefon yarışta çok yavaşsa
-     çözünürlük kademeli düşer ama yüksek DPR'li ekranlarda 2'nin altına inmez (karakterler bulanıklaşmasın).
+     çözünürlük kademeli düşer ama yüksek DPR'li ekranlarda 1.75'in altına inmez (karakterler bulanıklaşmasın).
      Karar yarış ortasında verilse bile önbellek yenilemesi (takılma) yarış DIŞINDA uygulanır. Öğrenilen değer kayıtta
      `adaptDpr3` olarak saklanır (eski `adaptDpr` anahtarındaki öğrenilmiş düşük değerler yok sayılır).
      Kalite ayarı 'low' ise hep 1. */
   const devDpr = () => window.devicePixelRatio || 1;
   const DPR_MAX = 3;
-  const dprFloor = () => devDpr() >= 2 ? 2 : 1;
-  const LV = [1, 1.25, 1.5, 2, 2.5, 3];
+  const dprFloor = () => devDpr() >= 2 ? 1.75 : 1;   // akıcılık önce: zorlanan telefonda 1.75'e kadar iner (yine keskin)
+  const LV = [1, 1.25, 1.5, 1.75, 2, 2.5, 3];
   const stepDown = d => { for (let i = LV.length - 1; i >= 0; i--) if (LV[i] < d - 1e-6) return LV[i]; return 1; };
   const stepUp = d => { for (const v of LV) if (v > d + 1e-6) return v; return DPR_MAX; };
   const settings = () => (FM.save && FM.save.settings) || {};
@@ -211,15 +211,39 @@
   }
 
   /* ---------- kare güncelleme (görsel, gerçek dt) ---------- */
-  function frameUpdate(dt) {
+  function frameUpdate(dt, noCam) {
     for (const t of S.toasts) t.t -= dt; S.toasts = S.toasts.filter(t => t.t > 0);
     for (const f of S.feed) f.t -= dt; S.feed = S.feed.filter(f => f.t > 0);
     S.shake = Math.max(0, S.shake - dt);
     S.flash.a = Math.max(0, S.flash.a - dt * 2.2);
     if (S.mode === 'podium') S.podiumT = (S.podiumT || 0) + dt;
     for (const u of FM.R.updaters) call(u, dt);
-    updateCamera(dt);
+    if (!noCam) updateCamera(dt);   // ana döngü kamerayı ara değerlenmiş konumla ayrıca günceller
   }
+
+  /* ---------- çizim ara değerlemesi (akıcılık) ----------
+     Fizik 120 Hz sabit adımla ilerler; ekran 60/90/120 Hz. Bir karede düşen adım sayısı 1-2-3 arasında oynadığından
+     ara değerleme olmadan hızlı koşan karakter ve kamera "takılır" (akıcı değil, ağır çekim gibi hissettirir).
+     Yarışçılar ve varlıklar son iki fizik adımı arasında, birikmiş sürenin oranı (alpha) kadar ileride çizilir; kamera da
+     bu konumu izler. Çizimden sonra gerçek konumlar geri yüklenir (simülasyon ve ağ etkilenmez). */
+  const IPL = [];
+  function snapPrev() {
+    for (const r of S.racers) { r._px = r.x; r._py = r.y; }
+    for (const e of S.ents) if (typeof e.x === 'number') { e._px = e.x; e._py = e.y; }
+  }
+  function ipOne(o, a) {
+    if (typeof o._px !== 'number' || typeof o.x !== 'number') return;
+    const dx = o.x - o._px, dy = o.y - o._py;
+    if (dx * dx + dy * dy > 22500) return;   // ışınlanma / yeniden doğma (150 px üstü): ara değerleme yok
+    IPL.push(o, o.x, o.y); o.x = o._px + dx * a; o.y = o._py + dy * a;
+  }
+  function ipApply(a) {
+    IPL.length = 0;
+    if (!(a > 0 && a < 1)) return;
+    for (const r of S.racers) ipOne(r, a);
+    for (const e of S.ents) ipOne(e, a);
+  }
+  function ipRestore() { for (let i = 0; i < IPL.length; i += 3) { IPL[i].x = IPL[i + 1]; IPL[i].y = IPL[i + 2]; } IPL.length = 0; }
 
   /* ---------- performans izleme: YALNIZCA yarışta ölçülür (menü bulanıklığı vb. yanıltmasın) ---------- */
   const perf = { sum: 0, n: 0, slow: 0, good: 0, downs: 0, ups: 0 };
@@ -228,7 +252,7 @@
     perf.sum += dt; perf.n++;
     if (perf.n < 90) return;
     const avg = perf.sum / perf.n; perf.sum = 0; perf.n = 0;
-    if (avg > 1 / 45) { perf.slow++; perf.good = 0; }
+    if (avg > 1 / 50) { perf.slow++; perf.good = 0; }   // 50 FPS altı: akıcı değil → çözünürlüğü bir kademe düşür
     else { perf.slow = Math.max(0, perf.slow - 1); perf.good = avg < 1 / 56 ? perf.good + 1 : 0; }
     const cur = pendingDpr || adaptDpr;
     if (perf.slow >= 2 && cur > dprFloor()) {
@@ -247,8 +271,8 @@
   FM.hitStop = function (sec) {
     if (settings().shake === false || !(sec > 0)) return;
     const mp = mpLive();
-    hsT = Math.max(hsT, Math.min(mp ? .06 : .12, sec));
-    hsK = mp ? .4 : .08;
+    hsT = Math.max(hsT, Math.min(mp ? .05 : .07, sec));   // kısa tut: uzun donma oyunu ağır gösteriyordu
+    hsK = mp ? .45 : .3;
   };
   FM.on('death', d => {
     const P = S.player;
@@ -285,11 +309,16 @@
         const sdt = simDt(dt);                                   // hit-stop: kısa yavaşlama (+ çok oyunculuda geri ödeme)
         acc += sdt;
         let n = 0;
-        while (acc >= C.STEP && n < 12) { FM.game.step(C.STEP); acc -= C.STEP; n++; }
+        while (acc >= C.STEP && n < 12) { snapPrev(); FM.game.step(C.STEP); acc -= C.STEP; n++; }
         if (n >= 12) acc = 0;
-        frameUpdate(sdt);
+        frameUpdate(sdt, true);
       }
-      if (shouldRender(now)) render();
+      // çizim ve kamera ara değerlenmiş konumla; ardından gerçek konumlar geri
+      ipApply(S.paused && !mpLive() ? 0 : acc / C.STEP);
+      try {
+        if (S.L && (!S.paused || mpLive())) updateCamera(dt);
+        if (shouldRender(now)) render();
+      } finally { ipRestore(); }
     } catch (e) {
       if (loopErrs++ < 10) console.error(e);
     } finally {

@@ -1032,6 +1032,367 @@
     return s.trim();
   }
 
+  /* =================== VARLIK: çevrimiçi listesi + profil kartları (TUR5 §8) ===================
+     Oyun açıkken (oda dışında da) hafif bir bağlantı. Konular:
+       fuatmorel/v1/_on/<pid>  canlı nabız (retain YOK): görünürken 5 sn'de bir + durum değişince; sayfa kapanırken {st:'off'}
+       fuatmorel/v1/_pr/<pid>  profil kartı (RETAIN): değişince + görünürken dakikada bir + gizlenince/kapanırken (ls = son görülme ms)
+     Çevrimiçi = son ~12 sn içinde nabız geldi (uydurma yok). Sekme 60 sn'den uzun gizliyse durum 'away' (Uzakta), nabız 30 sn'ye
+     seyrekleşir; 'away' ASLA çevrimiçi sayılmaz. Oda bağlantısı aynı aracıdaysa onu paylaşır (ikinci soket açmaz).
+     Kare başına iş yok (1 sn'lik zamanlayıcı); aracıya ulaşılamazsa sessizce bekler, oyunu asla etkilemez.
+     Paylaşılan: takma ad, karakter, durum, oda kodu (yalnız açık lobide) ve profil kartı. Başka kişisel bilgi yok. */
+  const PR_ON = ROOT + '_on/', PR_PR = ROOT + '_pr/';
+  const HB_MS = 5000, HB_AWAY_MS = 30000, AWAY_AFTER = 60000, ONLINE_MS = 12000, AWAY_TTL = 75000;
+  const CARD_MS = 60000, CARD_MIN_MS = 3000, WARM_MS = 7000, CAME_GAP = 600000, BLIP_MS = 20000, PMAX = 300;
+  const ST_RANK = { lobby: 0, race: 1, solo: 2, menu: 3, away: 4 };
+  const P = {
+    on: false, halt: false,                 // açık mı / sayfa kapanıyor (bfcache) — halt iken yeniden bağlanmaz
+    mq: null, bi: -1, ord: 0, att: 0, timer: null, cn: '', openAt: 0, conn: 'off', homeT: 0,
+    subMq: null,                            // varlık konularına abone olunan bağlantı (kendi ya da paylaşılan oda bağlantısı)
+    shareWait: 0, iv: null, lastTick: 0,
+    lastHb: 0, hbSig: '', lastCard: 0, cardSig: '', cardDirty: true, hiddenAt: 0, warmUntil: 0,
+    peers: {},                              // pid → canlı kayıt {pid, nick, char, st, code, n, max, open, t, sns: {oturum: bitiş}}
+    cards: {},                              // pid → profil kartı (retain)
+    ls: {},                                 // pid → yerelde son görülme (canlı nabız anı, ms)
+    gone: {}, cameAt: {}, lobAt: {},        // kısa kesinti tespiti / net:came ve net:lobby-open sınırları
+    emitT: null, onSig: '', prSig: '', prT: 0, prDirty: false, myCardC: null, myCardT: 0
+  };
+  const pUrlOf = bi => (bi >= 0 && bi < BROKERS.length ? BROKERS[bi].url : '');
+  const pTarget = () => PREF[P.ord % PREF.length];
+  const pShared = () => connected() && C.bi >= 0 && pUrlOf(C.bi) === pUrlOf(pTarget());
+  const pOwnOk = () => !!(P.mq && P.mq.ok && !P.mq.done);
+  const pMq = () => (pShared() ? C.mq : (pOwnOk() ? P.mq : null));
+  const pHiddenLong = () => !!P.hiddenAt && now() - P.hiddenAt > AWAY_AFTER;
+  function pStatus() {
+    const sh = pShared() && P.subMq === C.mq, bi = sh ? C.bi : P.bi;
+    return { on: P.on, conn: P.conn, shared: sh, broker: bi, brokerName: bi >= 0 ? BROKERS[bi].n : '', n: P.on ? onlineCount() : 0 };
+  }
+  function pSetConn(s) { if (P.conn === s) return; P.conn = s; emit('net:presence', pStatus()); pChanged(); }
+
+  /* ---- bağlantı: paylaş ya da kendi bağlantını aç ---- */
+  function pRoute() {
+    if (!P.on || P.halt) { pStopOwn(); P.subMq = null; pSetConn('off'); return; }
+    if (pShared()) {
+      pStopOwn();
+      if (P.subMq !== C.mq) { pSubscribe(C.mq); pBeat(true); pCardPub(1); }
+      pSetConn('open');
+      return;
+    }
+    if (P.subMq && P.subMq !== P.mq) P.subMq = null;          // paylaşılan oda bağlantısı gitti
+    if (pOwnOk()) { if (P.subMq !== P.mq) pSubscribe(P.mq); pSetConn('open'); return; }
+    if (P.mq || P.timer) return;                               // bağlanıyor ya da bekliyor
+    // oda aynı aracıya yeniden bağlanıyorsa kısa süre bekle (gereksiz ikinci soket açma)
+    const w = P.shareWait - now();
+    if (C.want && C.bi >= 0 && pUrlOf(C.bi) === pUrlOf(pTarget()) && w > 0) { P.timer = setTimeout(pRouteT, w + 50); return; }
+    pAttempt();
+  }
+  const pRouteT = guard(function () { P.timer = null; pRoute(); }, 'pRouteT');
+  const pAttempt = guard(function () {
+    P.timer = null;
+    if (!P.on || P.halt || pShared() || P.mq) return;
+    if (typeof WebSocket === 'undefined') { pSetConn('off'); return; }
+    if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {   // çevrimdışı: 'online' olayı ya da 30 sn sonra tekrar
+      pSetConn('offline'); P.timer = setTimeout(pAttempt, 30000); return;
+    }
+    const bi = pTarget(); P.bi = bi; P.cn = rnd(5);
+    if (P.conn !== 'open') pSetConn('connecting');
+    log('varlık bağlanıyor', BROKERS[bi].n);
+    const m = new Mq(BROKERS[bi].url, { cid: 'fm' + myPid() + 'v' + P.cn, keep: KEEP, will: null,
+      onOpen: () => { if (P.mq === m) pOnOpen(); }, onClose: (r, w) => { if (P.mq === m) pOnClose(r, w); }, onMsg: (t, p, r) => { if (P.mq === m) pMsg(t, p, r); } });
+    P.mq = m; m.open();
+  }, 'pAttempt');
+  function pOnOpen() {
+    if (pShared() || !P.on || P.halt) { pRoute(); return; }
+    P.att = 0; P.openAt = now();
+    P.homeT = P.ord % PREF.length ? now() + 600000 : 0;      // yedek aracıdaysak 10 dk sonra tercih edilene dönmeyi dene
+    log('varlık bağlandı', BROKERS[P.bi].n);
+    pSubscribe(P.mq); pSetConn('open'); pBeat(true); pCardPub(1);
+  }
+  function pOnClose(reason, was) {
+    const m = P.mq; P.mq = null; if (P.subMq === m) P.subMq = null;
+    log('varlık bağlantısı kapandı:', reason);
+    if (!P.on || P.halt) { pSetConn('off'); return; }
+    if (pShared()) { pRoute(); return; }
+    const short = was && now() - P.openAt < 5000;
+    if (!was || short) { P.att++; if (P.att % 2 === 0) P.ord++; }   // aynı aracı iki kez açılmadı → sıradaki (herkes aynı sırayı izler)
+    else P.ord = 0;                                                // kurulu bağlantı koptu: önce tercih edilen aracı
+    pSetConn('connecting');
+    const d = BACKOFF[Math.min(P.att, BACKOFF.length - 1)] * (0.85 + Math.random() * 0.3);
+    clearTimeout(P.timer); P.timer = setTimeout(pAttempt, (was && !short) ? 500 : d);
+  }
+  function pStopOwn() {
+    clearTimeout(P.timer); P.timer = null;
+    const m = P.mq; P.mq = null;
+    if (m) { if (P.subMq === m) P.subMq = null; m.disconnect(); }
+  }
+  function pSubscribe(mq) {
+    mq.subscribe(PR_ON + '+'); mq.subscribe(PR_PR + '+');
+    P.subMq = mq; P.warmUntil = Math.max(P.warmUntil, now() + WARM_MS);   // ilk liste: zaten çevrimiçi olanlar için bildirim yok
+  }
+  // oda bağlantısı kapandı (paylaşıyorsak): oda aynı aracıya dönecekse 4 sn bekle, yoksa kendi bağlantımızı aç
+  function pRoomClosed() { try { if (P.subMq && P.subMq.done) P.subMq = null; P.shareWait = now() + 4000; pRoute(); } catch (e) { log('HATA pRoomClosed ' + (e && e.stack || e)); } }
+  // yayın: paylaşılan bağlantıda oda bütçesine uyar (oda trafiği öncelikli; yer yoksa tik birazdan tekrar dener)
+  function pSend(sub, obj, retain, urgent) {
+    const mq = pMq(); if (!mq) return false;
+    const payload = JSON.stringify(obj);
+    if (mq === C.mq) {
+      const b = bk();
+      if (!urgent && (Q.q.length || used(now()) + 1 + b.res > b.win)) return false;
+      return send(ROOT + sub, payload, !!retain, false);
+    }
+    return mq.publish(ROOT + sub, payload, !!retain, false);
+  }
+
+  /* ---- kendi durumum ve kartım ---- */
+  function pState() {
+    if (pHiddenLong()) return { st: 'away' };
+    if (R.phase === 'in' && R.lob) {
+      const n = R.lob.p.filter(p => !p.o).length, lob = R.lob.st === 'lobby', open = lob && n < MAXP && !!R.code;
+      const o = { st: lob ? 'lobby' : 'race', n, max: MAXP, open };
+      if (open) o.code = R.code;
+      return o;
+    }
+    const S = FM.S;
+    const solo = !!S && !S.netRole && (S.mode === 'count' || S.mode === 'race' || S.mode === 'end' || S.mode === 'podium');
+    return { st: solo ? 'solo' : 'menu' };
+  }
+  function pBeatSig() { const s = pState(), pr = myProfile(); return [pr.n, pr.c, s.st, s.code || '', s.n == null ? '' : s.n, s.open ? 1 : 0].join('|'); }
+  function pBeat(force) {
+    if (!P.on || P.halt) return false;
+    const t = now(); if (!force && t - P.lastHb < 900) return false;
+    const s = pState(), pr = myProfile(), me = myPid();
+    const m = Object.assign({ pid: me, nick: pr.n, char: pr.c, sn: SN, iv: Math.round((s.st === 'away' ? HB_AWAY_MS : HB_MS) / 1000), v: VER }, s);
+    if (!pSend('_on/' + me, m, false, false)) return false;
+    P.lastHb = t; P.hbSig = pBeatSig();
+    return true;
+  }
+  function sanitizeCard(c, pid) {
+    if (!isObj(c) || !tok(pid, null)) return null;
+    const I = (v, max) => fin(v) && v >= 0 ? Math.min(max, Math.floor(v)) : 0;
+    const okc = v => typeof v === 'string' && FM.CH && FM.CH[v];
+    return {
+      pid, nick: cleanNick(c.nick) || 'Oyuncu', char: okc(c.char) ? c.char : 'TAFTAF', skin: tok(c.skin, 'klasik'),
+      lvl: fin(c.lvl) ? Math.max(1, Math.min(999, Math.floor(c.lvl))) : 1, tr: I(c.tr, 1e7), play: I(c.play, 1e9),
+      races: I(c.races, 1e8), wins: I(c.wins, 1e8), kills: I(c.kills, 1e8), best: okc(c.best) ? c.best : null,
+      since: fin(c.since) && c.since > 1.4e12 && c.since < Date.now() + 864e5 ? Math.floor(c.since) : 0,
+      lg: tok(c.lg, null), ls: fin(c.ls) && c.ls > 0 ? Math.min(Math.floor(c.ls), Date.now()) : 0
+    };
+  }
+  // profil kartı: FM.meta.card() (PROFİL); yoksa kayıttan yedek
+  function myCard() {
+    const t = now(); if (P.myCardC && t - P.myCardT < 1500) return P.myCardC;
+    let c = null;
+    try { if (FM.meta && typeof FM.meta.card === 'function') c = FM.meta.card(); } catch (e) { c = null; }
+    if (!isObj(c)) {
+      const sv = FM.save || {}, st = isObj(sv.stats) ? sv.stats : {}, pr = myProfile();
+      let tr = 0; if (isObj(sv.trophies)) for (const k in sv.trophies) if (fin(sv.trophies[k]) && sv.trophies[k] > 0) tr += sv.trophies[k];
+      c = { nick: myNick(), char: pr.c, skin: pr.sk, lvl: sv.level, tr, play: st.playSec, races: st.races, wins: st.wins, kills: st.kills, best: null, since: sv.since || sv.created };
+    }
+    const pr = myProfile();
+    c = sanitizeCard(Object.assign({}, c, { nick: cleanNick(c && c.nick) || pr.n }), myPid());
+    P.myCardC = c; P.myCardT = t;
+    return c;
+  }
+  // mode: 0 = değiştiyse (≥3 sn arayla) ya da dakikası geldiyse, 1 = şimdi (≥1.5 sn arayla), 2 = hemen (sayfa kapanıyor)
+  function pCardPub(mode) {
+    if (!P.on || P.halt) return false;
+    const t = now();
+    if (mode === 1 && t - P.lastCard < 1500) return false;
+    P.myCardT = 0;
+    const c = myCard(); if (!c) return false;
+    const sig = [c.nick, c.char, c.skin, c.lvl, c.tr, Math.floor(c.play / 60), c.races, c.wins, c.kills, c.best, c.since, c.lg].join('|');
+    if (!mode) { if (sig === P.cardSig && t - P.lastCard < CARD_MS) { P.cardDirty = false; return false; } if (t - P.lastCard < CARD_MIN_MS) return false; }
+    const out = Object.assign({}, c, { ls: Date.now(), v: VER });
+    if (!pSend('_pr/' + c.pid, out, true, mode === 2)) return false;
+    P.lastCard = t; P.cardSig = sig; P.cardDirty = false;
+    return true;
+  }
+
+  /* ---- gelenler ---- */
+  function pMsg(topic, payload, retain) {
+    if (payload.length > 4096) return;
+    if (topic.indexOf(PR_ON) === 0) pOnBeat(topic.slice(PR_ON.length), payload);
+    else if (topic.indexOf(PR_PR) === 0) pOnCard(topic.slice(PR_PR.length), payload, retain);
+  }
+  function pOnBeat(pid, payload) {
+    if (!tok(pid, null) || pid === myPid() || !payload.length) return;
+    let m; try { m = JSON.parse(fromUtf8(payload)); } catch (e) { return; }
+    if (!isObj(m) || m.pid !== pid) return;
+    const t = now(), sn = tok(m.sn, '-');
+    let e = P.peers[pid];
+    if (m.st === 'off') {                                   // sayfa kapandı: o oturum hemen düşer
+      if (e) {
+        if (e.st !== 'away') P.ls[pid] = Date.now();
+        delete e.sns[sn];
+        if (!m.sn || !Object.keys(e.sns).length) pGone(pid);
+        pChanged();
+      }
+      return;
+    }
+    if (!ST_RANK.hasOwnProperty(m.st)) return;
+    if (!e && Object.keys(P.peers).length >= PMAX) return;
+    const wasOn = !!e && e.st !== 'away';
+    const pc = typeof m.code === 'string' ? parseCode(m.code) : null;
+    const code = m.st === 'lobby' && pc ? pc.code : null;
+    const card = P.cards[pid];
+    const d = {
+      pid, nick: cleanNick(m.nick) || (card ? card.nick : '') || 'Oyuncu', char: (typeof m.char === 'string' && FM.CH && FM.CH[m.char]) ? m.char : (card ? card.char : 'TAFTAF'),
+      st: m.st, code, n: fin(m.n) ? Math.max(0, Math.min(MAXP, m.n | 0)) : null, max: fin(m.max) ? Math.max(1, Math.min(MAXP, m.max | 0)) : null,
+      open: !!(m.open && code)
+    };
+    if (!e) e = P.peers[pid] = { sns: {} };
+    const prevCode = e.code || null;
+    Object.assign(e, d); e.t = t;
+    e.sns[sn] = t + (m.st === 'away' ? AWAY_TTL : ONLINE_MS);
+    let k = 0; for (const s in e.sns) if (++k > 4) delete e.sns[s];      // aynı kimlikle en fazla birkaç sekme
+    if (m.st !== 'away') { P.ls[pid] = Date.now(); delete P.gone[pid]; }
+    if (!wasOn && m.st !== 'away') pCame(e);
+    if (code && code !== prevCode) pLobbyOpen(e);
+    pChanged();
+  }
+  function pOnCard(pid, payload, retain) {
+    if (!tok(pid, null) || pid === myPid()) return;
+    if (!payload.length) { if (P.cards[pid]) { delete P.cards[pid]; pChanged(); } return; }   // retain silindi
+    let m; try { m = JSON.parse(fromUtf8(payload)); } catch (e) { return; }
+    if (!isObj(m) || (m.pid != null && m.pid !== pid)) return;
+    const c = sanitizeCard(m, pid); if (!c) return;
+    if (!P.cards[pid]) {
+      const ks = Object.keys(P.cards);
+      if (ks.length >= PMAX) {                               // dolu: en eski son görülmeyi at (yeni kart daha eskiyse alma)
+        let old = null; for (const q of ks) if (!old || P.cards[q].ls < P.cards[old].ls) old = q;
+        if (!old || P.cards[old].ls >= c.ls) return;
+        delete P.cards[old];
+      }
+    }
+    P.cards[pid] = c;
+    if (!retain && P.peers[pid] && P.peers[pid].st !== 'away') P.ls[pid] = Date.now();
+    pChanged();
+  }
+  function pGone(pid) { delete P.peers[pid]; P.gone[pid] = now(); }
+  function pView(e, t) {
+    const c = P.cards[e.pid];
+    return { pid: e.pid, nick: e.nick, char: e.char, skin: c ? c.skin : 'klasik', st: e.st, code: e.code || null, n: e.n, max: e.max, open: !!e.open, me: false, age: Math.round((t || now()) - e.t) };
+  }
+  function pCame(e) {
+    const t = now(), pid = e.pid;
+    if (t < P.warmUntil) { P.cameAt[pid] = t; if (e.code) P.lobAt[e.code] = t; return; }   // ilk liste: zaten çevrimiçiydi
+    if (P.gone[pid] && t - P.gone[pid] < BLIP_MS) return;                                   // kısa kesinti (sayfa yenileme, ağ değişimi)
+    if (P.cameAt[pid] && t - P.cameAt[pid] < CAME_GAP) return;                              // aynı kişi için 10 dk'da en fazla bir kez
+    P.cameAt[pid] = t; if (e.code) P.lobAt[e.code] = t;
+    emit('net:came', { p: pView(e, t) });
+  }
+  function pLobbyOpen(e) {
+    const t = now(), c = e.code;
+    if (!c || c === R.code) return;                          // kendi odam değil
+    if (P.lobAt[c] && t - P.lobAt[c] < CAME_GAP) return;
+    P.lobAt[c] = t;
+    if (t < P.warmUntil) return;
+    emit('net:lobby-open', { p: pView(e, t) });
+  }
+
+  /* ---- listeler ve olaylar ---- */
+  function onlineCount() { let n = 0; for (const k in P.peers) if (P.peers[k].st !== 'away') n++; return n; }
+  function onlineList() {
+    if (!P.on || P.conn !== 'open') return [];
+    const t = now(), s = pState(), pr = myProfile(), out = [];
+    out.push({ pid: myPid(), nick: pr.n, char: pr.c, skin: pr.sk, st: s.st, code: s.code || null, n: s.n != null ? s.n : null, max: s.max || null, open: !!s.open, me: true, age: 0 });
+    for (const k in P.peers) out.push(pView(P.peers[k], t));
+    out.sort((a, b) => (b.me - a.me) || ((b.open ? 1 : 0) - (a.open ? 1 : 0)) || (ST_RANK[a.st] - ST_RANK[b.st]) || String(a.nick).localeCompare(String(b.nick), 'tr'));
+    return out;
+  }
+  function profilesList() {
+    const out = [], ids = {};
+    for (const k in P.cards) ids[k] = 1;
+    for (const k in P.peers) ids[k] = 1;
+    const mine = myCard(), ps = pState(), meOn = P.on && P.conn === 'open';
+    if (mine) out.push(Object.assign({}, mine, { ls: Date.now(), online: meOn, st: meOn ? ps.st : 'off', away: ps.st === 'away', code: ps.code || null, me: true }));
+    for (const pid in ids) {
+      if (pid === myPid()) continue;
+      const c = P.cards[pid], e = P.peers[pid], on = !!e && e.st !== 'away';
+      out.push({
+        pid, nick: e ? e.nick : c.nick, char: e ? e.char : c.char, skin: c ? c.skin : 'klasik',
+        lvl: c ? c.lvl : null, tr: c ? c.tr : null, play: c ? c.play : null, races: c ? c.races : null, wins: c ? c.wins : null, kills: c ? c.kills : null,
+        best: c ? c.best : null, since: c && c.since ? c.since : null, lg: c ? c.lg : null,
+        ls: Math.max(c ? c.ls : 0, P.ls[pid] || 0) || null, online: on, st: e ? e.st : 'off', away: !!e && e.st === 'away', code: e ? e.code : null, me: false
+      });
+    }
+    out.sort((a, b) => (b.me - a.me) || ((b.online ? 1 : 0) - (a.online ? 1 : 0)) || ((b.away ? 1 : 0) - (a.away ? 1 : 0)) || ((b.ls || 0) - (a.ls || 0)));
+    return out;
+  }
+  function pChanged() { if (!P.emitT && typeof setTimeout === 'function') P.emitT = setTimeout(pEmit, 300); }
+  const pEmit = guard(function () {
+    P.emitT = null;
+    const list = onlineList();
+    const sig = P.conn + '#' + list.map(x => [x.pid, x.st, x.code || '', x.n == null ? '' : x.n, x.nick, x.char].join(',')).join(';');
+    if (sig !== P.onSig) { P.onSig = sig; emit('net:online', { list, n: list.filter(x => !x.me && x.st !== 'away').length }); }
+    const t = now();
+    const prof = profilesList();
+    const psig = prof.map(x => [x.pid, x.online ? 1 : 0, x.st, x.nick, x.char, x.skin, x.lvl, x.tr, Math.floor((x.play || 0) / 60), x.races, x.wins, x.kills, x.online ? 0 : Math.floor((x.ls || 0) / 60000)].join(',')).join(';');
+    if (psig === P.prSig) { P.prDirty = false; return; }
+    if (t - P.prT < 1000) { P.prDirty = true; return; }        // seyreltme: tik birazdan tekrar dener
+    P.prSig = psig; P.prT = t; P.prDirty = false;
+    emit('net:profiles', { list: prof });
+  }, 'pEmit');
+
+  /* ---- 1 sn'lik tik: süre dolanlar, nabız, kart, yeniden bağlanma ---- */
+  const pTick = guard(function () {
+    const t = now(), gap = t - P.lastTick; P.lastTick = t;
+    if (!P.on || P.halt) return;
+    if (gap > 4000) { P.warmUntil = t + WARM_MS; const m = pMq(); if (m) m.probe(); }   // askıdan dönüş: liste bayat olabilir, bildirim yok
+    if (P.mq) P.mq.tick(t);
+    let ch = false;
+    for (const pid in P.peers) {
+      const e = P.peers[pid]; let any = false;
+      for (const s in e.sns) { if (e.sns[s] <= t) delete e.sns[s]; else any = true; }
+      if (!any) { pGone(pid); ch = true; }
+    }
+    if (ch) pChanged();
+    if (gap > 4000 || (t % 60000) < 1100) for (const T of [P.gone, P.cameAt, P.lobAt]) for (const k in T) if (t - T[k] > CAME_GAP) delete T[k];
+    if (!pMq()) { if (!P.mq && !P.timer) pRoute(); if (P.prDirty) pEmit(); return; }
+    if (P.subMq !== pMq()) pRoute();
+    const iv = pHiddenLong() ? HB_AWAY_MS : HB_MS;
+    if (t - P.lastHb >= iv || (t - P.lastHb >= 1000 && pBeatSig() !== P.hbSig)) pBeat();
+    if (!P.hiddenAt && t - P.lastCard >= CARD_MS) pCardPub(1);   // görünürken dakikada bir: son görülme dakika hassasiyetinde
+    else if (P.cardDirty) pCardPub(0);
+    if (P.homeT && t > P.homeT && P.mq && !pShared()) { P.homeT = 0; P.ord = 0; P.att = 0; pStopOwn(); pRoute(); }
+    if (P.prDirty) pEmit();
+  }, 'pTick');
+  function pEnable(on) {
+    if (on) {
+      if (P.on || typeof WebSocket === 'undefined') return P.on;
+      P.on = true; P.halt = false; P.warmUntil = now() + WARM_MS; P.lastTick = now(); P.cardDirty = true;
+      if (!P.iv && typeof setInterval === 'function') P.iv = setInterval(pTick, 1000);
+      pRoute();
+      return true;
+    }
+    if (!P.on) return false;
+    const me = myPid();
+    pSend('_on/' + me, { pid: me, st: 'off', sn: SN, v: VER }, false, true);
+    P.on = false;
+    if (P.subMq && P.subMq === C.mq && connected()) { C.mq.unsubscribe(PR_ON + '+'); C.mq.unsubscribe(PR_PR + '+'); }
+    pStopOwn(); P.subMq = null;
+    clearInterval(P.iv); P.iv = null;
+    P.peers = {};
+    pSetConn('off'); pChanged();
+    return false;
+  }
+  function pHidden(h) {
+    if (!P.on || P.halt) return;
+    if (h) { P.hiddenAt = now(); pBeat(true); pCardPub(1); return; }     // gizlenme anı = son görülme
+    const away = P.hiddenAt ? now() - P.hiddenAt : 0; P.hiddenAt = 0;
+    if (away > 10000) P.warmUntil = now() + WARM_MS;
+    const m = pMq(); if (m) { m.probe(); pBeat(true); if (away > 10000) pCardPub(1); } else pRoute();
+  }
+  // sayfa kapanıyor: önce son görülme kartı + 'off' (paylaşılan bağlantı oda çıkışıyla kapanmadan), sonra varlık durur
+  function pPageHide() {
+    if (!P.on || P.halt) return;
+    const me = myPid();
+    pCardPub(2);
+    pSend('_on/' + me, { pid: me, st: 'off', sn: SN, v: VER }, false, true);
+    P.halt = true; pStopOwn(); P.subMq = null; P.conn = 'off';
+  }
+  function pPageShow() { if (P.on && P.halt) { P.halt = false; P.warmUntil = now() + WARM_MS; P.lastTick = now(); pRoute(); } }
+  function pOnline() { if (P.on && !P.halt && !pMq()) { P.att = 0; clearTimeout(P.timer); P.timer = null; if (P.mq) { const m = P.mq; P.mq = null; m.end('çevrimiçi', true); } pRoute(); } }
+
   /* ---------------- sayfa yaşam döngüsü ---------------- */
   function onVisible() {
     if (!R.phase) return;
@@ -1043,22 +1404,26 @@
   try {
     if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
       document.addEventListener('visibilitychange', guard(function () {
-        if (document.hidden) { R.hiddenAt = now(); if (R.phase === 'in' && connected()) sendPing(); }
-        else onVisible();
+        if (document.hidden) { R.hiddenAt = now(); if (R.phase === 'in') { if (connected()) sendPing(); rjWrite(); } pHidden(true); }
+        else { onVisible(); pHidden(false); }
       }, 'visibility'));
     }
     if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
-      window.addEventListener('online', guard(function () { if (C.want && !connected()) { C.att = 0; reconnectNow('çevrimiçi'); } }, 'online'));
+      window.addEventListener('online', guard(function () { if (C.want && !connected()) { C.att = 0; reconnectNow('çevrimiçi'); } pOnline(); }, 'online'));
       window.addEventListener('pagehide', guard(function (ev) {
+        pPageHide();
         if (!R.phase) return;
+        if (R.phase === 'in') rjWrite({ closed: Date.now() });     // yenileme / kapanma: geri dönüş kaydı kalır (bilerek çıkış değil)
         if (ev && ev.persisted && R.phase === 'in') {               // bfcache: odayı hatırla, dönünce yeniden katıl
-          const keep = { code: R.code, base: R.base, lob: R.lob, role: R.role };
-          leave(false);
+          const keep = { code: R.code, broker: C.bi };
+          leave(false, true);
           R.resume = keep;
-        } else leave(false);
+        } else leave(false, true);
       }, 'pagehide'));
       window.addEventListener('pageshow', guard(function (ev) {
-        if (ev && ev.persisted && R.resume && !R.phase) { const k = R.resume; R.resume = null; joinRoom(k.code); }
+        if (!(ev && ev.persisted)) return;
+        pPageShow();
+        if (R.resume && !R.phase) { const k = R.resume; R.resume = null; joinRoom(k.code, { rejoin: true, broker: k.broker }); }
       }, 'pageshow'));
     }
   } catch (e) { }

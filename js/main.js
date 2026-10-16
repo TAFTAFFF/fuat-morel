@@ -9,19 +9,19 @@
 
   /* ---------- uyarlanır çözünürlük ----------
      Herkes YÜKSEK çözünürlükte oynar: varsayılan cihazın kendi DPR'si (en çok 3). Telefon yarışta çok yavaşsa
-     çözünürlük kademeli düşer ama yüksek DPR'li ekranlarda 1.75'in altına inmez (karakterler bulanıklaşmasın).
+     çözünürlük kademeli düşer ama yüksek DPR'li ekranlarda 2'nin altına inmez (karakterler bulanıklaşmasın).
      Karar yarış ortasında verilse bile önbellek yenilemesi (takılma) yarış DIŞINDA uygulanır. Öğrenilen değer kayıtta
      `adaptDpr3` olarak saklanır (eski `adaptDpr` anahtarındaki öğrenilmiş düşük değerler yok sayılır).
      Kalite ayarı 'low' ise hep 1. */
   const devDpr = () => window.devicePixelRatio || 1;
   const DPR_MAX = 3;
-  const dprFloor = () => devDpr() >= 2 ? 1.75 : 1;   // akıcılık önce: zorlanan telefonda 1.75'e kadar iner (yine keskin)
+  const dprFloor = () => devDpr() >= 2 ? 2 : 1;   // yüksek çözünürlük (oyuncu isteği): yüksek DPR'li telefonda 2x'in altına inmez
   const LV = [1, 1.25, 1.5, 1.75, 2, 2.5, 3];
   const stepDown = d => { for (let i = LV.length - 1; i >= 0; i--) if (LV[i] < d - 1e-6) return LV[i]; return 1; };
   const stepUp = d => { for (const v of LV) if (v > d + 1e-6) return v; return DPR_MAX; };
   const settings = () => (FM.save && FM.save.settings) || {};
   let adaptDpr = DPR_MAX;
-  { const sv = +settings().adaptDpr3; if (sv >= 1 && sv <= DPR_MAX) adaptDpr = sv; }
+  // her oturum tam çözünürlükle başlar (öğrenilmiş düşük değer geri yüklenmez; zorlanırsa oturum içinde kademe düşer)
   adaptDpr = Math.max(adaptDpr, dprFloor());
   let pendingDpr = 0;
   let lastQuality = settings().quality;

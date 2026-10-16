@@ -1711,16 +1711,20 @@
         break;
       }
       case 'run': case 'pulled': {
-        const s = sin(ph), c = cos(ph), sp = clamp(o.speed != null ? o.speed : 1, 0, 2);
-        const amp = 0.55 + min(1.2, sp) * 0.45;
+        // Fun Run gibi zıplayan koşu: adım başına ezilme (ayak yere basınca) / uzama (itişte), adımla eş zamanlı bob,
+        // hıza göre öne eğilme, bacakların tersine kol pompası. ph: game.js'te hızla ilerler (~3.5 adım/sn tam hızda)
+        const s = sin(ph), c = cos(ph), sp = clamp(o.speed != null ? o.speed : 1, 0, 2), k = min(1, sp + 0.2);
+        const amp = 0.6 + min(1.2, sp) * 0.5;
+        const lift = cos(ph * 2);                 // +1: bacaklar çaprazlanmış (uçuş evresi), −1: bacaklar açık (basma)
         p.legF = s * amp; p.legB = -s * amp;
-        p.legFs = 1 - max(0, c) * 0.32; p.legBs = 1 - max(0, -c) * 0.32;
-        p.armF = -s * (0.65 + amp * 0.55) + 0.35; p.armB = s * (0.65 + amp * 0.55) + 0.35;
-        p.bob = -abs(s) * 2.6 * min(1, sp + 0.2);
-        p.lean = 0.12 + min(1.4, sp) * 0.12;
-        p.head = -p.lean * 0.55 + cos(ph * 2) * 0.03;
-        p.sy = 1 + cos(ph * 2) * 0.025; p.sx = 1 - cos(ph * 2) * 0.015;
-        p.flow = clamp(sp, 0, 1.2); p.tw = ph * 0.9 + t * 3;
+        p.legFs = 1 - max(0, c) * 0.34; p.legBs = 1 - max(0, -c) * 0.34;
+        p.armF = -s * (0.75 + amp * 0.6) + 0.4; p.armB = s * (0.75 + amp * 0.6) + 0.4;
+        p.armFs = 1 - max(0, -s) * 0.08; p.armBs = 1 - max(0, s) * 0.08;
+        p.bob = -(lift + 1) * 2.3 * k;            // adım başına sıçrama (iki adım = iki sıçrama)
+        p.sy = 1 + (lift > 0 ? lift * 0.05 : lift * 0.075) * k; p.sx = 1 - (lift > 0 ? lift * 0.03 : lift * 0.05) * k;
+        p.lean = 0.12 + min(1.4, sp) * 0.17;
+        p.head = -p.lean * 0.55 + lift * 0.035;
+        p.flow = clamp(sp, 0, 1.2); p.tw = ph * 1.0 + t * 2;
         if (st === 'pulled') {
           p.lean = -0.28; p.head = 0.12; p.expr = 'o';
           p.armF = 2.1 + sin(t * 15) * 0.45; p.armB = 2.5 - sin(t * 15) * 0.45; p.flow = 0.2;
@@ -1735,29 +1739,49 @@
         break;
       }
       case 'air': {
-        const k = clamp((vy + 220) / 720, 0, 1), fl = sin(t * 17) * 0.25 * k;
-        p.legF = lerp(0.85, 0.5, k); p.legFs = lerp(0.72, 0.78, k);
-        p.legB = lerp(-0.5, 0.18, k); p.legBs = lerp(1, 0.76, k);
-        p.armF = lerp(2.55, 1.55, k) + fl; p.armB = lerp(2.85, 1.9, k) - fl;
-        p.lean = lerp(0.06, -0.06, k); p.head = lerp(-0.08, 0.06, k);
-        p.flow = lerp(0.55, 0.95, k); p.tw = t * 6;
-        if (vy > 760) p.expr = 'o';
+        // üç anahtar poz: YÜKSELİŞ (öne diz, kollar ileri) → TEPE (topak, bakış aşağı) → DÜŞÜŞ (kollar havada çırpınır, bacaklar açık)
+        const k1 = clamp((vy + 320) / 320, 0, 1), k2 = clamp(vy / 480, 0, 1), fl = sin(t * 17) * 0.28 * k2;
+        const L3 = (a, b, c) => lerp(lerp(a, b, k1), c, k2);
+        p.legF = L3(0.95, 1.25, 0.55); p.legFs = L3(0.75, 0.62, 0.84);
+        p.legB = L3(-0.55, 0.85, 0.1); p.legBs = L3(1, 0.7, 0.86);
+        p.armF = L3(1.9, 1.3, 2.75) + fl; p.armB = L3(2.2, 1.6, 2.95) - fl;
+        p.lean = L3(0.1, 0.22, -0.08); p.head = L3(-0.1, 0.1, 0.08);
+        p.flow = L3(0.55, 0.7, 1); p.tw = t * 6;
+        if (vy > 700) p.expr = 'o';
         if (o.flip > 0) {
+          // çift zıplama: gövde merkezi etrafında hızlı 360° öne takla (~0.32 sn), ortasında sıkı topak
           const f = clamp(o.flip, 0, 1), e = 1 - (1 - f) * (1 - f) * (1 - f);
           p.rot = -TAU * e; p.pv = rg.hipY + 12;
           const tuck = sin(f * PI);
-          p.legF = lerp(p.legF, 1.2, tuck); p.legB = lerp(p.legB, 0.9, tuck);
-          p.legFs = lerp(p.legFs, 0.62, tuck); p.legBs = lerp(p.legBs, 0.62, tuck);
-          p.armF = lerp(p.armF, 1.1, tuck); p.armB = lerp(p.armB, 1.4, tuck);
-          p.lean = lerp(p.lean, 0.3, tuck); p.head = lerp(p.head, 0.2, tuck); p.expr = 'h';
+          p.legF = lerp(p.legF, 1.3, tuck); p.legB = lerp(p.legB, 1.0, tuck);
+          p.legFs = lerp(p.legFs, 0.6, tuck); p.legBs = lerp(p.legBs, 0.6, tuck);
+          p.armF = lerp(p.armF, 1.05, tuck); p.armB = lerp(p.armB, 1.35, tuck);
+          p.lean = lerp(p.lean, 0.35, tuck); p.head = lerp(p.head, 0.25, tuck); p.expr = 'h';
         }
         break;
       }
+      case 'slam': {   // çakılma: topak dalış, burun aşağı, kollar havada
+        const w = sin(t * 26) * 0.06;
+        p.rot = 0.42 + w; p.pv = rg.hipY + 12;
+        p.legF = 1.2; p.legB = 0.95; p.legFs = 0.62; p.legBs = 0.62;
+        p.armF = 2.5; p.armB = 2.8; p.lean = 0.3; p.head = 0.15; p.expr = 'f'; p.flow = 1.1; p.tw = t * 8;
+        break;
+      }
+      case 'tumble': {  // savrulma (yumruk/kükreme): havada geriye takla, uzuvlar çırpınır
+        p.rot = -(o.tum || 0); p.pv = rg.hipY + 10;
+        const w = sin(t * 21);
+        p.legF = 0.9 + w * 0.5; p.legB = -0.3 - w * 0.5; p.legFs = 0.85; p.legBs = 0.85;
+        p.armF = 1.7 + w * 0.7; p.armB = 2.4 - w * 0.7; p.lean = 0.1; p.head = 0.2 + w * 0.1;
+        p.expr = 'x'; p.flow = 0.6; p.tw = t * 7;
+        break;
+      }
       case 'slide': {
-        p.hrot = -1.42; p.bx = 13; p.bob = rg.hipY - 1.2 - (rg.bw || 11) * 0.97;
-        p.legF = -0.1; p.legB = 0.55; p.legBs = 0.78;
-        p.armF = 2.5 + sin(t * 9) * 0.08; p.armB = 2.9; p.head = 0.62; p.lean = 0.04;
-        p.expr = 'f'; p.flow = 0.9; p.tw = t * 8; p.backRot = 1.3; p.capeAng = 2.55;
+        // alçak, geriye yatık dinamik kayma: ön bacak uzanmış, arka bacak bükük, ön kol ileri; hafif titreşim
+        const v = sin(t * 19);
+        p.hrot = -1.3; p.bx = 13; p.bob = rg.hipY - 1 - (rg.bw || 11) * 0.97 + v * 0.35;
+        p.legF = -0.22; p.legFs = 1.04; p.legB = 0.72; p.legBs = 0.72;
+        p.armF = 2.45 + v * 0.06; p.armB = 2.95; p.head = 0.72; p.lean = 0.06;
+        p.expr = 'f'; p.flow = 1.0; p.tw = t * 8; p.backRot = 1.3; p.capeAng = 2.55;
         break;
       }
       case 'sled': {

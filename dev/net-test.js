@@ -295,7 +295,16 @@ async function runBroker(bi) {
     await waitFor(() => all.every(c => last(c, 'net:toLobby') && c.net.lobby().st === 'lobby'), 8000, 'net:toLobby herkese');
     if (all.some(c => count(c, 'net:end') !== 1 || count(c, 'net:toLobby') !== 1)) throw new Error('kontrol mesajı tekrarlandı');
     if (h.net.players().some(p => p.ready)) throw new Error('lobiye dönünce hazır bayrakları sıfırlanmadı');
-    ok('end/next/toLobby herkese tam bir kez ulaştı');
+    if (all.some(c => c.net._dbg.R.ready)) throw new Error('lobiye dönünce kendi hazır bayrağı (R.ready) kaldı');
+    // yolda kalmış eski "hazır" katılma mesajı (lobiye dönüşü görmeden yollanmış) bayrağı geri getirmemeli
+    const mem = all.find(c => c !== h && c.net.inRoom()), rq = mem.net._dbg.R;
+    mem.net._dbg.C.mq.publish(rq.base + 'join', JSON.stringify({ f: mem.net.pid(), sn: mem.net._dbg.SN(), v: mem.net.VER, n: 'Eski', c: 'TAFTAF', rd: 1, ck: 'eski.1' }), false);
+    await sleep(700);
+    if (h.net.players().some(p => p.ready)) throw new Error('eski hazır bayrağı geri geldi');
+    mem.net.setReady(true);
+    await waitFor(() => h.net.players().some(p => p.pid === mem.net.pid() && p.ready), 4000, 'güncel hazır kabul edilir');
+    mem.net.setReady(false);
+    ok('end/next/toLobby herkese tam bir kez ulaştı; lobiye dönünce hazırlar herkeste sıfır, yolda kalmış eski "hazır" geri gelmedi');
   });
   streaming = false;
 

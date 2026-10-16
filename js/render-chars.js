@@ -2102,9 +2102,178 @@
   try { if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => { plateVer++; }); } catch (e) { /* yok say */ }
   let measureCtx = null;
   const TWC = new Map();   // ad genişliği önbelleği (her karede yazı ölçümü yapılmasın)
+  /* Plaka stilleri (FM.COSMETICS.plates id'leri). Her stil: { top, bottom (pill dışına taşan süs payı), bg(g, o) → {tcol, tstroke, tlw} }.
+     o: { x, y, pw, ph, r, fs, pill(), icon, dot } — pill: hap yolu (beginPath dahil). Ad her zaman oyuncunun takma adıdır. */
+  function grad(g, y0, y1, stops) { const gr = g.createLinearGradient(0, y0, 0, y1); for (let i = 0; i < stops.length; i += 2) gr.addColorStop(stops[i], stops[i + 1]); return gr; }
+  function pillClip(g, o, fn) { g.save(); o.pill(); g.clip(); fn(); g.restore(); }
+  function sheen(g, o, a) { pillClip(g, o, () => { g.beginPath(); ell(g, 0, o.y + o.ph * 0.18, o.pw * 0.48, o.ph * 0.32); g.fillStyle = 'rgba(255,255,255,' + a + ')'; g.fill(); }); }
+  function stripesPill(g, o, cols, w, ang) { pillClip(g, o, () => { g.rotate(ang); for (let i = -30; i <= 30; i++) { g.fillStyle = cols[((i % cols.length) + cols.length) % cols.length]; g.fillRect(-200, i * w, 400, w + 0.3); } }); }
+  const PLATE_DEF = {
+    basic: { bg(g, o, big, col) {
+      o.pill(); g.fillStyle = big ? 'rgba(20,10,40,0.74)' : 'rgba(16,8,32,0.64)'; g.fill();
+      if (col && !big) { g.lineWidth = 1.5; g.strokeStyle = rgba(col, 0.85); g.stroke(); }
+      else { g.lineWidth = 1; g.strokeStyle = big ? 'rgba(255,225,120,0.7)' : 'rgba(255,255,255,0.22)'; g.stroke(); }
+      return { tcol: '#ffffff', tstroke: 'rgba(0,0,0,0.35)', tlw: 2.2 };
+    } },
+    gold: { bg(g, o) {
+      o.pill(); g.lineWidth = 3.2; g.strokeStyle = '#5a3200'; g.stroke();
+      g.fillStyle = grad(g, o.y, 0, [0, '#fff6c4', 0.45, '#ffd23f', 0.55, '#f0b020', 1, '#b06a08']); g.fill();
+      sheen(g, o, 0.4);
+      return { tcol: '#ffffff', tstroke: '#6b3a00', tlw: 2.8 };
+    } },
+    clan: { icon: true, bg(g, o) {
+      o.pill(); g.lineWidth = 3.4; g.strokeStyle = '#000000'; g.stroke();
+      g.fillStyle = grad(g, o.y, 0, [0, '#34343c', 1, '#09090b']); g.fill();
+      g.lineWidth = 1.4; g.strokeStyle = '#c0182e'; g.stroke();
+      g.beginPath(); rrect(g, o.x + 2, o.y + 2, o.pw - 4, o.ph - 4, o.r - 2); g.lineWidth = 0.6; g.strokeStyle = 'rgba(255,90,100,0.4)'; g.stroke();
+      g.beginPath(); spadePath(g, o.x + 7.5 + o.dot + o.icon * 0.3, o.y + o.ph / 2 - 0.4, o.icon * 0.42); g.fillStyle = '#e0243a'; g.fill();
+      return { tcol: '#ffffff', tstroke: '#000000', tlw: 2.4 };
+    } },
+    neon: { bg(g, o) {
+      o.pill(); g.lineWidth = 6; g.strokeStyle = 'rgba(255,59,212,0.28)'; g.stroke();
+      g.fillStyle = 'rgba(14,2,30,0.82)'; g.fill();
+      g.lineWidth = 1.7; g.strokeStyle = '#ff3bd4'; g.stroke();
+      g.beginPath(); rrect(g, o.x + 2, o.y + 2, o.pw - 4, o.ph - 4, o.r - 2); g.lineWidth = 0.8; g.strokeStyle = 'rgba(38,240,255,0.9)'; g.stroke();
+      return { tcol: '#ffffff', tstroke: 'rgba(255,59,212,0.95)', tlw: 2.6 };
+    } },
+    fire: { top: 7, bg(g, o) {
+      const { x, y, pw, r } = o;
+      g.beginPath();
+      const n = Math.max(4, Math.round(pw / 11));
+      g.moveTo(x + r * 0.6, y + 2);
+      for (let i = 0; i < n; i++) {
+        const fx0 = x + r * 0.6 + (pw - r * 1.2) * i / n, fx1 = x + r * 0.6 + (pw - r * 1.2) * (i + 1) / n, hh = 4.5 + (i % 2) * 2.5;
+        g.quadraticCurveTo(fx0 + (fx1 - fx0) * 0.2, y - hh * 0.5, (fx0 + fx1) / 2 + 1, y - hh);
+        g.quadraticCurveTo(fx0 + (fx1 - fx0) * 0.6, y - hh * 0.3, fx1, y + 2);
+      }
+      g.closePath();
+      g.lineJoin = 'round'; g.lineWidth = 2.6; g.strokeStyle = '#5a0a00'; g.stroke();
+      g.fillStyle = grad(g, y - 8, y + 2, [0, '#ffe14d', 1, '#ff6a1a']); g.fill();
+      o.pill(); g.lineWidth = 3.2; g.strokeStyle = '#5a0a00'; g.stroke();
+      g.fillStyle = grad(g, y, 0, [0, '#ffd84a', 0.45, '#ff8a1a', 1, '#c8201a']); g.fill();
+      sheen(g, o, 0.32);
+      return { tcol: '#ffffff', tstroke: '#5a0a00', tlw: 2.8 };
+    } },
+    orman: { top: 3, bg(g, o) {   // ahşap tabela + yapraklar
+      const { x, y, pw, ph } = o;
+      o.pill(); g.lineWidth = 3.2; g.strokeStyle = '#3a1e08'; g.stroke();
+      g.fillStyle = grad(g, y, 0, [0, '#b8783a', 0.5, '#9a5e2a', 1, '#6e3e16']); g.fill();
+      pillClip(g, o, () => {
+        g.strokeStyle = 'rgba(60,30,8,0.45)'; g.lineWidth = 0.9;
+        for (let i = 0; i < 4; i++) { const yy = y + 3 + i * (ph - 6) / 3; g.beginPath(); g.moveTo(x, yy); for (let xx = x; xx <= x + pw; xx += 6) g.lineTo(xx, yy + sin(xx * 0.5 + i) * 0.8); g.stroke(); }
+        g.fillStyle = 'rgba(40,20,5,0.7)'; for (const px of [x + 5, x + pw - 5]) { g.beginPath(); g.arc(px, y + 4, 1.2, 0, TAU); g.arc(px, y + ph - 4, 1.2, 0, TAU); g.fill(); }
+      });
+      const leaf = (lx, ly, a) => { g.save(); g.translate(lx, ly); g.rotate(a); g.beginPath(); blob(g, [0, 0, 3, -2.6, 7.6, -1.6, 9.6, 0.4, 7.6, 2.2, 3, 2.6], 0.9); g.fillStyle = '#5ec54a'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = '#1e5a1a'; g.stroke(); g.beginPath(); g.moveTo(1, 0.3); g.lineTo(8.4, 0.3); g.lineWidth = 0.6; g.strokeStyle = 'rgba(20,80,20,0.7)'; g.stroke(); g.restore(); };
+      leaf(x + 1, y - 0.5, -2.2); leaf(x + pw - 1, y + 1, -0.9);
+      return { tcol: '#fff3dc', tstroke: '#3a1e08', tlw: 2.6 };
+    } },
+    seker: { bg(g, o) {   // şeker çizgileri
+      o.pill(); g.lineWidth = 3.2; g.strokeStyle = '#8a1e52'; g.stroke();
+      g.fillStyle = '#ffffff'; g.fill();
+      stripesPill(g, o, ['#ff6ec7', '#ffffff', '#ff6ec7', '#ffe14d'], 5, -0.7);
+      sheen(g, o, 0.3);
+      o.pill(); g.lineWidth = 1.2; g.strokeStyle = 'rgba(255,255,255,0.6)'; g.stroke();
+      return { tcol: '#ffffff', tstroke: '#8a1e52', tlw: 2.8 };
+    } },
+    karbon: { bg(g, o) {   // karbon fiber örgü + gümüş kenar
+      const { x, y, pw, ph } = o;
+      o.pill(); g.lineWidth = 3; g.strokeStyle = '#0b0c10'; g.stroke();
+      g.fillStyle = '#1e2128'; g.fill();
+      pillClip(g, o, () => { for (let i = 0; i < pw / 3 + 1; i++) for (let j = 0; j < ph / 3 + 1; j++) { g.fillStyle = (i + j) % 2 ? '#2c3039' : '#171a20'; g.fillRect(x + i * 3, y + j * 3, 3, 3); } });
+      sheen(g, o, 0.14);
+      o.pill(); g.lineWidth = 1.2; g.strokeStyle = '#aab2c0'; g.stroke();
+      return { tcol: '#ffffff', tstroke: '#05060a', tlw: 2.6 };
+    } },
+    retro: { bg(g, o) {   // 8-bit piksel çerçeve
+      const { x, y, pw, ph } = o, c = 2.6;
+      g.fillStyle = '#1a1240';
+      g.fillRect(x + c, y, pw - c * 2, ph); g.fillRect(x, y + c, pw, ph - c * 2);
+      g.fillStyle = '#ffb347';
+      g.fillRect(x + c, y, pw - c * 2, c); g.fillRect(x + c, y + ph - c, pw - c * 2, c); g.fillRect(x, y + c, c, ph - c * 2); g.fillRect(x + pw - c, y + c, c, ph - c * 2);
+      g.fillStyle = '#ff6a3d'; g.fillRect(x + c, y + c, c, c); g.fillRect(x + pw - c * 2, y + c, c, c); g.fillRect(x + c, y + ph - c * 2, c, c); g.fillRect(x + pw - c * 2, y + ph - c * 2, c, c);
+      g.fillStyle = 'rgba(255,255,255,0.12)'; for (let i = 0; i < pw / c; i += 2) g.fillRect(x + c + i * c, y + c * 2, c, c);
+      return { tcol: '#fff2c8', tstroke: '#0a0620', tlw: 2.6 };
+    } },
+    grafiti: { bottom: 5, bg(g, o) {   // asfalt + sprey sıçramaları + damlalar
+      const { x, y, pw, ph } = o;
+      o.pill(); g.lineWidth = 3.2; g.strokeStyle = '#121216'; g.stroke();
+      g.fillStyle = '#2b2b33'; g.fill();
+      const cols = ['#ff3bd4', '#3ddc84', '#ffe14d', '#4fb3ff', '#ff6a1a'];
+      pillClip(g, o, () => { for (let i = 0; i < 9; i++) { const sx = x + 4 + FM.hash(i * 3 + pw) * (pw - 8), sy = y + 2 + FM.hash(i * 7 + 3) * (ph - 4), rr = 3 + FM.hash(i * 11) * 5; const gr = g.createRadialGradient(sx, sy, 0, sx, sy, rr); gr.addColorStop(0, rgba(cols[i % 5], 0.85)); gr.addColorStop(1, rgba(cols[i % 5], 0)); g.fillStyle = gr; g.fillRect(sx - rr, sy - rr, rr * 2, rr * 2); } });
+      for (let i = 0; i < 3; i++) { const dx = x + pw * (0.2 + i * 0.3), col = cols[(i * 2) % 5]; g.fillStyle = col; g.beginPath(); g.moveTo(dx - 1.3, -1); g.lineTo(dx + 1.3, -1); g.lineTo(dx + 0.9, 2.6 + i); g.arc(dx, 3.6 + i, 1.2, 0, PI); g.closePath(); g.fill(); g.lineWidth = 0.9; g.strokeStyle = '#121216'; g.stroke(); }
+      o.pill(); g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.3)'; g.stroke();
+      return { tcol: '#ffffff', tstroke: '#000000', tlw: 2.8 };
+    } },
+    buzul: { bottom: 6, bg(g, o) {   // buz bloğu + sarkan saçaklar
+      const { x, y, pw, ph } = o;
+      const n = Math.max(3, Math.round(pw / 9));
+      g.beginPath(); g.moveTo(x + 4, -1);
+      for (let i = 0; i < n; i++) { const x0 = x + 4 + (pw - 8) * i / n, x1 = x + 4 + (pw - 8) * (i + 1) / n, hh = 3 + (i % 3) * 1.8; g.lineTo((x0 + x1) / 2, hh); g.lineTo(x1, -1); }
+      g.closePath(); g.lineJoin = 'round'; g.lineWidth = 2.6; g.strokeStyle = '#1f5f8f'; g.stroke(); g.fillStyle = '#cdefff'; g.fill();
+      o.pill(); g.lineWidth = 3.2; g.strokeStyle = '#1f5f8f'; g.stroke();
+      g.fillStyle = grad(g, y, 0, [0, '#f0fbff', 0.5, '#a6e0fb', 1, '#5fb0e6']); g.fill();
+      pillClip(g, o, () => { g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x + pw * 0.2, y + ph); g.lineTo(x + pw * 0.32, y + 2); g.moveTo(x + pw * 0.7, y + ph); g.lineTo(x + pw * 0.62, y + 3); g.stroke(); });
+      sheen(g, o, 0.45);
+      return { tcol: '#ffffff', tstroke: '#1f5f8f', tlw: 2.8 };
+    } },
+    lav: { bottom: 2, bg(g, o) {   // kor kaya + magma çatlakları
+      const { x, y, pw, ph } = o;
+      o.pill(); g.lineWidth = 5; g.strokeStyle = 'rgba(255,110,30,0.35)'; g.stroke();
+      g.lineWidth = 3.2; g.strokeStyle = '#2a0a04'; g.stroke();
+      g.fillStyle = grad(g, y, 0, [0, '#3a1410', 0.6, '#1e0806', 1, '#4a1408']); g.fill();
+      pillClip(g, o, () => {
+        g.lineCap = 'round'; g.lineJoin = 'round';
+        const pts = []; for (let i = 0; i <= 8; i++) pts.push([x + pw * i / 8, y + ph * (0.35 + FM.hash(i * 5 + pw) * 0.45)]);
+        const path = () => { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); };
+        path(); g.lineWidth = 4; g.strokeStyle = 'rgba(255,120,30,0.35)'; g.stroke();
+        path(); g.lineWidth = 1.8; g.strokeStyle = '#ff8a1e'; g.stroke();
+        path(); g.lineWidth = 0.8; g.strokeStyle = '#ffe680'; g.stroke();
+        g.fillStyle = grad(g, y + ph - 5, y + ph, [0, 'rgba(255,140,30,0)', 1, 'rgba(255,140,30,0.7)']); g.fillRect(x, y + ph - 5, pw, 5);
+      });
+      return { tcol: '#fff1c8', tstroke: '#3a0a00', tlw: 2.8 };
+    } },
+    elmas: { bg(g, o) {   // kristal yüzeyler + parıltı
+      const { x, y, pw, ph } = o;
+      o.pill(); g.lineWidth = 3.2; g.strokeStyle = '#0a4a6a'; g.stroke();
+      g.fillStyle = grad(g, y, 0, [0, '#ffffff', 0.4, '#9ff0ff', 1, '#3fc0e8']); g.fill();
+      pillClip(g, o, () => {
+        g.fillStyle = 'rgba(255,255,255,0.35)';
+        for (let i = 0; i < 6; i++) { const fx0 = x + pw * i / 6, fx1 = x + pw * (i + 1) / 6; g.beginPath(); g.moveTo(fx0, y); g.lineTo(fx1, y); g.lineTo((fx0 + fx1) / 2 + (i % 2 ? 4 : -4), y + ph); g.closePath(); if (i % 2) g.fill(); }
+        g.strokeStyle = 'rgba(10,74,106,0.35)'; g.lineWidth = 0.8; g.beginPath(); for (let i = 1; i < 6; i++) { g.moveTo(x + pw * i / 6, y); g.lineTo(x + pw * i / 6 + (i % 2 ? 4 : -4), y + ph); } g.stroke();
+      });
+      g.fillStyle = '#ffffff'; g.beginPath(); sparklePath(g, x + 6, y + 3.5, 4); g.fill(); g.beginPath(); sparklePath(g, x + pw - 5, y + ph - 3.5, 3); g.fill();
+      return { tcol: '#ffffff', tstroke: '#0a4a6a', tlw: 2.8 };
+    } },
+    galaksi: { bg(g, o) {   // uzay boşluğu + yıldızlar + bulutsu
+      const { x, y, pw, ph } = o;
+      o.pill(); g.lineWidth = 5; g.strokeStyle = 'rgba(150,110,255,0.3)'; g.stroke();
+      g.lineWidth = 3; g.strokeStyle = '#1a0a3a'; g.stroke();
+      g.fillStyle = grad(g, y, 0, [0, '#2d1b6e', 0.5, '#120b3a', 1, '#05031a']); g.fill();
+      pillClip(g, o, () => {
+        const neb = g.createRadialGradient(x + pw * 0.35, y + ph * 0.5, 0, x + pw * 0.35, y + ph * 0.5, pw * 0.3); neb.addColorStop(0, 'rgba(255,90,200,0.4)'); neb.addColorStop(1, 'rgba(255,90,200,0)'); g.fillStyle = neb; g.fillRect(x, y, pw, ph);
+        const neb2 = g.createRadialGradient(x + pw * 0.75, y + ph * 0.4, 0, x + pw * 0.75, y + ph * 0.4, pw * 0.25); neb2.addColorStop(0, 'rgba(60,220,255,0.35)'); neb2.addColorStop(1, 'rgba(60,220,255,0)'); g.fillStyle = neb2; g.fillRect(x, y, pw, ph);
+        for (let i = 0; i < 18; i++) { const sx = x + 2 + FM.hash(i * 13 + pw) * (pw - 4), sy = y + 1.5 + FM.hash(i * 17 + 1) * (ph - 3); g.fillStyle = 'rgba(255,255,255,' + (0.4 + FM.hash(i * 3) * 0.6).toFixed(2) + ')'; g.beginPath(); g.arc(sx, sy, 0.5 + FM.hash(i * 5) * 0.6, 0, TAU); g.fill(); }
+        g.fillStyle = '#ffffff'; g.beginPath(); sparklePath(g, x + pw - 6, y + 4, 2.6); g.fill();
+      });
+      o.pill(); g.lineWidth = 1; g.strokeStyle = 'rgba(200,180,255,0.7)'; g.stroke();
+      return { tcol: '#ffffff', tstroke: '#1a0a3a', tlw: 2.6 };
+    } },
+    saray: { top: 2, bg(g, o) {   // mor kadife + altın çift şerit + mücevherler
+      const { x, y, pw, ph } = o;
+      o.pill(); g.lineWidth = 4; g.strokeStyle = '#2a0a44'; g.stroke();
+      g.fillStyle = grad(g, y, 0, [0, '#8a3ad8', 0.5, '#5a1a9a', 1, '#2e0a5a']); g.fill();
+      g.lineWidth = 1.8; g.strokeStyle = '#ffd23f'; g.stroke();
+      g.beginPath(); rrect(g, x + 2.4, y + 2.4, pw - 4.8, ph - 4.8, o.r - 2.4); g.lineWidth = 0.8; g.strokeStyle = 'rgba(255,230,120,0.7)'; g.stroke();
+      sheen(g, o, 0.16);
+      for (const p of [[x + 5, y + ph / 2, '#ff5aa0'], [x + pw - 5, y + ph / 2, '#7df9ff']]) { g.beginPath(); g.arc(p[0], p[1], 2, 0, TAU); g.fillStyle = p[2]; g.fill(); g.lineWidth = 0.9; g.strokeStyle = '#ffd23f'; g.stroke(); g.fillStyle = 'rgba(255,255,255,0.85)'; g.beginPath(); g.arc(p[0] - 0.6, p[1] - 0.6, 0.6, 0, TAU); g.fill(); }
+      g.fillStyle = '#ffd23f'; g.beginPath(); g.moveTo(x + pw / 2 - 4, y - 0.5); g.lineTo(x + pw / 2 - 2.6, y - 3.6); g.lineTo(x + pw / 2, y - 1.6); g.lineTo(x + pw / 2 + 2.6, y - 3.6); g.lineTo(x + pw / 2 + 4, y - 0.5); g.closePath(); g.fill(); g.lineWidth = 0.8; g.strokeStyle = '#6a3a00'; g.stroke();
+      return { tcol: '#fff6d2', tstroke: '#2a0a44', tlw: 2.8 };
+    } }
+  };
   function plateSprite(name, style, big, col) {
     const fs = big ? 12.5 : 10.5;
     col = col || '';
+    const PD = PLATE_DEF[style] || PLATE_DEF.basic;
     const key = 'fmplate|' + name + '|' + style + '|' + (big ? 1 : 0) + '|' + plateVer + '|' + col;
     let tw = TWC.get(key);
     if (tw == null) {
@@ -2114,59 +2283,18 @@
       if (TWC.size > 200) TWC.clear();
       TWC.set(key, tw);
     }
-    const icon = style === 'clan' ? fs * 0.95 : 0;
+    const icon = PD.icon ? fs * 0.95 : 0;
     const dot = col ? fs * 0.78 + 3 : 0;          // oyuncu rengi noktası (sol uçta)
     const ph = fs + 7, pw = tw + 15 + icon + dot;
-    const pad = 7, top = style === 'fire' ? 7 : 0;
-    const W = pw + pad * 2, H = ph + pad * 2 + top;
-    const spr = FM.gfx.sprite(key, W, H, W / 2, H - pad, g => {
+    const pad = 7, top = PD.top || 0, bottom = PD.bottom || 0;
+    const W = pw + pad * 2, H = ph + pad * 2 + top + bottom;
+    const spr = FM.gfx.sprite(key, W, H, W / 2, H - pad - bottom, g => {
       const x = -pw / 2, y = -ph, r = ph / 2;
-      const pill = () => { g.beginPath(); rrect(g, x, y, pw, ph, r); };
-      let tcol = '#ffffff', tstroke = 'rgba(0,0,0,0.35)', tlw = 2.2;
-      if (style === 'gold') {
-        pill(); g.lineWidth = 3.2; g.strokeStyle = '#5a3200'; g.stroke();
-        const gr = g.createLinearGradient(0, y, 0, 0); gr.addColorStop(0, '#fff6c4'); gr.addColorStop(0.45, '#ffd23f'); gr.addColorStop(0.55, '#f0b020'); gr.addColorStop(1, '#b06a08');
-        g.fillStyle = gr; g.fill();
-        g.save(); pill(); g.clip(); g.beginPath(); ell(g, 0, y + ph * 0.18, pw * 0.48, ph * 0.32); g.fillStyle = 'rgba(255,255,255,0.4)'; g.fill(); g.restore();
-        tstroke = '#6b3a00'; tlw = 2.8;
-      } else if (style === 'clan') {
-        pill(); g.lineWidth = 3.4; g.strokeStyle = '#000000'; g.stroke();
-        const gr = g.createLinearGradient(0, y, 0, 0); gr.addColorStop(0, '#34343c'); gr.addColorStop(1, '#09090b');
-        g.fillStyle = gr; g.fill();
-        g.lineWidth = 1.4; g.strokeStyle = '#c0182e'; g.stroke();
-        g.beginPath(); rrect(g, x + 2, y + 2, pw - 4, ph - 4, r - 2); g.lineWidth = 0.6; g.strokeStyle = 'rgba(255,90,100,0.4)'; g.stroke();
-        g.beginPath(); spadePath(g, x + 7.5 + dot + icon * 0.3, y + ph / 2 - 0.4, icon * 0.42); g.fillStyle = '#e0243a'; g.fill();
-        tstroke = '#000000'; tlw = 2.4;
-      } else if (style === 'neon') {
-        pill(); g.lineWidth = 6; g.strokeStyle = 'rgba(255,59,212,0.28)'; g.stroke();
-        g.fillStyle = 'rgba(14,2,30,0.82)'; g.fill();
-        g.lineWidth = 1.7; g.strokeStyle = '#ff3bd4'; g.stroke();
-        g.beginPath(); rrect(g, x + 2, y + 2, pw - 4, ph - 4, r - 2); g.lineWidth = 0.8; g.strokeStyle = 'rgba(38,240,255,0.9)'; g.stroke();
-        tstroke = 'rgba(255,59,212,0.95)'; tlw = 2.6;
-      } else if (style === 'fire') {
-        // alev dilleri
-        g.beginPath();
-        const n = Math.max(4, Math.round(pw / 11));
-        g.moveTo(x + r * 0.6, y + 2);
-        for (let i = 0; i < n; i++) {
-          const fx0 = x + r * 0.6 + (pw - r * 1.2) * i / n, fx1 = x + r * 0.6 + (pw - r * 1.2) * (i + 1) / n, hh = 4.5 + (i % 2) * 2.5;
-          g.quadraticCurveTo(fx0 + (fx1 - fx0) * 0.2, y - hh * 0.5, (fx0 + fx1) / 2 + 1, y - hh);
-          g.quadraticCurveTo(fx0 + (fx1 - fx0) * 0.6, y - hh * 0.3, fx1, y + 2);
-        }
-        g.closePath();
-        g.lineJoin = 'round'; g.lineWidth = 2.6; g.strokeStyle = '#5a0a00'; g.stroke();
-        const fg = g.createLinearGradient(0, y - 8, 0, y + 2); fg.addColorStop(0, '#ffe14d'); fg.addColorStop(1, '#ff6a1a');
-        g.fillStyle = fg; g.fill();
-        pill(); g.lineWidth = 3.2; g.strokeStyle = '#5a0a00'; g.stroke();
-        const gr = g.createLinearGradient(0, y, 0, 0); gr.addColorStop(0, '#ffd84a'); gr.addColorStop(0.45, '#ff8a1a'); gr.addColorStop(1, '#c8201a');
-        g.fillStyle = gr; g.fill();
-        g.save(); pill(); g.clip(); g.beginPath(); ell(g, 0, y + ph * 0.16, pw * 0.46, ph * 0.28); g.fillStyle = 'rgba(255,255,255,0.32)'; g.fill(); g.restore();
-        tstroke = '#5a0a00'; tlw = 2.8;
-      } else {
-        pill(); g.fillStyle = big ? 'rgba(20,10,40,0.74)' : 'rgba(16,8,32,0.64)'; g.fill();
-        if (col && !big) { g.lineWidth = 1.5; g.strokeStyle = rgba(col, 0.85); g.stroke(); }
-        else { g.lineWidth = 1; g.strokeStyle = big ? 'rgba(255,225,120,0.7)' : 'rgba(255,255,255,0.22)'; g.stroke(); }
-      }
+      const o = { x, y, pw, ph, r, fs, icon, dot, pill: () => { g.beginPath(); rrect(g, x, y, pw, ph, r); } };
+      g.lineJoin = 'round';
+      let T;
+      try { T = PD.bg(g, o, big, col); } catch (e) { T = PLATE_DEF.basic.bg(g, o, big, col); }
+      T = T || { tcol: '#ffffff', tstroke: 'rgba(0,0,0,0.35)', tlw: 2.2 };
       if (col) {
         // oyuncu rengi: koyu halkalı parlak nokta (aynı karakteri seçen oyuncular ayırt edilsin; ayak halkasıyla aynı renk)
         const dr = fs * 0.39, dx = x + ph / 2 + 0.5, dy = y + ph / 2;
@@ -2177,12 +2305,19 @@
       }
       g.font = fs + 'px ' + FM.FONT_H; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
       const tx = icon * 0.5 + dot * 0.5 + 0.2, ty = y + ph / 2 + 0.6;
-      g.lineWidth = tlw; g.strokeStyle = tstroke; g.strokeText(name, tx, ty);
-      g.fillStyle = tcol; g.fillText(name, tx, ty);
+      g.lineWidth = T.tlw; g.strokeStyle = T.tstroke; g.strokeText(name, tx, ty);
+      g.fillStyle = T.tcol; g.fillText(name, tx, ty);
     });
     spr.ph = ph + top;
     return spr;
   }
+  /** Mağaza canlı önizlemesi: plakayı (x,y) alt-orta noktasına, mantıksal ölçekle çizer. name = oyuncunun takma adı. */
+  R.drawPlate = function (ctx, style, name, x, y, scale, big) {
+    if (!ctx) return;
+    const s = plateSprite(String(name == null ? '' : name).slice(0, 18) || 'Sen', PLATE_DEF[style] ? style : 'basic', big !== false, '');
+    const z = scale || 1;
+    ctx.drawImage(s.c, x - s.ox * z, y - s.oy * z, s.w * z, s.h * z);
+  };
 
   /* =====================================================================
      DURUM KATMANLARI
@@ -2488,10 +2623,34 @@
     if (FOCUS_SPEC) return '#3fe0f0';
     return TAGS ? racerColor(r) : '#ffd23f';
   }
-  const PLATE_STYLES = { basic: 1, gold: 1, clan: 1, neon: 1, fire: 1 };
-  function racerPlate(r, isPlayer) {
-    return plateSprite(String(r.nick || r.name || r.id || '').slice(0, 18), PLATE_STYLES[r.plate] ? r.plate : 'basic', isPlayer, TAGS ? racerColor(r) : '');
+  /** Plakadaki ad: ağda r.nick (lobi takma adı); tek oyunculuda yerel oyuncu için kayıttaki takma ad (FM.save.nick), botlarda karakter adı */
+  function plateName(r) {
+    let n = r.nick || r.name || r.id || '';
+    if (r.ctrl === 'local' && !r.pid && !r.bot && FM.save && typeof FM.save.nick === 'string' && FM.save.nick.trim()) n = FM.save.nick.trim();
+    return String(n).slice(0, 18);
   }
+  function racerPlate(r, isPlayer) {
+    return plateSprite(plateName(r), PLATE_DEF[r.plate] ? r.plate : 'basic', isPlayer, TAGS ? racerColor(r) : '');
+  }
+  /** Yarışçının şapkası: r.hat (ağ/bot: game.js & netgame.js atar); yerel oyuncuda atanmamışsa kuşanılan (FM.meta) */
+  function racerHat(r) {
+    if (hatOk(r.hat)) return r.hat;
+    if (r.hat == null && r.ctrl === 'local' && !r.ghost && FM.meta && typeof FM.meta.equipped === 'function') {
+      const h = FM.meta.equipped('hats'); return hatOk(h) ? h : null;
+    }
+    return null;
+  }
+  const WIN_POSES = { cheer: 1, dance: 1, flex: 1, flip: 1 };
+  /** Bitişteki kutlama pozu: r.win (FM.COSMETICS.wins id) → pose; yerel oyuncuda kuşanılan */
+  function winPose(r) {
+    let w = r.win;
+    if (w == null && r.ctrl === 'local' && !r.ghost && FM.meta && typeof FM.meta.equipped === 'function') w = FM.meta.equipped('wins');
+    const L = FM.COSMETICS && FM.COSMETICS.wins;
+    if (w && L) for (const it of L) if (it.id === w) return WIN_POSES[it.pose] ? it.pose : 'cheer';
+    return 'cheer';
+  }
+  R.racerHat = racerHat;
+  R.racerWinPose = winPose;
 
   /* =====================================================================
      ÇOK OYUNCULU İŞARETLERİ — oyuncu rengi (plaka noktası + ayak halkası), emoji balonu,
@@ -2831,18 +2990,19 @@
     const face = opts.face === -1 ? -1 : 1;
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
-    if (skin === 'neon' || skin === 'gece') {
-      const gs = FM.gfx.glowSprite(skin === 'neon' ? 'rgba(255,60,220,0.6)' : 'rgba(110,90,255,0.45)', 32);
+    const sg = SKIN_GLOW[skin];
+    if (sg) {
+      const gs = FM.gfx.glowSprite(sg[0], 32);
       const ga = ctx.globalAlpha;
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = ga * (skin === 'neon' ? 0.2 : 0.3);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = ga * sg[1];
       ctx.drawImage(gs.c, x - 34 * scale, y - 62 * scale, 68 * scale, 64 * scale);
       ctx.globalAlpha = ga; ctx.globalCompositeOperation = 'source-over';
     }
     ctx.translate(x, y);
     ctx.scale(face * scale, scale);
-    drawFig(ctx, id, skin, m, p, t, opts.outline !== false);
+    drawFig(ctx, id, skin, m, p, t, opts.outline !== false, hatOk(opts.hat) ? opts.hat : null);
     ctx.restore();
-    if (skin === 'altin' || skin === 'buz') {
+    if (SKIN_TWINKLE[skin] && opts.fx !== false) {
       ctx.save(); drawSkinFx(ctx, skin, { t }, x, y, scale); ctx.restore();
     }
   };
@@ -2857,7 +3017,8 @@
     opts = opts || {};
     size = clamp(Math.round(size || 96), 8, 1024);
     const skin = SKINS[opts.skin] ? opts.skin : 'klasik', bg = opts.bg || '', ex = opts.expr || 'n';
-    const key = id + '|' + size + '|' + skin + '|' + bg + '|' + ex + '|' + (opts.ring === false ? 0 : 1);
+    const hat = hatOk(opts.hat) && opts.hat !== 'none' ? opts.hat : '';
+    const key = id + '|' + size + '|' + skin + '|' + bg + '|' + ex + '|' + (opts.ring === false ? 0 : 1) + '|' + hat;
     let c = PORT.get(key);
     if (c) { PORT.delete(key); PORT.set(key, c); return c; }   // LRU: en son kullanılan sona
     stampNow();
@@ -2867,7 +3028,13 @@
       const adj = PORT_ADJ[id] || [0, 0, 1];
       const D = DEF[id], p0 = makePose(id, 'idle', 0, 0.3, 0, {});
       const hl = headLocal(id, p0), rs0 = D.rig.scale || 1;
-      const topY = hl[1] - D.rig.top * rs0, botY = hl[1] + 21 * rs0;      // kafa tepesi → omuzlar
+      let topY = hl[1] - D.rig.top * rs0;
+      const botY = hl[1] + 21 * rs0;      // kafa tepesi → omuzlar
+      if (hat && HAT_DEF[hat].slot === 'head' && HAT_DEF[hat].up > 0) {   // yüksek şapka (sihirbaz, silindir…) kadraja sığsın
+        const A = HEAD_ANCHOR[id] || HEAD_ANCHOR.TAFTAF, hs = D.rig.hs || 1;
+        const hatTop = hl[1] + (A.y - HAT_DEF[hat].up * (A.s || 1)) * hs * rs0;
+        if (hatTop < topY) topY = hatTop + (topY - hatTop) * 0.25;
+      }
       const sc = size * 0.9 / (botY - topY) * adj[2];
       const cx = size / 2, cyc = size / 2, rad = size * 0.47;
       if (bg) {
@@ -2895,7 +3062,7 @@
       // portre bir kez üretilip kendi önbelleğinde tutulur: yalnızca onun için üretilen büyük parçalar önbellekte
       // "eski" işaretlenir ki bütçe dolunca ilk onlar atılsın (yarışçıların her karede kullandıkları korunur)
       portBuild = true;
-      try { drawFig(g, id, skin, m, p, 0.3, true); } finally { portBuild = false; }
+      try { drawFig(g, id, skin, m, p, 0.3, true, hat || null); } finally { portBuild = false; }
       g.restore();
       if (bg && opts.ring !== false) {
         g.beginPath(); g.arc(cx, cyc, rad, 0.06 * PI, 0.94 * PI);
@@ -2928,6 +3095,102 @@
   };
   R.charHeadPos = function (r) { const a = r && AS.get(r); return a ? { x: a.hx, y: a.hy } : null; };
   R.charPalette = function (id, skin) { return pal(DEF[id] ? id : 'TAFTAF', SKINS[skin] ? skin : 'klasik', false); };
+  R.SKIN_IDS = Object.keys(SKINS);
+  R.HAT_IDS = Object.keys(HAT_DEF);
+  R.PLATE_IDS = Object.keys(PLATE_DEF);
+  R.hatInfo = function (id) { const D = HAT_DEF[id]; return D ? { slot: D.slot, up: D.up } : null; };
+
+  /* =====================================================================
+     MAĞAZA İKONLARI — kart ikonları (önbellekli tuval). Parçacık biçimleri render-fx'teki türlerle aynı dilde
+     (dot, star, heart, spade, leaf, ice, note, conf/pixel, bubble, flame, bolt, coin, twinkle, puff, ghost, vortex, firework).
+     ===================================================================== */
+  const ICONS = new Map();
+  /** Parçacık glifi (ikon ve önizleme için): kind, merkez (x,y), boyut s, renk */
+  function glyph(g, kind, x, y, s, col, rot) {
+    g.save(); g.translate(x, y); if (rot) g.rotate(rot);
+    g.fillStyle = col; g.strokeStyle = 'rgba(20,10,30,0.85)'; g.lineWidth = max(1, s * 0.16); g.lineJoin = 'round';
+    switch (kind) {
+      case 'star': g.beginPath(); starPath(g, 0, 0, s, s * 0.45, 5); g.fill(); g.stroke(); break;
+      case 'twinkle': g.beginPath(); sparklePath(g, 0, 0, s); g.fill(); break;
+      case 'heart': g.beginPath(); g.moveTo(0, s); g.bezierCurveTo(-s * 1.4, -s * 0.1, -s * 0.7, -s * 1.1, 0, -s * 0.35); g.bezierCurveTo(s * 0.7, -s * 1.1, s * 1.4, -s * 0.1, 0, s); g.closePath(); g.fill(); g.stroke(); break;
+      case 'spade': g.beginPath(); spadePath(g, 0, 0, s); g.fill(); g.stroke(); break;
+      case 'leaf': g.beginPath(); blob(g, [-s, 0, -s * 0.4, -s * 0.7, s * 0.5, -s * 0.6, s, 0, s * 0.5, s * 0.6, -s * 0.4, s * 0.7], 0.9); g.fill(); g.stroke(); g.beginPath(); g.moveTo(-s * 0.8, 0); g.lineTo(s * 0.8, 0); g.lineWidth = 0.8; g.stroke(); break;
+      case 'ice': g.lineWidth = max(1.2, s * 0.22); g.strokeStyle = col; g.beginPath(); for (let i = 0; i < 3; i++) { const a = i * PI / 3; g.moveTo(-cos(a) * s, -sin(a) * s); g.lineTo(cos(a) * s, sin(a) * s); for (const d of [-1, 1]) { g.moveTo(cos(a) * s * 0.55, sin(a) * s * 0.55); g.lineTo(cos(a) * s * 0.55 + cos(a + d * 0.9) * s * 0.35, sin(a) * s * 0.55 + sin(a + d * 0.9) * s * 0.35); } } g.stroke(); break;
+      case 'note': g.beginPath(); ell(g, -s * 0.3, s * 0.5, s * 0.55, s * 0.4, -0.4); g.fill(); g.stroke(); g.lineWidth = max(1.4, s * 0.22); g.strokeStyle = col; g.beginPath(); g.moveTo(s * 0.2, s * 0.4); g.lineTo(s * 0.2, -s); g.quadraticCurveTo(s * 0.9, -s * 0.9, s * 0.9, -s * 0.2); g.stroke(); break;
+      case 'conf': case 'pixel': g.beginPath(); g.rect(-s * 0.7, -s * (kind === 'pixel' ? 0.7 : 0.45), s * 1.4, s * (kind === 'pixel' ? 1.4 : 0.9)); g.fill(); g.stroke(); break;
+      case 'bubble': g.beginPath(); g.arc(0, 0, s, 0, TAU); g.fillStyle = rgba(col, 0.28); g.fill(); g.lineWidth = max(1, s * 0.14); g.strokeStyle = col; g.stroke(); g.fillStyle = '#ffffff'; g.beginPath(); ell(g, -s * 0.35, -s * 0.4, s * 0.25, s * 0.14, -0.6); g.fill(); break;
+      case 'flame': g.beginPath(); g.moveTo(0, s); g.bezierCurveTo(-s * 1.1, s * 0.4, -s * 0.5, -s * 0.5, 0, -s * 1.1); g.bezierCurveTo(s * 0.3, -s * 0.3, s * 1.1, s * 0.2, 0, s); g.closePath(); g.fill(); g.stroke(); g.fillStyle = 'rgba(255,255,255,0.75)'; g.beginPath(); g.moveTo(0, s * 0.7); g.bezierCurveTo(-s * 0.4, s * 0.4, -s * 0.2, 0, 0, -s * 0.3); g.bezierCurveTo(s * 0.2, 0, s * 0.4, s * 0.4, 0, s * 0.7); g.fill(); break;
+      case 'bolt': g.beginPath(); g.moveTo(s * 0.2, -s); g.lineTo(-s * 0.6, s * 0.1); g.lineTo(0, s * 0.1); g.lineTo(-s * 0.2, s); g.lineTo(s * 0.6, -s * 0.15); g.lineTo(0, -s * 0.15); g.closePath(); g.fill(); g.stroke(); break;
+      case 'coin': g.beginPath(); g.arc(0, 0, s, 0, TAU); g.fill(); g.stroke(); g.beginPath(); g.arc(0, 0, s * 0.62, 0, TAU); g.lineWidth = 0.9; g.strokeStyle = 'rgba(120,70,0,0.6)'; g.stroke(); break;
+      case 'puff': g.beginPath(); g.arc(-s * 0.5, s * 0.2, s * 0.6, 0, TAU); g.arc(s * 0.1, -s * 0.3, s * 0.75, 0, TAU); g.arc(s * 0.7, s * 0.25, s * 0.55, 0, TAU); g.fill(); g.stroke(); break;
+      case 'ghost': g.beginPath(); g.moveTo(-s, s); g.lineTo(-s, -s * 0.2); g.arc(0, -s * 0.2, s, PI, 0); g.lineTo(s, s); for (let i = 0; i < 3; i++) g.quadraticCurveTo(s - s * (i * 2 + 1) / 3, s * 0.55, s - s * (i + 1) * 2 / 3, s); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#1b1024'; g.beginPath(); g.arc(-s * 0.35, -s * 0.25, s * 0.17, 0, TAU); g.arc(s * 0.35, -s * 0.25, s * 0.17, 0, TAU); g.fill(); break;
+      case 'vortex': g.lineWidth = max(1.4, s * 0.2); g.strokeStyle = col; g.beginPath(); for (let i = 0; i <= 40; i++) { const a = i / 40 * TAU * 2, d = i / 40 * s; if (i) g.lineTo(cos(a) * d, sin(a) * d); else g.moveTo(0, 0); } g.stroke(); break;
+      case 'firework': g.lineWidth = max(1.2, s * 0.14); g.strokeStyle = col; g.lineCap = 'round'; g.beginPath(); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; g.moveTo(cos(a) * s * 0.3, sin(a) * s * 0.3); g.lineTo(cos(a) * s, sin(a) * s); } g.stroke(); g.fillStyle = col; for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; g.beginPath(); g.arc(cos(a) * s, sin(a) * s, s * 0.14, 0, TAU); g.fill(); } break;
+      case 'galaxy': g.beginPath(); sparklePath(g, 0, 0, s); g.fill(); g.fillStyle = 'rgba(255,255,255,0.8)'; g.beginPath(); g.arc(s * 0.7, -s * 0.6, s * 0.18, 0, TAU); g.fill(); break;
+      case 'ribbon': g.lineWidth = max(2, s * 0.5); g.lineCap = 'round'; g.strokeStyle = col; g.beginPath(); g.moveTo(-s, s * 0.4); g.quadraticCurveTo(0, -s, s, s * 0.2); g.stroke(); break;
+      default: g.beginPath(); g.arc(0, 0, s * 0.8, 0, TAU); g.fill(); g.stroke();
+    }
+    g.restore();
+  }
+  R.glyph = glyph;
+  function cosItemOf(type, id) { const L = FM.COSMETICS && FM.COSMETICS[type]; if (L) for (const it of L) if (it.id === id) return it; return null; }
+  /** cosmeticIcon(type, id, size, opts) → size×size tuval (önbellekli). opts {nick (plaka adı), char (skin önizlemesi için karakter)}.
+      Şeffaf zemin: kart arka planını arayüz verir. */
+  R.cosmeticIcon = function (type, id, size, opts) {
+    opts = opts || {};
+    size = clamp(Math.round(size || 96), 16, 512);
+    const nick = String(opts.nick || (FM.save && FM.save.nick) || 'Sen').slice(0, 14), ch = DEF[opts.char] ? opts.char : (FM.save && DEF[FM.save.selChar] ? FM.save.selChar : 'TAFTAF');
+    const key = type + '|' + id + '|' + size + '|' + (type === 'plates' ? nick : '') + '|' + (type === 'skins' ? ch : '') + '@' + FM.gfx.rs();
+    let c = ICONS.get(key);
+    if (c) return c;
+    stampNow();
+    c = mkCanvas(size, size);
+    const g = c.getContext('2d'), it = cosItemOf(type, id), cx = size / 2, cy = size / 2;
+    try {
+      if (type === 'hats' && HAT_DEF[id]) {
+        const D = HAT_DEF[id], w = D.box[2] - D.box[0], h = D.box[3] - D.box[1];
+        const sc = size * 0.84 / max(w, h), m = clamp(Math.ceil(sc / FM.gfx.rs() - 0.15), 1, 4);
+        const s = hatSprite(id, m, 1);
+        g.save(); g.translate(cx - (D.box[0] + w / 2) * sc, cy - (D.box[1] + h / 2) * sc); g.scale(sc, sc); blit(g, s, m); g.restore();
+      } else if (type === 'plates') {
+        const s = plateSprite(nick, PLATE_DEF[id] ? id : 'basic', true, '');
+        const sc = min(size * 0.92 / s.w, size * 0.6 / s.h);
+        g.drawImage(s.c, cx - s.w / 2 * sc, cy - (s.h - (s.oy - (s.ph || 20) / 2 - 3.5)) * sc + s.h * sc / 2 - s.h * sc / 2, s.w * sc, s.h * sc);
+      } else if (type === 'skins') {
+        const pc = R.portrait(ch, size, { skin: SKINS[id] ? id : 'klasik', ring: false });
+        g.drawImage(pc, 0, 0, size, size);
+      } else if (type === 'trails' || type === 'wins' || type === 'deaths') {
+        const fx = it && (type === 'trails' ? { k: it.k || 'dot', cols: it.colors || ['#ffffff'] } : (it.fx || null));
+        const u = size / 100;
+        if (!fx || id === 'none') {
+          g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 3 * u; g.setLineDash([6 * u, 6 * u]);
+          g.beginPath(); g.arc(cx, cy, 30 * u, 0, TAU); g.stroke(); g.setLineDash([]);
+          if (type === 'wins') { g.lineWidth = 4 * u; g.lineCap = 'round'; g.strokeStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.moveTo(cx - 10 * u, cy - 10 * u); g.lineTo(cx - 10 * u, cy + 10 * u); g.moveTo(cx + 10 * u, cy - 10 * u); g.lineTo(cx + 10 * u, cy + 10 * u); g.stroke(); }
+        } else if (type === 'trails') {
+          // sağa koşan izin arkasında kalan parçacık dizisi: büyükten küçüğe, renk döngülü
+          const cols = fx.cols.length ? fx.cols : ['#ffffff'];
+          if (fx.k === 'ribbon') {
+            const n = cols.length, bw = 9 * u / n * 1.6;
+            for (let i = 0; i < n; i++) { g.lineWidth = bw; g.lineCap = 'butt'; g.strokeStyle = cols[i]; g.beginPath(); g.moveTo(10 * u, 70 * u - (i - n / 2) * bw); g.quadraticCurveTo(50 * u, 20 * u - (i - n / 2) * bw, 90 * u, 60 * u - (i - n / 2) * bw); g.stroke(); }
+          } else {
+            const pts = [[82, 50, 13], [60, 36, 11], [44, 60, 9], [28, 42, 7.5], [16, 56, 6]];
+            pts.forEach((p, i) => glyph(g, fx.k === 'puff' ? 'puff' : fx.k, p[0] * u, p[1] * u, p[2] * u, cols[i % cols.length], (i * 1.3) % TAU));
+          }
+        } else {
+          const cols = fx.cols || ['#ffffff'], k = fx.k;
+          if (fx.ring) { g.strokeStyle = fx.ring; g.lineWidth = 4 * u; g.beginPath(); g.arc(cx, cy + 6 * u, 36 * u, 0, TAU); g.stroke(); }
+          if (k === 'vortex' || k === 'ghost' || k === 'firework') glyph(g, k, cx, cy, 30 * u, cols[k === 'vortex' ? 1 : 0]);
+          else {
+            const pts = [[50, 30, 15], [26, 50, 11], [74, 50, 11], [36, 72, 9], [64, 72, 9], [50, 56, 8]];
+            pts.forEach((p, i) => glyph(g, k, p[0] * u, p[1] * u, p[2] * u, cols[i % cols.length], (i * 0.9) % TAU));
+          }
+        }
+      }
+    } catch (e) { console.error('[cosmeticIcon]', e); }
+    ICONS.set(key, c);
+    if (ICONS.size > 160) { const k0 = ICONS.keys().next().value; ICONS.delete(k0); }
+    return c;
+  };
 
   /* =====================================================================
      ÖN ISITMA — yarış başında parçaları birkaç kareye yayarak önceden üret
@@ -2942,12 +3205,13 @@
       for (const nm of ['body', 'armF', 'armB', 'legF', 'legB']) WARM.push([r.id, skin, nm, '']);
       for (const ex of ['n', 'b', 'f', 'h', 'o', 'x']) WARM.push([r.id, skin, 'head', ex]);
       if (r.id === 'Nuss') { WARM.push([r.id, skin, 'wingF', '']); WARM.push([r.id, skin, 'wingB', '']); }
+      const hat = racerHat(r); if (hat) WARM.push(['hat', hat]);
     }
   }
   FM.on('race:start', queueWarm);
   FM.on('match:start', queueWarm);
   // çözünürlük değişmediyse parçalar korunur (takılma yok); değiştiyse eski çözünürlüklüler hemen bırakılır
-  FM.on('resize', () => { pcTrim('stale'); queueWarm(); });
+  FM.on('resize', () => { pcTrim('stale'); clearHats(); ICONS.clear(); queueWarm(); });
   /** Geliştirici/test: parça ve portre önbelleklerinin boyutu */
   R.charCacheStats = function () {
     let pb = 0; for (const c of PORT.values()) pb += c.width * c.height * 4;
@@ -2959,7 +3223,7 @@
     let n = 0;
     while (WARM.length && n < 3) {
       const w = WARM.shift();
-      try { part(w[0], w[1], w[2], w[3], racerM, 1); } catch (e) { /* yok say */ }
+      try { if (w[0] === 'hat') hatSprite(w[1], racerM, 1); else part(w[0], w[1], w[2], w[3], racerM, 1); } catch (e) { /* yok say */ }
       n++;
     }
   });

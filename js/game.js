@@ -1188,7 +1188,7 @@
     if (!r || !S.L) return A;
     const d = aimDir(ax, ay);
     if (d) { A.ax = d.x; A.ay = d.y; }
-    const alive = r.dead <= 0 && !r.finished && !r.out;
+    const alive = r.dead <= 0 && !r.finished && !r.out && S.mode === 'race';   // geri sayımda nişan alınabilir ama atılamaz
     const cx = cxOf(r), cy = cyOf(r);
     if (kind === 'item') {
       const it = r.item; A.key = it || null;
@@ -1306,9 +1306,9 @@
       if (best) { res.ax = r2(Math.cos(ba)); res.ay = r2(Math.sin(ba)); res.snap = best; }
       return res;
     }
-    // balistik arama: önce nişanın kendisi, sonra ±0.05 rad adımlarla dışa doğru
-    for (let i = 0; i <= 10; i++) {
-      const kk = i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * .05;
+    // balistik arama: önce nişanın kendisi, sonra ±0.025 rad adımlarla dışa doğru (dinamitin isabet penceresi dar)
+    for (let i = 0; i <= 22; i++) {
+      const kk = i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * .025;
       if (Math.abs(kk) > ASSIST_LIM) break;
       const a = a0 + kk, dd = aimDir(Math.cos(a), Math.sin(a));
       const q = throwHits(r, key, dd, rivals);
@@ -1330,12 +1330,17 @@
     if (cur) FM.emit('aim:start', { kind: cur });
     aimPrev = cur;
   }
-  // her karede (main.js): yerel oyuncu nişan alıyorsa FM.S.aim = önizleme, almıyorsa null
+  // her karede (main.js): yerel oyuncu nişan alıyorsa FM.S.aim = önizleme, almıyorsa null.
+  // Nişan yardımı araması pahalı (birkaç simülasyon): nişan pek değişmediyse 0.1 sn boyunca önceki sonuç kullanılır.
+  let asC = null;
   game.updateAim = function () {
     trackAim();
     const I = FM.input, P = S.player, kind = I && I.aim;
-    if ((kind !== 'item' && kind !== 'ab') || !P || P.ghost || P.out || !S.L || !(S.mode === 'race' || S.mode === 'count')) { S.aim = null; return null; }
-    const a = assistAim(P, kind, I.ax, I.ay);
+    if ((kind !== 'item' && kind !== 'ab') || !P || P.ghost || P.out || !S.L || !(S.mode === 'race' || S.mode === 'count')) { S.aim = null; asC = null; return null; }
+    const ck = kind + ':' + (kind === 'item' ? P.item : P.id), ax = +I.ax || 0, ay = +I.ay || 0;
+    let a;
+    if (asC && asC.k === ck && Math.abs(asC.ax - ax) < .015 && Math.abs(asC.ay - ay) < .015 && S.T - asC.t < .1 && S.T >= asC.t) a = asC.a;
+    else { a = assistAim(P, kind, ax, ay); asC = { k: ck, ax, ay, t: S.T, a }; }
     const A = aimPreview(P, kind, a.ax, a.ay);
     A.rax = I.ax || 0; A.ray = I.ay || 0; A.assist = a.snap || null;
     S.aim = A;

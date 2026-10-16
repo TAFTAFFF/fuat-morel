@@ -570,7 +570,8 @@
   function sendJoin(re) {
     R.joinLast = now();
     const pr = myProfile();
-    pub('join', { f: myPid(), sn: SN, v: VER, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, re: re ? 1 : 0 });
+    // ck = gördüğümüz son kontrol mesajı: ev sahibi lobiye döndürdükten sonra yolda kalmış eski "hazır" bayrağı geri gelmesin
+    pub('join', { f: myPid(), sn: SN, v: VER, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, re: re ? 1 : 0, ck: R.lob ? R.lob.ck : '' });
   }
 
   /* ---------------- ev sahibi: lobi yayını ---------------- */
@@ -723,6 +724,8 @@
     const inf = R.info[f] || (R.info[f] = {}); inf.sn = tok(m.sn, inf.sn);
     const e = sanitizeEntry({ id: f, n: m.n, c: m.c, sk: m.sk, tr: m.tr, pl: m.pl, rd: m.rd, sn: m.sn });
     if (!e) return;
+    // maç sonu lobiye dönüşü (ctl 'lobby') henüz görmemiş üyenin hazır bayrağı eskidir: sıfır say (geri sayım bayat bayrakla başlamasın)
+    if (L.st === 'lobby' && L.cl && L.cl.t === 'lobby' && typeof m.ck === 'string' && m.ck !== L.ck) e.rd = 0;
     const ex = L.p.find(p => p.id === f);
     if (ex) {
       const keepW = ex.w;

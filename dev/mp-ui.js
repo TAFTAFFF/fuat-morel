@@ -215,9 +215,11 @@ const ui = p => p.eval('FM.ui.state()');
     // maç sonu: herkes KENDİLİĞİNDEN lobiye döner (menüye atılmaz); olmazsa ev sahibi düğmesi
     let back = 'otomatik';
     const t1 = Date.now();
-    while (autoOn && Date.now() - t1 < 30000) { const a = (await ui(A)).screen, b = (await ui(B)).screen; if (a === 'lobby' && b === 'lobby') break; await sleep(400); }
-    if (!((await ui(A)).screen === 'lobby' && (await ui(B)).screen === 'lobby')) { back = 'elle'; await tap(A, '[data-act="tolobby"]', 'A LOBİYE DÖN'); }
-    await waitFor(async () => (await ui(A)).screen === 'lobby' && (await ui(B)).screen === 'lobby', 15000, 'iki taraf lobiye döndü');
+    // ui.state().screen yarış/sonuç/final GÖRÜNÜMLERİNDE de 'lobby' kalır: gerçek dönüşü ağ evresi söyler
+    const inLobby = async p => (await ui(p)).screen === 'lobby' && (await p.eval('FM.netgame.state().phase')) === 'lobby';
+    while (autoOn && Date.now() - t1 < 30000) { if (await inLobby(A) && await inLobby(B)) break; await sleep(400); }
+    if (!(await inLobby(A) && await inLobby(B))) { back = 'elle'; await tap(A, '[data-act="tolobby"]', 'A LOBİYE DÖN'); }
+    await waitFor(async () => await inLobby(A) && await inLobby(B), 15000, 'iki taraf lobiye döndü');
     ok(true, 'lobiye dönüş (' + back + ')');
     await sleep(800);
     console.log('teşhis hazır bayrakları: A R.ready=' + (await A.eval('FM.net._dbg.R.ready')) + ' B R.ready=' + (await B.eval('FM.net._dbg.R.ready')) + ' A lobi rd=' + (await A.eval('JSON.stringify(FM.net._dbg.R.lob.p.map(p=>[p.id.slice(0,4),p.rd]))')) + ' cd=' + (await A.eval('FM.netgame.countdown()')));

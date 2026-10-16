@@ -346,7 +346,11 @@ async function lobbyFlow(all) {
     const s = (Date.now() - tF) / 1000;
     const lob = H.net.lobby(), pl = H.net.players();
     const okRoom = M3.every(g => g.net.inRoom() && g.net.code() === code && g.ng.state().phase === 'lobby' && g.count('mp:left') === 0);
-    if (okRoom && pl.length === 3 && pl.every(p => !p.ready) && lob.st === 'lobby') pass(`final'den ${s.toFixed(1)} sn sonra herkes AYNI odada (${code}) lobide; 3 oyuncu korundu, hazırlar sıfırlandı, kimse menüye atılmadı`);
+    const rdy = M3.map(g => !!g.net._dbg.R.ready).concat(M3.map(g => g.net.players().some(p => p.ready)));
+    if (rdy.some(Boolean)) fail('lobiye dönünce hazır bayrağı kaldı (R.ready / players().ready): ' + JSON.stringify(rdy));
+    await sleep(6500);
+    if (M3.some(g => g.ng.countdown() != null || g.ng.state().phase !== 'lobby')) fail('lobiye dönünce bayat bayrakla geri sayım/yarış başladı');
+    if (okRoom && pl.length === 3 && pl.every(p => !p.ready) && lob.st === 'lobby') pass(`final'den ${s.toFixed(1)} sn sonra herkes AYNI odada (${code}) lobide; 3 oyuncu korundu, hazırlar HERKESTE sıfır (R.ready ve lobi), 6.5 sn bekleyince de geri sayım başlamadı, kimse menüye atılmadı`);
     else fail('lobiye dönüş: ' + JSON.stringify({ okRoom, n: pl.length, ready: pl.map(p => p.ready), st: lob.st }));
   });
 

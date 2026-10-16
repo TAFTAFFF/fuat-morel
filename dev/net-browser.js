@@ -104,7 +104,8 @@ function cdp(wsUrl) {
     await waitFor(async () => B.net.inRoom() && Cc.net.inRoom() && (await page.eval('FM.net.players().length')) === 3, 40000, 'iki node oyuncu katıldı');
     pass('2 node oyuncu tarayıcının odasına katıldı; tarayıcı 3 oyuncu görüyor');
 
-    await page.eval('FM.net.start({seed: 99, theme: 1, mode: "classic", round: 1, rounds: 3, roster: FM.net.players().map(p => ({pid: p.pid}))})');
+    // boş kadro: sayfadaki netgame bu yükle GERÇEK yarış başlatmaz (yoksa oyunun kendi durum akışı testin akışıyla yarışır)
+    await page.eval('FM.net.start({seed: 99, theme: 1, mode: "classic", round: 1, rounds: 3, roster: [], pids: FM.net.players().map(p => p.pid)})');
     await waitFor(() => last(B, 'net:start') && last(Cc, 'net:start'), 8000, 'net:start node oyunculara');
     await waitFor(() => page.eval('__ev.some(x => x.e === "net:start")'), 5000, 'net:start tarayıcının kendisine');
     pass('tarayıcı ev sahibinin start mesajı herkese ulaştı (kendisine de yankıyla)');

@@ -1329,6 +1329,15 @@
     const x = num(e.x, 0) + w / 2, y = num(e.y, 0) + h;
     if (!inView(x, y, 60)) return;
     const v = vis(e), age = num(e.age, 0), life = num(e.life, 10);
+    if (e.fly) {
+      // fırlatılan tuzak (yönlü atış): havada takla atan kapalı çeneler + hafif ışık izi
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .35;
+      spr(ctx, glowSprite('#cfd6e4'), x, y - h / 2, 0, .8);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      spr(ctx, trapClosedSprite(), x, y - h / 2 + 4, num(v.spin, 0), .66 * TRAP_SC, .66 * TRAP_SC);
+      resetXf(ctx);
+      return;
+    }
     let a = 1;
     if (life < 1.2) a = .35 + .65 * (Math.sin(life * 28) > -.3 ? 1 : 0);
     // zemin gölgesi

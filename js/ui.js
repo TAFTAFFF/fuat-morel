@@ -305,6 +305,7 @@
     opts = opts || {};
     const o = { bg: opts.bg === undefined ? chBg(id) : opts.bg };
     if (opts.skin && opts.skin !== 'klasik') o.skin = opts.skin;
+    if (opts.hat && opts.hat !== 'none') o.hat = opts.hat;
     if (opts.expr) o.expr = opts.expr;
     if (opts.ring === false) o.ring = false;
     if (!o.bg) delete o.bg;
@@ -346,6 +347,10 @@
   const COS = FM.COSMETICS || { skins: [], trails: [], plates: [] };
   const cosList = type => COS[type] || [];
   const cosItem = (type, id) => cosList(type).find(x => x.id === id) || null;
+  // Mağaza 2.0 türleri: kayıt alanı ve varsayılan (meta yoksa yedek)
+  const COS_EQ = { trails: 'trail', plates: 'plate', hats: 'hat', wins: 'win', deaths: 'death' };
+  const COS_DEF = { skins: 'klasik', trails: 'dust', plates: 'basic', hats: 'none', wins: 'none', deaths: 'none' };
+  const RAR = FM.RARITY || { c: { n: 'Sıradan', col: '#9aa3b2' }, r: { n: 'Nadir', col: '#4fb3ff' }, e: { n: 'Destansı', col: '#c084fc' }, l: { n: 'Efsanevi', col: '#ffb020' } };
   function owns(type, id, ch) {
     const v = mcall('owns', type, id, ch);
     if (typeof v === 'boolean') return v;
@@ -360,14 +365,25 @@
     if (typeof v === 'string' && v) return v;
     const e = sv().equipped || {};
     if (type === 'skins') return (e.skin || {})[ch] || 'klasik';
-    if (type === 'trails') return e.trail || 'dust';
-    return e.plate || 'basic';
+    return (COS_EQ[type] && e[COS_EQ[type]]) || COS_DEF[type] || 'none';
   }
   function equip(type, id, ch) {
     if (hasMeta('equip')) { mcall('equip', type, id, ch); return; }
     const e = sv().equipped; if (!e) return;
-    if (type === 'skins') { e.skin = e.skin || {}; e.skin[ch] = id; } else if (type === 'trails') e.trail = id; else e.plate = id;
+    if (type === 'skins') { e.skin = e.skin || {}; e.skin[ch] = id; } else if (COS_EQ[type]) e[COS_EQ[type]] = id;
     FM.persist(); FM.emit('meta:change', {});
+  }
+  /** Mağaza öğesi görünümü (FM.meta.cosmetic; yoksa katalogdan): {id, n, d, type, price, base, off, cur, rar, rarN, rarCol, owned, equipped, can, typeOne} */
+  function cosView(type, id, ch) {
+    let v = mcall('cosmetic', type, id, ch);
+    if (!v || typeof v !== 'object') {
+      const it = cosItem(type, id); if (!it) return null;
+      const rar = RAR[it.rar] ? it.rar : 'c';
+      v = Object.assign({}, it, { type, price: +it.price || 0, base: +it.price || 0, off: 0, cur: it.cur === 'gems' ? 'gems' : 'coins', rar, rarN: RAR[rar].n, rarCol: RAR[rar].col, owned: owns(type, id, ch), equipped: equipped(type, ch) === id });
+      v.can = v.owned || curAmt(v.cur) >= v.price;
+    }
+    if (!v.typeOne) v.typeOne = (mcall('cosTypes') || []).reduce((a, t) => (t.type === type ? t.one : a), '') || '';
+    return v;
   }
   function buyCos(type, id, ch) {
     if (hasMeta('buyCosmetic')) return !!mcall('buyCosmetic', type, id, ch);
@@ -699,10 +715,53 @@
   const shows = [];
   let showRaf = 0, showLast = 0;
   function attachShowcase(cv) {
-    const sc = { cv, g: cv.getContext('2d'), id: cv.getAttribute('data-showcase') || 'TAFTAF', skin: cv.getAttribute('data-skin') || 'klasik', cheer: +(cv.getAttribute('data-cheer') || 0), zoom: clamp(+(cv.getAttribute('data-zoom') || 1) || 1, .6, 1.5), hop: 0, chk: 0, cw: 0, ch: 0, t0: nowMs() / 1000 };
-    cv.addEventListener('pointerdown', () => { sc.cheer = 1.6; sc.hop = 1; click(); });
+    const at = n => cv.getAttribute(n) || '';
+    const sc = { cv, g: cv.getContext('2d'), id: at('data-showcase') || 'TAFTAF', skin: at('data-skin') || 'klasik', cheer: +(at('data-cheer') || 0), zoom: clamp(+(at('data-zoom') || 1) || 1, .6, 1.5), hop: 0, chk: 0, cw: 0, ch: 0, t0: nowMs() / 1000,
+      // Mağaza 2.0 canlı önizleme: şapka, plaka (takma adla), iz, kutlama, ölüm efekti
+      hat: at('data-hat'), plate: at('data-plate'), nick: at('data-nick'), trail: at('data-trail'), win: at('data-win'), death: at('data-death'), parts: [], acc: 0, dieT: 0, died: false };
+    cv.addEventListener('pointerdown', () => { if (sc.trail || sc.win || sc.death) return; sc.cheer = 1.6; sc.hop = 1; click(); });
     shows.push(sc);
     startShowLoop();
+  }
+  /* ---- önizleme parçacıkları (yalnızca mağaza/vitrin tuvalinde; render-chars glifleriyle) ---- */
+  const PV_MAX = 48;
+  function pvPush(sc, p) { if (sc.parts.length >= PV_MAX) sc.parts.shift(); p.max = p.life; sc.parts.push(p); }
+  function fxOf(type, id) { const it = cosItem(type, id); return it && it.fx && it.fx.k ? it.fx : null; }
+  function trailOf(id) { const it = cosItem('trails', id); return it && it.k && id !== 'none' ? { k: it.k, cols: it.colors && it.colors.length ? it.colors : ['#ffffff'] } : null; }
+  const GLYPH_OF = { puff: 'puff', heart: 'heart', leaf: 'leaf', flame: 'flame', ice: 'ice', bubble: 'bubble', star: 'star', note: 'note', bolt: 'bolt', pixel: 'pixel', spade: 'spade', galaxy: 'galaxy', coin: 'coin', conf: 'conf', firework: 'star', twinkle: 'twinkle', ghost: 'ghost', vortex: 'star' };
+  function pvTrail(sc, cx, fy, s, tr) {
+    const c = tr.cols[(Math.random() * tr.cols.length) | 0], k = GLYPH_OF[tr.k] || 'dot';
+    if (tr.k === 'ribbon') return;
+    const up = tr.k === 'puff' ? 0 : 20 * s;
+    pvPush(sc, { k, x: cx - 10 * s + (Math.random() - .5) * 8 * s, y: fy - up - Math.random() * 14 * s, vx: -(50 + Math.random() * 40) * s, vy: (tr.k === 'puff' ? -20 : tr.k === 'heart' || tr.k === 'bubble' || tr.k === 'note' ? -40 : -10) * s + (Math.random() - .5) * 30 * s, g: (tr.k === 'leaf' || tr.k === 'coin' || tr.k === 'pixel' ? 120 : tr.k === 'ice' ? 40 : 0) * s, life: .7 + Math.random() * .4, c, s: (tr.k === 'puff' ? 7 : 4.5) * s * (.8 + Math.random() * .5), rot: Math.random() * 6, vr: (Math.random() - .5) * 6 });
+  }
+  function pvBurst(sc, cx, cy, s, fx, kind) {
+    const cols = fx.cols || ['#ffffff'], k = GLYPH_OF[fx.k] || 'star', n = kind === 'death' ? 16 : 14;
+    const vortex = fx.k === 'vortex', ghost = fx.k === 'ghost';
+    if (ghost) { pvPush(sc, { k: 'ghost', x: cx, y: cy, vx: 0, vy: -45 * s, g: 0, life: 1.4, c: cols[0], s: 11 * s, rot: 0, vr: 0, wob: 1 }); return; }
+    if (fx.k === 'firework') { const bx = cx + (Math.random() - .5) * 60 * s, by = cy - 50 * s - Math.random() * 30 * s; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, v = (60 + Math.random() * 60) * s; pvPush(sc, { k: i % 2 ? 'star' : 'twinkle', x: bx, y: by, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 90 * s, life: .6 + Math.random() * .4, c: cols[i % cols.length], s: 3.6 * s, rot: a, vr: 3 }); } return; }
+    for (let i = 0; i < n; i++) {
+      const a = vortex ? Math.random() * Math.PI * 2 : -Math.PI / 2 + (Math.random() - .5) * (fx.k === 'conf' ? 1.6 : 2.6), v = (vortex ? 0 : 70 + Math.random() * 110) * s;
+      const d = vortex ? (40 + Math.random() * 30) * s : 0, life = .55 + Math.random() * .5;
+      pvPush(sc, { k, x: cx + Math.cos(a) * d + (Math.random() - .5) * 20 * s, y: cy + Math.sin(a) * d, vx: vortex ? -Math.cos(a) * d / life : Math.cos(a) * v, vy: vortex ? -Math.sin(a) * d / life : Math.sin(a) * v, g: (vortex ? 0 : fx.k === 'heart' || fx.k === 'note' || fx.k === 'bubble' || fx.k === 'flame' ? -40 : 160) * s, life, c: cols[i % cols.length], s: (fx.k === 'puff' ? 7 : fx.k === 'twinkle' ? 6 : 4) * s * (.8 + Math.random() * .5), rot: Math.random() * 6, vr: (Math.random() - .5) * 8 });
+    }
+  }
+  function pvDraw(sc, g, dt) {
+    const R = FM.R, L = sc.parts;
+    if (!L.length) return;
+    const glyph = R && typeof R.glyph === 'function' ? R.glyph : null;
+    for (let i = L.length - 1; i >= 0; i--) {
+      const p = L[i];
+      p.life -= dt; if (p.life <= 0) { L.splice(i, 1); continue; }
+      p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+      const k = p.life / p.max, a = Math.min(1, p.life / .3) * Math.min(1, (p.max - p.life) / .08 + .2);
+      g.globalAlpha = Math.max(0, Math.min(1, a));
+      const sz = p.k === 'ghost' ? p.s * (1 + (1 - k) * .3) : p.s * (p.k === 'puff' ? 1 + (1 - k) * .6 : (.55 + .45 * k));
+      const x = p.wob ? p.x + Math.sin((p.max - p.life) * 5) * 6 : p.x;
+      if (glyph) glyph(g, p.k, x, p.y, sz, p.c, p.k === 'ghost' ? Math.sin((p.max - p.life) * 3) * .15 : p.rot);
+      else { g.fillStyle = p.c; g.beginPath(); g.arc(x, p.y, sz * .6, 0, TAU); g.fill(); }
+    }
+    g.globalAlpha = 1;
   }
   function stopShowcases() { shows.length = 0; }
   function startShowLoop() {
@@ -740,15 +799,48 @@
     const hopY = sc.hop > 0 ? -Math.sin((1 - sc.hop) * Math.PI) * H * .09 : 0;
     // gölge
     const sk = 1 - Math.min(.5, -hopY / (H * .2));
-    g.fillStyle = 'rgba(10,0,30,.45)'; g.beginPath(); g.ellipse(cx, footY, 20 * scale * sk, 5 * scale * sk, 0, 0, TAU); g.fill();
-    let pose;
-    if (sc.cheer > 0) { sc.cheer -= dt; pose = { st: 'cheer', t, ph: t * 7, expr: 'h' }; }
-    else pose = { st: 'idle', t, ph: t * 2 };
     const R = FM.R;
-    if (R && typeof R.drawCharacter === 'function') {
-      R.drawCharacter(g, sc.id, cx, footY + hopY, scale, pose, { skin: sc.skin });
-    } else if (R && typeof R.portrait === 'function') {
-      const s = Math.min(W, H) * .55; g.drawImage(R.portrait(sc.id, Math.round(s * d), { bg: chBg(sc.id) }), cx - s / 2, footY - s * 1.05, s, s);
+    // Mağaza 2.0 önizleme modları: iz (koşar), kutlama (poz + parçacık), ölüm efekti (puf döngüsü)
+    let pose, hidden = false;
+    const tr = sc.trail ? trailOf(sc.trail) : null, wfx = sc.win ? fxOf('wins', sc.win) : null, dfx = sc.death ? fxOf('deaths', sc.death) : null;
+    const bodyY = footY + hopY - 28 * scale;
+    if (dfx) {
+      sc.dieT += dt; if (sc.dieT >= 3) { sc.dieT = 0; sc.died = false; }
+      if (sc.dieT >= 1.7 && !sc.died) { sc.died = true; pvBurst(sc, cx, bodyY, scale, dfx, 'death'); }
+      hidden = sc.dieT >= 1.7 && sc.dieT < 2.55;
+      pose = sc.dieT >= 1.45 && sc.dieT < 1.7 ? { st: 'stun', t, ph: t * 2, expr: 'o' } : { st: 'idle', t, ph: t * 2 };
+    } else if (wfx || sc.win) {
+      const it = cosItem('wins', sc.win), ps = it && it.pose ? it.pose : 'cheer';
+      pose = { st: ps, t, ph: t * 7 };
+      sc.acc += dt;
+      if (wfx && sc.acc > (wfx.k === 'firework' ? .6 : .85)) { sc.acc = 0; pvBurst(sc, cx, footY + hopY - 40 * scale, scale, wfx, 'win'); }
+    } else if (sc.trail) {
+      pose = { st: 'run', t, ph: t * 9, speed: 1.1 };
+      if (tr) { sc.acc += dt * (tr.k === 'flame' ? 22 : tr.k === 'puff' ? 10 : 7); while (sc.acc >= 1) { sc.acc -= 1; pvTrail(sc, cx, footY, scale, tr); } }
+    } else if (sc.cheer > 0) { sc.cheer -= dt; pose = { st: 'cheer', t, ph: t * 7, expr: 'h' }; }
+    else pose = { st: 'idle', t, ph: t * 2 };
+    if (!hidden) { g.fillStyle = 'rgba(10,0,30,.45)'; g.beginPath(); g.ellipse(cx, footY, 20 * scale * sk, 5 * scale * sk, 0, 0, TAU); g.fill(); }
+    // gökkuşağı kurdelesi (iz önizlemesi): karakterin arkasında
+    if (tr && tr.k === 'ribbon' && R && typeof R.glyph === 'function') {
+      const n = tr.cols.length, bw = 3.2 * scale;
+      for (let i = 0; i < n; i++) { g.lineWidth = bw; g.lineCap = 'round'; g.strokeStyle = tr.cols[i]; g.beginPath(); const oy = (i - n / 2) * bw; g.moveTo(cx - 12 * scale, footY - 22 * scale + oy); g.quadraticCurveTo(cx - 60 * scale, footY - 30 * scale + oy + Math.sin(t * 6) * 8 * scale, cx - 110 * scale, footY - 10 * scale + oy + Math.sin(t * 6 + 1) * 10 * scale); g.stroke(); }
+    }
+    if (sc.trail || dfx) pvDraw(sc, g, dt);      // iz/ölüm parçacıkları karakterin arkasında
+    if (!hidden) {
+      if (R && typeof R.drawCharacter === 'function') {
+        R.drawCharacter(g, sc.id, cx, footY + hopY, scale, pose, { skin: sc.skin, hat: sc.hat || null });
+      } else if (R && typeof R.portrait === 'function') {
+        const s = Math.min(W, H) * .55; g.drawImage(R.portrait(sc.id, Math.round(s * d), { bg: chBg(sc.id) }), cx - s / 2, footY - s * 1.05, s, s);
+      }
+    }
+    if (!sc.trail && !dfx) pvDraw(sc, g, dt);    // kutlama parçacıkları karakterin önünde
+    // isim plakası (oyuncunun TAKMA ADIYLA), kafanın üstünde; yüksek şapkalarda yukarı kayar
+    if (sc.plate && !hidden && R && typeof R.drawPlate === 'function') {
+      let up = 0;
+      try { const hi = sc.hat && typeof R.hatInfo === 'function' ? R.hatInfo(sc.hat) : null; if (hi && hi.slot === 'head') up = Math.max(0, (hi.up || 0) - 8); } catch (e) { up = 0; }
+      const flipUp = pose.st === 'flip' ? 24 * scale : 0;
+      const ps = scale * .62, py = Math.max(20 * ps + 6, footY + hopY - (70 + up) * scale - flipUp + Math.sin(t * 2.2) * 1.5);   // sahnenin üstünden taşmasın
+      try { R.drawPlate(g, sc.plate, sc.nick || 'Sen', cx, py, ps, true); } catch (e) { /* plaka çizilemedi */ }
     }
     g.setTransform(1, 0, 0, 1, 0, 0);
   }
@@ -762,14 +854,24 @@
         if (a === 'logo') drawLogo(cv);
         else if (a === 'flag') drawFlag(cv);
         else if (a === 'trail') drawTrail(cv, cv.getAttribute('data-id'));
+        else if (a === 'cos') drawCosIcon(cv);
       } catch (e) { console.error('[ui sanat ' + a + ']', e); }
     }
     for (const cv of $$('canvas[data-showcase]', el)) attachShowcase(cv);
   }
+  /** Mağaza kartı ikonu (render-chars önbellekli kozmetik ikonu) */
+  function drawCosIcon(cv) {
+    const R = FM.R, f = fitCanvas(cv); if (!f) return;
+    const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, f.w, f.h);
+    if (!R || typeof R.cosmeticIcon !== 'function') return;
+    const px = Math.round(clamp(Math.min(f.w, f.h), 24, 320) / 8) * 8;
+    const ic = R.cosmeticIcon(cv.getAttribute('data-type'), cv.getAttribute('data-id'), px, { nick: myNick(), char: cv.getAttribute('data-ch') || selChar() });
+    if (ic) g.drawImage(ic, (f.w - Math.min(f.w, f.h)) / 2, (f.h - Math.min(f.w, f.h)) / 2, Math.min(f.w, f.h), Math.min(f.w, f.h));
+  }
   function redrawArt() {
     for (const cv of $$('canvas[data-art]')) {
       const a = cv.getAttribute('data-art');
-      try { if (a === 'logo') drawLogo(cv); else if (a === 'flag') drawFlag(cv); else if (a === 'trail') drawTrail(cv, cv.getAttribute('data-id')); } catch (e) { /* yok say */ }
+      try { if (a === 'logo') drawLogo(cv); else if (a === 'flag') drawFlag(cv); else if (a === 'trail') drawTrail(cv, cv.getAttribute('data-id')); else if (a === 'cos') drawCosIcon(cv); } catch (e) { /* yok say */ }
     }
     for (const sc of shows) sc.chk = 0;
   }
@@ -805,7 +907,7 @@
   };
   const st = {
     view: 'none', screen: null,
-    tabs: { shop: 'up', missions: 'daily', help: 'controls' },
+    tabs: { shop: 'vitrin', missions: 'daily', help: 'controls' }, shopSel: {},
     cview: null, modal: null, onOk: null, pausedByRot: false, dailyShown: false,
     lastMatch: { rounds: 3 }, flashKey: null, resData: null, quitArm: 0, lastCur: null, devForce: false,
     mpEmo: {}, mpCode: '', fakeLobby: null, nickThen: null, mpRaced: false, imp: null,
@@ -887,7 +989,7 @@
     return '<div class="show">' +
       '<div class="sh-stage">' +
         '<div class="sh-rays"></div><div class="sh-glow"></div>' +
-        '<canvas class="sh-cv" data-showcase="' + esc(id) + '" data-skin="' + esc(skin) + '" data-cheer="1.1" aria-label="' + esc(id) + '"></canvas>' +
+        '<canvas class="sh-cv" data-showcase="' + esc(id) + '" data-skin="' + esc(skin) + '" data-hat="' + esc(equipped('hats', id)) + '" data-cheer="1.1" aria-label="' + esc(id) + '"></canvas>' +
         '<button class="rbtn b-dark sh-arr sh-al" data-act="cyc" data-d="-1" aria-label="Önceki karakter">' + svg('chevL') + '</button>' +
         '<button class="rbtn b-dark sh-arr sh-ar" data-act="cyc" data-d="1" aria-label="Sonraki karakter">' + svg('chevR') + '</button>' +
         '<div class="sh-tr" title="Kupa">' + trophyI(48, 'sh-tri') + '<b>' + fmtN(trophies(id)) + '</b></div>' +
@@ -954,7 +1056,7 @@
     FM.ORDER.forEach((id, i) => {
       const c = FM.CH[id] || {};
       cards += '<button class="cc ' + (id === sel ? 'is-sel ' : '') + (id === v ? 'is-view' : '') + '" data-act="cview" data-id="' + esc(id) + '" data-k="cc:' + esc(id) + '" style="--d:' + (i * .035).toFixed(3) + 's;--cc:' + esc(c.col2 || '#5b2a86') + '">' +
-        '<span class="cc-pt">' + pt(id, 112, { skin: equipped('skins', id) }) + '</span>' +
+        '<span class="cc-pt">' + pt(id, 112, { skin: equipped('skins', id), hat: equipped('hats', id) }) + '</span>' +
         '<span class="cc-n">' + esc(id) + '</span>' +
         '<span class="cc-tr">' + trophyI(24, 'cc-tri') + '<b>' + fmtN(trophies(id)) + '</b></span>' +
         (id === sel ? '<span class="cc-tag">' + svg('check') + 'SEÇİLİ</span>' : '') +
@@ -991,7 +1093,7 @@
     STATS.forEach((s, i) => { stats += '<div class="stt"><span class="st-ic">' + svg(s[1]) + '</span><span class="st-l">' + s[0] + '</span><span class="bar bar-st" style="--d:' + (.2 + i * .1) + 's"><i></i></span><b>10</b></div>'; });
     const det =
       '<div class="cd-head">' +
-        '<div class="cd-stage"><div class="sh-rays sm"></div><canvas class="cd-cv" data-showcase="' + esc(v) + '" data-skin="' + esc(skinEq) + '" data-zoom="1.2" data-cheer="' + (st.cheerNext ? 1.4 : 0) + '"></canvas></div>' +
+        '<div class="cd-stage"><div class="sh-rays sm"></div><canvas class="cd-cv" data-showcase="' + esc(v) + '" data-skin="' + esc(skinEq) + '" data-hat="' + esc(equipped('hats', v)) + '" data-zoom="1.2" data-cheer="' + (st.cheerNext ? 1.4 : 0) + '"></canvas></div>' +
         '<div class="cd-id">' +
           '<div class="cd-name">' + esc(v) + '</div>' +
           '<div class="cd-meta">' + roleBadge(ch.role) + '<span class="cd-sp">' + esc(ch.species || '') + '</span></div>' +
@@ -1043,12 +1145,84 @@
     if (i === 1) return '<span class="pa pa1"><i class="gi fb-svg c-wood pa-chest">' + svg('chest') + '</i>' + c(1) + c(2) + c(3) + '</span>';
     return '<span class="pa pa2"><i class="gi fb-svg c-wood pa-chest">' + svg('chest') + '</i>' + c(1) + c(2) + c(3) + c(4) + c(5) + gemI(64, 'pa-g') + '</span>';
   }
-  const PLATE_TAG = { basic: 'Sade ve şık', gold: 'Altın parıltı', clan: 'Kırmızı-siyah maça', neon: 'Gece ışıltısı', fire: 'Alev alev' };
+  /* ---------- Mağaza 2.0: sekmeler, nadirlik, kartlar, canlı önizleme, günün vitrini ---------- */
+  const SHOP_TABS = [['vitrin', 'Vitrin', 'gift'], ['skins', 'Görünüm', 'user'], ['hats', 'Aksesuar', 'crown'], ['trails', 'İz', 'sparkle'], ['plates', 'Plaka', 'flag'], ['wins', 'Kutlama', 'trophy'], ['deaths', 'Ölüm Efekti', 'fire'], ['up', 'Geliştirme', 'bolt']];
+  const COS_TABS = { vitrin: 1, skins: 1, hats: 1, trails: 1, plates: 1, wins: 1, deaths: 1 };
+  const TYPE_ONE = { skins: 'Görünüm', hats: 'Aksesuar', trails: 'İz', plates: 'Plaka', wins: 'Kutlama', deaths: 'Ölüm Efekti' };
+  function rarPill(v, cls) { return '<span class="rar rar-' + esc(v.rar) + ' ' + (cls || '') + '" style="--rc:' + esc(v.rarCol) + '">' + esc(v.rarN) + '</span>'; }
+  function priceChip(v) {
+    const ok = curAmt(v.cur) >= v.price;
+    return '<span class="pchip ' + (ok ? '' : 'poor') + '">' + (v.off ? '<s>' + fmtN(v.base) + '</s>' : '') + curIcon(v.cur, 22, 'bi') + '<b>' + fmtN(v.price) + '</b></span>';
+  }
+  function cosCard(v, ch, sel, o) {
+    o = o || {};
+    const cls = 'it it-cos rar-' + esc(v.rar) + (v.equipped ? ' is-eq' : '') + (v.owned ? ' is-own' : '') + (sel ? ' is-sel' : '') + (o.feat ? ' it-feat' : '');
+    return '<button class="' + cls + '" style="--rc:' + esc(v.rarCol) + ';--d:' + (o.d || 0) + 's" data-act="shopsel" data-type="' + esc(v.type) + '" data-id="' + esc(v.id) + '" data-k="cos:' + esc(v.type) + ':' + esc(v.id) + '" aria-label="' + esc(v.n) + '">' +
+      (v.off ? '<i class="it-off">-%' + (+v.off || 0) + '</i>' : '') +
+      (o.typeTag ? '<em class="it-type">' + esc(v.typeOne || '') + '</em>' : '') +
+      '<span class="ic-wrap"><canvas data-art="cos" data-type="' + esc(v.type) + '" data-id="' + esc(v.id) + '" data-ch="' + esc(ch) + '"></canvas></span>' +
+      '<span class="it-n">' + esc(v.n) + '</span>' +
+      rarPill(v, 'sm') +
+      '<span class="it-st">' + (v.equipped ? '<span class="tag-eq">' + svg('check') + 'KUŞANILDI</span>' : v.owned ? '<span class="tag-own">' + svg('check') + 'SAHİP</span>' : priceChip(v)) + '</span>' +
+    '</button>';
+  }
+  function cosAction(v, ch) {
+    const at = 'data-type="' + esc(v.type) + '" data-id="' + esc(v.id) + '" data-ch="' + esc(ch) + '"';
+    if (v.equipped) return '<span class="tag-eq big">' + svg('check') + 'KUŞANILDI</span>';
+    if (v.owned) return '<button class="btn b-blue" data-act="shopeq" ' + at + '>' + svg('check') + '<span>KUŞAN</span></button>';
+    const ok = curAmt(v.cur) >= v.price;
+    return '<button class="btn b-green buy ' + (ok ? '' : 'poor') + '" data-act="shopbuy" ' + at + '>' + (v.off ? '<s class="was">' + fmtN(v.base) + '</s>' : '') + curIcon(v.cur, 28, 'bi') + '<b>' + fmtN(v.price) + '</b></button>' +
+      (ok ? '' : '<span class="shp-need">' + curIcon(v.cur, 18, 'bi') + '<span>' + fmtN(v.price - curAmt(v.cur)) + ' daha gerek</span></span>');
+  }
+  /** Sol pano: canlı önizleme tuvali (seçili karakter + seçili/kuşanılan süsler, plakada takma ad) + öğe bilgisi ve eylem */
+  function shopPreview(tab, v, ch) {
+    const type = v ? v.type : tab;
+    const skin = type === 'skins' && v ? v.id : equipped('skins', ch), hat = type === 'hats' && v ? v.id : equipped('hats', ch), plate = type === 'plates' && v ? v.id : equipped('plates', ch);
+    const trail = type === 'trails' && v ? v.id : '', win = type === 'wins' && v ? v.id : '', death = type === 'deaths' && v ? v.id : '';
+    const attrs = ' data-skin="' + esc(skin) + '" data-hat="' + esc(hat) + '" data-plate="' + esc(plate) + '" data-nick="' + esc(myNick()) + '" data-trail="' + esc(trail) + '" data-win="' + esc(win) + '" data-death="' + esc(death) + '"';
+    const info = !v ? '<div class="shp-info"><div class="shp-n">Mağaza</div><div class="shp-d">Bir ürüne dokun, üstünde dene.</div></div>' :
+      '<div class="shp-info rar-' + esc(v.rar) + '" style="--rc:' + esc(v.rarCol) + '">' +
+        '<div class="shp-top">' + rarPill(v) + '<span class="shp-type">' + esc(v.typeOne || '') + '</span>' + (v.off ? '<b class="shp-deal">BUGÜN -%' + (+v.off || 0) + '</b>' : '') + '</div>' +
+        '<div class="shp-n">' + esc(v.n) + '</div>' +
+        '<div class="shp-d">' + esc(v.d || '') + '</div>' +
+        '<div class="shp-act">' + cosAction(v, ch) + '</div>' +
+      '</div>';
+    return '<div class="shp-pv"><div class="shp-stage"><div class="sh-rays sm"></div><canvas class="shp-cv" data-showcase="' + esc(ch) + '"' + attrs + ' data-zoom="1.05" aria-label="Önizleme"></canvas>' +
+      '<button class="btn sm b-purple shp-ch" data-act="go" data-to="chars" title="Karakter değiştir">' + svg('user') + '<span>' + esc(ch) + '</span></button></div>' + info + '</div>';
+  }
+  function shopList(tab, ch) {
+    if (tab === 'vitrin') {
+      const d = mcall('dailyShop', ch);
+      return { list: d && Array.isArray(d.items) ? d.items.filter(Boolean) : [], reset: d && typeof d.resetsIn === 'number' ? d.resetsIn / 1000 : secsToReset() };
+    }
+    let list = mcall('cosmetics', tab, ch);
+    list = Array.isArray(list) ? list.filter(Boolean).map(x => Object.assign({ type: tab }, x)) : cosList(tab).map(x => cosView(tab, x.id, ch)).filter(Boolean);
+    return { list, reset: 0 };
+  }
+  function shopSelection(tab, list) {
+    const key = st.shopSel[tab];
+    let v = key ? list.find(x => x.type + ':' + x.id === key) : null;
+    if (!v) v = (tab === 'vitrin' ? null : list.find(x => x.equipped)) || list[0] || null;
+    return v;
+  }
   function renderShop() {
     const tab = st.tabs.shop, ch = selChar();
-    const tabs = [['up', 'Geliştirmeler', 'bolt'], ['skins', 'Görünümler', 'user'], ['trails', 'İzler', 'sparkle'], ['plates', 'Plakalar', 'flag']];
+    const tabs = SHOP_TABS.slice();
     if (hasMeta('packs')) tabs.push(['packs', 'Hazine', 'chest']);
     let body = '', head = '';
+    if (COS_TABS[tab]) {
+      const L = shopList(tab, ch), list = L.list;
+      for (const v of list) if (!v.typeOne) v.typeOne = TYPE_ONE[v.type] || '';
+      const sel = shopSelection(tab, list);
+      const cards = list.map((v, i) => cosCard(v, ch, !!sel && sel.id === v.id && sel.type === v.type, { feat: tab === 'vitrin' && i === 0, typeTag: tab === 'vitrin', d: (i * .035).toFixed(3) })).join('');
+      const extra = tab === 'vitrin'
+        ? '<div class="vit-head">' + svg('gift', 'vit-ic') + '<span class="vit-t">GÜNÜN VİTRİNİ</span><span class="vit-sub">Herkese aynı 6 ürün · biri indirimli</span><span class="vit-cd">' + svg('clock') + '<span>Yenilenir</span><b data-reset>' + fmtClock(L.reset) + '</b></span></div>'
+        : tab === 'skins' ? '<div class="shop-head sh-cos">' + pt(ch, 40, { skin: equipped('skins', ch), hat: equipped('hats', ch) }, 'sh-mini') + '<span><b>' + esc(ch) + '</b> için görünümler</span><span class="sh-col">' + collectionTxt() + '</span></div>'
+        : '<div class="shop-head sh-cos"><span>' + esc(TYPE_ONE[tab] || '') + ' seç, karakterinin üstünde canlı gör.</span><span class="sh-col">' + collectionTxt() + '</span></div>';
+      body = '<div class="shp">' + shopPreview(tab, sel, ch) +
+        '<div class="shp-list scroll" data-sk="shop-' + tab + '">' + extra + '<div class="sgrid sg-cos' + (tab === 'vitrin' ? ' sg-vit' : '') + '">' + (cards || emptyBox('bag', 'Burada henüz ürün yok', tab === 'vitrin' ? 'Yarın tekrar bak.' : '')) + '</div></div></div>';
+      return panel('MAĞAZA', tabsBar('shop', tabs, tab) + body, 'pnl-shop', 'rb-gold');
+    }
     if (tab === 'up') {
       const all = upgrades(ch);
       if (all === null) body = emptyBox('bolt', 'Geliştirmeler hazırlanıyor', 'Biraz sonra tekrar bak.');
@@ -1072,29 +1246,7 @@
           '</div>';
         });
       }
-    } else if (tab === 'skins') {
-      head = '<div class="shop-head">' + pt(ch, 48, {}, 'sh-mini') + '<span><b>' + esc(ch) + '</b> için görünümler</span><button class="btn sm b-purple" data-act="go" data-to="chars">Karakter değiştir</button></div>';
-      cosList('skins').forEach((s, i) => {
-        const eq = equipped('skins', ch) === s.id;
-        body += '<div class="it it-skin ' + (eq ? 'is-eq' : '') + '" data-k="skins:' + esc(s.id) + '" style="--d:' + (i * .04).toFixed(2) + 's">' +
-          '<div class="it-pv pv-skin sk-' + esc(s.id) + '">' + pt(ch, 128, { skin: s.id }, 'pv-pt') + '</div>' +
-          '<div class="it-n">' + esc(s.n) + '</div>' +
-          '<div class="it-f">' + cosState('skins', s.id, ch, s.price) + '</div>' +
-        '</div>';
-      });
-    } else if (tab === 'trails') {
-      cosList('trails').forEach((s, i) => {
-        const eq = equipped('trails', ch) === s.id;
-        let sw = '';
-        for (const c of (s.colors || []).slice(0, 6)) sw += '<i style="background:' + esc(c) + '"></i>';
-        body += '<div class="it it-trail ' + (eq ? 'is-eq' : '') + '" data-k="trails:' + esc(s.id) + '" style="--d:' + (i * .04).toFixed(2) + 's">' +
-          '<div class="it-pv pv-trail"><canvas data-art="trail" data-id="' + esc(s.id) + '"></canvas></div>' +
-          '<div class="it-n">' + esc(s.n) + '</div>' +
-          '<div class="swatch">' + (sw || '<span>iz yok</span>') + '</div>' +
-          '<div class="it-f">' + cosState('trails', s.id, ch, s.price) + '</div>' +
-        '</div>';
-      });
-    } else if (tab === 'packs') {
+    } else {
       const packs = mcall('packs');
       head = '<div class="shop-head">' + gemI(40, 'sh-mini') + '<span>Elmaslarını bozdur, kesene <b>altın</b> doldur!</span></div>';
       if (!Array.isArray(packs) || !packs.length) body = emptyBox('chest', 'Hazine kapalı');
@@ -1107,20 +1259,14 @@
           '<div class="it-f">' + priceBtn('pack', 'data-id="' + esc(pk.id) + '"', { cur: 'gems', n: +pk.gems || 0 }) + '</div>' +
         '</div>';
       });
-    } else {
-      cosList('plates').forEach((s, i) => {
-        const eq = equipped('plates', ch) === s.id;
-        body += '<div class="it it-plate ' + (eq ? 'is-eq' : '') + '" data-k="plates:' + esc(s.id) + '" style="--d:' + (i * .04).toFixed(2) + 's">' +
-          '<div class="it-pv pv-plate"><span class="plate pl-' + esc(s.id) + '">' + (s.id === 'clan' ? svg('spade') : '') + '<span>' + esc(ch) + '</span></span></div>' +
-          '<div class="it-n">' + esc(s.n) + '</div>' +
-          '<div class="it-d">' + esc(PLATE_TAG[s.id] || '') + '</div>' +
-          '<div class="it-f">' + cosState('plates', s.id, ch, s.price) + '</div>' +
-        '</div>';
-      });
     }
     return panel('MAĞAZA',
       tabsBar('shop', tabs, tab) + head +
       '<div class="tab-body scroll" data-sk="shop-' + tab + '"><div class="sgrid sg-' + tab + '">' + body + '</div></div>', 'pnl-shop', 'rb-gold');
+  }
+  function collectionTxt() {
+    const c = mcall('collection');
+    return c && typeof c === 'object' ? svg('bag') + '<span>Koleksiyon <b>' + fmtN(c.owned) + '/' + fmtN(c.total) + '</b></span>' : '';
   }
 
   /* =====================================================================
@@ -1432,7 +1578,7 @@
     const g = NGM();
     if (g && typeof g.normCfg === 'function') { try { return g.normCfg(c); } catch (e) { /* aşağıdaki yedek */ } }
     c = c || {};
-    return { mode: modeOf(c.mode).id, map: mapList().indexOf(c.map) >= 0 ? c.map : 'random', rounds: +c.rounds || 3, bots: c.bots !== false, fill: +c.fill || 4, autoNext: 20 };
+    return { mode: modeOf(c.mode).id, map: mapList().indexOf(c.map) >= 0 ? c.map : 'random', rounds: +c.rounds || 3, bots: c.bots !== false, fill: +c.fill || 4, autoNext: 8 };
   }
   function lastCfg() {
     let c = null;
@@ -1932,7 +2078,7 @@
       if (st.lastCur.g !== g) bumpCur('gems', st.lastCur.g, g);
     }
     st.lastCur = { c, g };
-    if (name === 'missions') startTicker(); else stopTicker();
+    if (name === 'missions' || (name === 'shop' && st.tabs.shop === 'vitrin')) startTicker(); else stopTicker();
   }
   function bumpCur(cur, from, to) {
     const pill = $('.cur[data-cur="' + cur + '"]');
@@ -2858,7 +3004,8 @@
   function setLobbyChar(id) {
     if (!FM.CH[id]) return;
     sv().selChar = id; if (typeof FM.persist === 'function') FM.persist();
-    ncall('setProfile', { char: id, skin: equipped('skins', id), trail: equipped('trails', id), plate: equipped('plates', id) });
+    const lo = FM.meta && typeof FM.meta.loadout === 'function' ? FM.meta.loadout(id) : null;
+    ncall('setProfile', Object.assign({ char: id, skin: equipped('skins', id), trail: equipped('trails', id), plate: equipped('plates', id) }, lo ? { hat: lo.hat, win: lo.win, death: lo.death } : {}));
     closeModalHard(); sfx('select');
     updateLobby(true);
   }
@@ -3043,6 +3190,19 @@
     st.flashKey = type + ':' + id;
     refreshSoon();
   }
+  /** Mağaza 2.0 satın alma: bugünkü (vitrin indirimli) fiyat, iki dokunuşla onay, otomatik kuşanma */
+  function doShopBuy(el) {
+    const type = el.getAttribute('data-type'), id = el.getAttribute('data-id'), ch = el.getAttribute('data-ch') || selChar();
+    const v = cosView(type, id, ch); if (!v) return;
+    if (v.owned) { equip(type, id, ch); refreshSoon(); return; }
+    if (curAmt(v.cur) < v.price) { fail(el, v.cur); return; }
+    if (!armBuy(el)) return;
+    if (!buyCos(type, id, ch)) { fail(el, v.cur); return; }
+    equip(type, id, ch);
+    if (type === 'skins') st.cheerNext = true;
+    buzz(25);
+    success('cos:' + type + ':' + id, v.rar === 'l' ? 'EFSANEVİ ürün senin!' : v.rar === 'e' ? 'Destansı ürün senin!' : 'Satın alındı!', v.n + ' kuşanıldı' + (v.off ? ' · %' + v.off + ' indirimle!' : '.'));
+  }
   function skinClick(el) {
     const id = el.getAttribute('data-id'), ch = el.getAttribute('data-ch') || selChar();
     if (equipped('skins', ch) === id) return;
@@ -3193,6 +3353,22 @@
     skin: el => skinClick(el),
     buycos: el => doBuyCos(el),
     equip: el => doEquip(el),
+    // Mağaza 2.0: kart seç (canlı önizleme), satın al (iki dokunuşla onay, vitrin indirimi meta'da), kuşan
+    shopsel: el => {
+      const type = el.getAttribute('data-type'), id = el.getAttribute('data-id');
+      if (!type || !id) return;
+      const key = type + ':' + id;
+      if (st.shopSel[st.tabs.shop] === key) return;
+      st.shopSel[st.tabs.shop] = key; click(); paint(false);
+    },
+    shopbuy: el => doShopBuy(el),
+    shopeq: el => {
+      const type = el.getAttribute('data-type'), id = el.getAttribute('data-id'), ch = el.getAttribute('data-ch') || selChar();
+      if (!owns(type, id, ch)) return;
+      equip(type, id, ch);
+      st.flashKey = 'cos:' + type + ':' + id; sfx('select'); buzz(10);
+      refreshSoon();
+    },
     claim: el => claimMission(el),
     claimDaily: el => claimDaily(el),
     daily: () => openDaily(),
@@ -3493,6 +3669,7 @@
   });
   FM.on('net:error', d => {
     d = d || {};
+    if (d.rejoin) return;   // otomatik geri dönüş hatası: mp:left {reason:'rejoin-failed'} kendi uyarısını gösterir
     if (st.modal === 'mpwait' || st.modal === 'share' || st.modal === 'chpick') closeModalHard();
     if (st.view === 'menu' && st.screen === 'lobby') showScreen('friends');
     if (d.code === 'badcode' || d.code === 'noroom' || d.code === 'full' || d.code === 'ver' || d.code === 'kicked') ncall('clearUrlCode');

@@ -2678,7 +2678,13 @@
   function drawPodChar(ctx, r, x, y, sc, st, pt) {
     if (typeof R.drawCharacter === 'function') {
       ctx.save();
-      try { R.drawCharacter(ctx, r.id, x, y, sc, { st, ph: pt * 7 + (r.idx || 0), t: pt, vy: 0 }, { skin: r.skin || 'klasik', outline: true }); }
+      // kutlama pozu (zafer kozmetiği: dance/flex/flip) ve şapka — Mağaza 2.0
+      let st2 = st, hat = null;
+      try {
+        if (st === 'cheer' && typeof R.racerWinPose === 'function') st2 = R.racerWinPose(r) || st;
+        if (typeof R.racerHat === 'function') hat = R.racerHat(r);
+      } catch (e) { st2 = st; hat = null; }
+      try { R.drawCharacter(ctx, r.id, x, y, sc, { st: st2, ph: pt * 7 + (r.idx || 0), t: pt + (r.idx || 0) * .37, vy: 0 }, { skin: r.skin || 'klasik', hat, outline: true }); }
       catch (e) { if (!drawPodChar.err) { drawPodChar.err = 1; console.error('[kürsü karakter]', e); } fallbackChar(ctx, r.id, x, y, sc, st, pt); }
       ctx.restore();
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';

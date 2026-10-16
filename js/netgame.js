@@ -8,6 +8,9 @@
      Hasar yalnızca yerel yetkililere uygulanır (game.harm uzakları atlar); kurban vuruluşunu/ölümünü (öldüren kimliğiyle) yayınlar.
    - Eleme kararı, meteorlar ve tur sonu sıralaması ev sahibinde; tur sonu ctl 'end' ile herkese AYNEN uygulanır.
    - Ev sahibi göçünde yeni ev sahibi botları son uzak durumlarından devralır.
+   TUR5: yönlü atış (it/ab mesajlarında ax, ay + ek sayısal p alanları), herkes hazır → 5 sn geri sayım → otomatik başlama
+   ('mp:countdown'), turlar arası otomatik geçiş (autoLeft herkeste), maç sonu herkes lobiye (oda korunur), açılışta son odaya
+   otomatik dönüş ('mp:rejoining' / 'mp:left {reason: 'rejoin-failed'}') ve yarış ortasında yenileyenin aynı yarışçıya kaldığı yerden dönmesi.
    Tek oyunculu oyuna dokunmaz: S.netRole null iken hiçbir kanca çalışmaz. */
 'use strict';
 (function (FM) {
@@ -467,12 +470,14 @@
       if (!isObj(p) || !tok(p.pid) || seen.has(p.pid) || d.roster.length >= MAXR) continue;
       seen.add(p.pid);
       d.roster.push({ pid: p.pid, nick: cleanNick(p.nick) || 'Oyuncu', char: validChar(p.char),
-        skin: validCos('skins', p.skin, 'klasik'), trail: validCos('trails', p.trail, 'dust'), plate: validCos('plates', p.plate, 'basic') });
+        skin: validCos('skins', p.skin, 'klasik'), trail: validCos('trails', p.trail, 'dust'), plate: validCos('plates', p.plate, 'basic'),
+        hat: validCos('hats', p.hat, 'none'), win: validCos('wins', p.win, 'none'), death: validCos('deaths', p.death, 'none') });
     }
     for (const b of Array.isArray(P.bots) ? P.bots : []) {
       if (!isObj(b) || typeof b.id !== 'string' || !/^b[0-9]{1,2}$/.test(b.id) || seen.has(b.id) || d.roster.length + d.bots.length >= MAXR) continue;
       seen.add(b.id);
-      d.bots.push({ id: b.id, char: validChar(b.char), skin: validCos('skins', b.skin, 'klasik'), trail: validCos('trails', b.trail, 'dust'), plate: validCos('plates', b.plate, 'basic') });
+      d.bots.push({ id: b.id, char: validChar(b.char), skin: validCos('skins', b.skin, 'klasik'), trail: validCos('trails', b.trail, 'dust'), plate: validCos('plates', b.plate, 'basic'),
+        hat: validCos('hats', b.hat, 'none'), win: validCos('wins', b.win, 'none'), death: validCos('deaths', b.death, 'none') });
     }
     if (isObj(P.tot)) for (const k in P.tot) if (tok(k) && num(P.tot[k])) d.tot[k] = Math.round(P.tot[k]);
     if (!d.seq.length) { for (let i = 0; i < rounds; i++) d.seq.push(theme); }
@@ -508,7 +513,7 @@
       nickN[p.nick] = (nickN[p.nick] || 0) + 1;
       r.pid = p.pid; r.name = r.nick = nickN[p.nick] > 1 ? p.nick + ' ' + nickN[p.nick] : p.nick;
       r.ctrl = p.pid === me ? 'local' : 'remote';
-      r.skin = p.skin; r.trail = p.trail; r.plate = p.plate;
+      r.skin = p.skin; r.trail = p.trail; r.plate = p.plate; r.hat = p.hat; r.win = p.win; r.death = p.death;
       racers.push(r);
     });
     // botlar: yalnızca ev sahibinde simüle edilir; aynı karakterden ikinci bot "Kral 2"
@@ -518,14 +523,14 @@
       botN[b.char] = (botN[b.char] || 0) + 1;
       r.pid = b.id; r.nbot = true; r.name = r.nick = botN[b.char] > 1 ? b.char + ' ' + botN[b.char] : b.char;
       r.ctrl = host ? 'bot' : 'remote'; r.bot = host;
-      r.skin = b.skin; r.trail = b.trail; r.plate = b.plate;
+      r.skin = b.skin; r.trail = b.trail; r.plate = b.plate; r.hat = b.hat; r.win = b.win; r.death = b.death;
       racers.push(r);
     });
     for (const r of racers) {
       if (mods) { r.abLv = mods.abLv; r.chargeMul = mods.chargeMul; r.startItem = mods.startItem; }
       r.total = M.tot[r.pid] | 0; r.off = false;
       byRid.set(r.pid, r);
-      M.info[r.pid] = { nick: r.name, char: r.id, skin: r.skin, bot: !!r.nbot };
+      M.info[r.pid] = { nick: r.name, char: r.id, skin: r.skin, hat: r.hat || 'none', bot: !!r.nbot };
     }
     S.racers = racers;
     const mine = racers.find(r => r.ctrl === 'local') || null;
@@ -595,7 +600,7 @@
     for (const r of S.racers) if (order.indexOf(r) < 0) { order.push(r); rp.push(0); total.push(r.total | 0); }
     M.lastEnd = {
       round: M.round, rounds: M.rounds, mode: S.gameMode, last: M.round >= M.rounds, spectator: M.spectating,
-      ranking: order.map((r, i) => ({ pid: r.pid, nick: r.name, char: r.id, skin: r.skin, bot: !!r.nbot, me: r === S.player, rank: i + 1,
+      ranking: order.map((r, i) => ({ pid: r.pid, nick: r.name, char: r.id, skin: r.skin, hat: r.hat || 'none', bot: !!r.nbot, me: r === S.player, rank: i + 1,
         rp: rp[i], total: total[i], finished: !!r.finished, place: r.place | 0, ftime: r.ftime || 0, coins: r.coins | 0, kills: r.kills | 0,
         deaths: r.deaths | 0, off: !!r.off, out: !!r.elim }))
     };
@@ -608,7 +613,7 @@
     const ids = Object.keys(M.tot);
     const lastRk = {}; (M.lastEnd ? M.lastEnd.ranking : []).forEach((e, i) => { lastRk[e.pid] = i; });
     ids.sort((a, b) => (M.tot[b] - M.tot[a]) || ((lastRk[a] != null ? lastRk[a] : 99) - (lastRk[b] != null ? lastRk[b] : 99)));
-    return ids.slice(0, 30).map(id => { const i = M.info[id] || {}; return { r: id, t: M.tot[id] | 0, n: i.nick || id, c: i.char || 'TAFTAF', s: i.skin || 'klasik', b: i.bot ? 1 : 0 }; });
+    return ids.slice(0, 30).map(id => { const i = M.info[id] || {}; return { r: id, t: M.tot[id] | 0, n: i.nick || id, c: i.char || 'TAFTAF', s: i.skin || 'klasik', h: i.hat || 'none', b: i.bot ? 1 : 0 }; });
   }
   function onFinal(d) {
     if (!M.on || d.mid !== M.mid || M.phase === 'final') return;
@@ -617,7 +622,7 @@
     for (const e of Array.isArray(d.st) ? d.st.slice(0, 30) : []) {
       if (!isObj(e) || !tok(e.r)) continue;
       M.tot[e.r] = int(e.t);
-      st.push({ pid: e.r, total: int(e.t), nick: cleanNick(e.n) || e.r, char: validChar(e.c), skin: validCos('skins', e.s, 'klasik'), bot: !!e.b, me: e.r === myPid() });
+      st.push({ pid: e.r, total: int(e.t), nick: cleanNick(e.n) || e.r, char: validChar(e.c), skin: validCos('skins', e.s, 'klasik'), hat: validCos('hats', e.h, 'none'), bot: !!e.b, me: e.r === myPid() });
     }
     for (const r of S.racers) if (M.tot[r.pid] != null) r.total = M.tot[r.pid];
     M.final = { standings: st, rounds: M.rounds, champion: st.length && st[0].me ? true : false };
@@ -652,12 +657,14 @@
   }
   function humans() { return FM.net.players().filter(p => !p.off && (p.alive || p.me)); }
   function randomCos() {
-    const sk = FM.COSMETICS.skins, tr = FM.COSMETICS.trails, pl = FM.COSMETICS.plates, R = Math.random;
+    const CO = FM.COSMETICS, sk = CO.skins, tr = CO.trails, pl = CO.plates, R = Math.random;
+    // yeni türler (şapka, zafer, ölüm efekti): katalog varsa arada bir rastgele, yoksa 'none'
+    const pick = (L, pNone) => (Array.isArray(L) && L.length > 1 && R() >= pNone) ? L[1 + Math.floor(R() * (L.length - 1))].id : 'none';
     return { skin: R() < .7 ? 'klasik' : sk[1 + Math.floor(R() * (sk.length - 1))].id, trail: tr[1 + Math.floor(R() * (tr.length - 1))].id,
-      plate: R() < .6 ? 'basic' : pl[Math.floor(R() * pl.length)].id };
+      plate: R() < .6 ? 'basic' : pl[Math.floor(R() * pl.length)].id, hat: pick(CO.hats, .5), win: pick(CO.wins, .4), death: pick(CO.deaths, .6) };
   }
   function buildRound(o) {
-    const roster = o.players.slice(0, MAXR).map(p => ({ pid: p.pid, nick: p.nick, char: p.char, skin: p.skin, trail: p.trail, plate: p.plate }));
+    const roster = o.players.slice(0, MAXR).map(p => ({ pid: p.pid, nick: p.nick, char: p.char, skin: p.skin, trail: p.trail, plate: p.plate, hat: p.hat, win: p.win, death: p.death }));
     const nb = o.cfg.bots ? clamp(o.cfg.fill - roster.length, 0, MAXR - roster.length) : 0;
     const prev = Array.isArray(o.prevBots) ? o.prevBots : [], bots = [], used = new Set(roster.map(p => p.char));
     for (let i = 0; i < nb; i++) {
@@ -669,7 +676,7 @@
         const ch = free.length ? free[(Math.random() * free.length) | 0] : FM.ORDER[(Math.random() * FM.ORDER.length) | 0];
         b = Object.assign({ id: 'b' + k, char: ch }, randomCos());
       }
-      used.add(b.char); bots.push({ id: b.id, char: b.char, skin: b.skin, trail: b.trail, plate: b.plate });
+      used.add(b.char); bots.push({ id: b.id, char: b.char, skin: b.skin, trail: b.trail, plate: b.plate, hat: b.hat, win: b.win, death: b.death });
     }
     return { v: NGV, mid: o.mid, seed: (Math.random() * 2147483647) | 0, theme: o.seq[o.round - 1] | 0, seq: o.seq, mode: o.cfg.mode,
       round: o.round, rounds: o.cfg.rounds, an: o.cfg.autoNext, bf: o.cfg.bots ? o.cfg.fill : 0, roster, bots,

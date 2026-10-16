@@ -272,6 +272,9 @@ async function lobbyFlow(all) {
   Am.net.joinRoom(code); Bm.net.joinRoom(code);
   await waitFor(() => [Am, Bm].every(g => g.net.inRoom()) && H.net.players().length === 3, 20000, 'üyeler katıldı');
 
+  // yeni kozmetik türleri (şapka / zafer kutlaması / ölüm efekti) ağdan taşınır
+  Am.net.setProfile({ hat: 'parti', win: 'konfeti', death: 'hayalet' });
+  await waitFor(() => { const p = H.net.players().find(q => q.pid === Am.net.pid()); return p && p.hat === 'parti' && p.win === 'konfeti' && p.death === 'hayalet'; }, 5000, 'kozmetik lobide');
   await step('geri sayım + iptaller', async () => {
     H.net.setReady(true); Am.net.setReady(true);
     await sleep(1500);
@@ -301,6 +304,9 @@ async function lobbyFlow(all) {
     await waitFor(() => [H, Am, Bm].every(g => g.count('mp:start') >= 1), 12000, 'sayım sonunda yarış');
     const dt = (Date.now() - t0) / 1000;
     const seqB = cds(Bm).map(c => c.left === null ? 'x(' + c.reason + ')' : c.left).join(',');
+    const ra = H.ng.racer(Am.net.pid()), rb = Bm.ng.racer(Am.net.pid());
+    if (ra && rb && ra.hat === 'parti' && ra.win === 'konfeti' && ra.death === 'hayalet' && rb.hat === 'parti') pass('şapka/zafer/ölüm kozmetiği lobi listesine ve diğer telefonlardaki yarışçıya taşındı (r.hat/r.win/r.death)');
+    else fail('kozmetik: ' + JSON.stringify(ra && { hat: ra.hat, win: ra.win, death: ra.death }));
     if (dt > 4.3 && dt < 7.5 && /^5,4,3,2,1,x\(start\)$/.test(seqB)) pass(`geri sayım bitti → yarış kendiliğinden başladı (${dt.toFixed(1)} sn), üyedeki sayım: ${seqB}`);
     else fail(`sayım/başlama: ${dt.toFixed(1)} sn, üye sayımı ${seqB}`);
   });
@@ -308,6 +314,23 @@ async function lobbyFlow(all) {
   let B2 = null;
   await step('yarış ortasında yenileme', async () => {
     await waitFor(() => Bm.FM.S.mode === 'race' && Bm.FM.S.raceT > 9, 30000, 'yarış ilerledi');
+    // yönlü atış ağda (TUR5 §2.3): üye testereyi GERİYE atar → ev sahibinin dünyasında aynı kimlikli testere geriye gider, p.ax/p.ay aynı
+    {
+      const PA = Am.FM.S.player; let got = null, sent = null;
+      const hEv = d => { if (d.net && d.r && d.r.pid === Am.net.pid() && d.item === 'saw') got = { ax: d.p.ax, ay: d.p.ay, vx: d.p.vx }; };
+      H.FM.on('item:use', hEv);
+      if (PA && !PA.dead && !PA.finished && !PA.out) {
+        PA.item = 'saw'; Am.FM.game.useItem(PA, -1, 0);
+        const e = Am.FM.S.ents.find(q => q.type === 'saw' && q.o === PA); sent = e ? { nid: e.nid, vx: Math.round(e.vx) } : null;
+      }
+      if (sent) {
+        await waitFor(() => got, 3000, 'yönlü testere ev sahibinde');
+        const he = H.FM.S.ents.find(q => q.nid === sent.nid);
+        if (got.ax === -1 && got.ay === 0 && got.vx < 0 && (!he || he.vx < 0)) pass(`yönlü atış ağdan geçti: geriye atılan testere (ax -1, ay 0, vx ${got.vx}) ev sahibinde de geriye`);
+        else fail('yönlü atış: gönderilen ' + JSON.stringify(sent) + ', ev sahibi ' + JSON.stringify(got));
+      } else console.log('    (yönlü atış denemesi atlandı: oyuncu ölü/bitirmiş)');
+      H.FM.off('item:use', hEv);
+    }
     const xB = Math.round(Bm.FM.S.player.x), pidB = Bm.net.pid(), mid = Bm.ng.state().mid;
     refresh(Bm);
     await waitFor(() => { const r = H.ng.racer(pidB); return r && r.off; }, 9000, 'ev sahibinde "bağlantı koptu"');
@@ -339,6 +362,8 @@ async function lobbyFlow(all) {
   await step('maç sonu → herkes lobiye', async () => {
     await waitFor(() => M3.every(g => g.count('mp:final') >= 1), 150000, 'final');
     await sleep(300);
+    const fs = H.last('mp:final').d.standings.find(x => x.pid === Am.net.pid());
+    if (!fs || fs.hat !== 'parti') fail('final sıralamasında şapka yok: ' + JSON.stringify(fs));
     const al = M3.map(g => g.ng.autoLeft());
     if (al.every(v => v != null && v >= 8 && v <= 10)) pass('final: lobiye dönüşe kalan süre herkeste ' + al.join('/')); else fail('final autoLeft: ' + JSON.stringify(al));
     const tF = Date.now();

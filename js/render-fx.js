@@ -409,9 +409,10 @@
   }
 
   const FLAME_STAGES = [['#fffbe6', '#ffe14d', '#ffa51f'], ['#ffe98a', '#ff9a1f', '#ff4d1a'], ['#ffad5c', '#e8401c', '#a3200f']];
-  function flameSprite(st) {
-    return sp('flame:' + st, 26, 36, 13, 22, g => {
-      const c = FLAME_STAGES[st];
+  const BLUE_STAGES = [['#f0fcff', '#9fe6ff', '#4fb3ff'], ['#c8f4ff', '#5ec8ff', '#2a7fe8'], ['#8fd0ff', '#2f6fd8', '#1a3aa8']];   // mavi alev (Mağaza 2.0 izi)
+  function flameSprite(st, blue) {
+    return sp('flame:' + st + (blue ? 'b' : ''), 26, 36, 13, 22, g => {
+      const c = (blue ? BLUE_STAGES : FLAME_STAGES)[st];
       const tear = (s, dy) => {
         g.beginPath();
         g.moveTo(0, -18 * s + dy);
@@ -455,6 +456,37 @@
 
   /* ateş topu (patlama) renk evresi: sıcak → turuncu → is → duman */
   const FB_COLS = ['#fff3b8', '#ffd45a', '#ffa83a', '#ff7426', '#e04a1e', '#8c3f2e', '#5a4446', '#3e3842'];
+  /* ---- Mağaza 2.0 parçacık türleri: bubble (baloncuk), pixel (retro kare), coin (altın para) ---- */
+  function bubbleSprite(hex) {
+    return sp('bubble:' + hex, 28, 28, 14, 14, g => {
+      const r = 11.5;
+      const gr = g.createRadialGradient(-3, -3.5, 1, 0, 0, r);
+      gr.addColorStop(0, 'rgba(255,255,255,0.05)'); gr.addColorStop(.7, rgba(hex, .14)); gr.addColorStop(.93, rgba(hex, .45)); gr.addColorStop(1, rgba(mix(hex, '#ffffff', .5), .85));
+      g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fillStyle = gr; g.fill();
+      g.lineWidth = 1.4; g.strokeStyle = rgba(mix(hex, INK, .45), .9); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.ellipse(-4, -4.6, 3, 1.6, -.7, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(4.6, 3.6, 1.2, .8, .5, 0, TAU); g.fill();
+    });
+  }
+  function pixelSprite(hex) {
+    return sp('pixel:' + hex, 16, 16, 8, 8, g => {
+      g.fillStyle = mix(hex, INK, .7); g.fillRect(-8, -8, 16, 16);
+      g.fillStyle = hex; g.fillRect(-6, -6, 12, 12);
+      g.fillStyle = mix(hex, '#ffffff', .55); g.fillRect(-6, -6, 12, 3); g.fillRect(-6, -6, 3, 12);
+      g.fillStyle = mix(hex, INK, .35); g.fillRect(-6, 3, 12, 3); g.fillRect(3, -6, 3, 12);
+    });
+  }
+  function coinSprite() {
+    return sp('coin:tr', 24, 24, 12, 12, g => {
+      let ok = false;
+      try { if (typeof R.coinIcon === 'function') { const c = R.coinIcon(48); if (c && c.width) { g.drawImage(c, -11, -11, 22, 22); ok = true; } } } catch (e) { ok = false; }
+      if (ok) return;
+      g.beginPath(); g.arc(0, 0, 10, 0, TAU); g.lineWidth = 2.4; g.strokeStyle = '#6b3a00'; g.stroke();
+      const gr = g.createRadialGradient(-3, -4, 1, 0, 0, 10); gr.addColorStop(0, '#fff6c4'); gr.addColorStop(.6, '#ffd23f'); gr.addColorStop(1, '#d08a10');
+      g.fillStyle = gr; g.fill();
+      g.beginPath(); g.arc(0, 0, 6.2, 0, TAU); g.lineWidth = 1.2; g.strokeStyle = 'rgba(120,70,0,.6)'; g.stroke();
+    });
+  }
 
   /* =====================================================================
      PARÇACIK GÜNCELLEME
@@ -585,7 +617,27 @@
         const st = k > .62 ? 0 : k > .3 ? 1 : 2;
         const sc = s / 9 * (.45 + .55 * k);
         ctx.globalAlpha = ca * Math.min(1, k * 4);
-        spr(ctx, flameSprite(st), p.x, p.y, Math.sin(age * 18 + p._ph) * .12, sc, sc * (1 + .15 * Math.sin(age * 25 + p._ph)));
+        spr(ctx, flameSprite(st, !!p.blue), p.x, p.y, Math.sin(age * 18 + p._ph) * .12, sc, sc * (1 + .15 * Math.sin(age * 25 + p._ph)));
+        break;
+      }
+      case 'bubble': {         // baloncuk: hafif büyür, sonda "patlar" (küçülüp kaybolur)
+        const pop = k < .12 ? k / .12 : 1;
+        const sc = s / 11.5 * (.7 + .3 * (1 - k)) * (1 + (1 - pop) * .5);
+        ctx.globalAlpha = ca * pop;
+        spr(ctx, bubbleSprite(hex), p.x + Math.sin(age * 3 + p._ph) * 3, p.y, 0, sc);
+        break;
+      }
+      case 'pixel': {          // retro kare: dönmez, yalnızca küçülür
+        const sc = s / 6 * (.45 + .55 * Math.min(1, k * 2));
+        ctx.globalAlpha = ca * Math.min(1, k * 4);
+        spr(ctx, pixelSprite(hex), p.x, p.y, 0, sc);
+        break;
+      }
+      case 'coin': {           // altın para: yatayda döner gibi genişlik salınır
+        const spin = Math.cos(age * 11 + p._ph);
+        const sc = s / 10;
+        ctx.globalAlpha = ca * Math.min(1, k * 4);
+        spr(ctx, coinSprite(), p.x, p.y, num(p.rot, 0) * .3, sc * Math.max(.15, Math.abs(spin)), sc);
         break;
       }
       case 'twinkle': {
@@ -1811,7 +1863,8 @@
     snow: ['rgba(255,255,255,.95)', 'rgba(225,240,255,.9)'],
     castle: ['rgba(214,200,190,.8)', 'rgba(180,165,160,.8)']
   };
-  const TRAIL_RATE = { dust: 20, fire: 46, rainbow: 7, stars: 18, spades: 9, hearts: 9 };
+  const TRAIL_RATE = { dust: 20, fire: 46, rainbow: 7, stars: 18, spades: 9, hearts: 9,
+    yaprak: 11, kar: 14, baloncuk: 9, nota: 8, simsek: 18, piksel: 13, mavialev: 46, galaksi: 15, altin: 9 };   // Mağaza 2.0 izleri
   /* Bot izleri sakin tutulur (sahne gürültüsü): oran ×.45, boyut ×.7, alfa ×.6; yarışın ilk 1.5 sn'sinde kapalı.
      Aynı anda en çok 2 gösterişli iz: oyuncu + oyuncuya en yakın bot ('dust' gösterişli sayılmaz). */
   const BOT_TRAIL = { rate: .45, s: .7, a: .6, delay: 1.5 };
@@ -1878,6 +1931,57 @@
       case 'hearts': {
         const c = cols ? pick(cols) : '#ff5a7a';
         P({ k: 'heart', x: tx + (rnd() - .5) * 8, y: ty + (rnd() - .5) * 18, vx: -face * (25 + rnd() * 35), vy: -(25 + rnd() * 30), life: .75 + rnd() * .3, c, s: 5 + rnd() * 2.4, g: -70, drag: 1.5 });
+        break;
+      }
+      // ---- Mağaza 2.0 izleri (FM.COSMETICS.trails k alanı) ----
+      case 'yaprak': {         // sonbahar yaprakları: salınarak düşer
+        const c = cols ? pick(cols) : '#9ad44a';
+        P({ k: 'leaf', x: tx + (rnd() - .5) * 10, y: ty + (rnd() - .5) * 20, vx: -face * (30 + rnd() * 40), vy: -(10 + rnd() * 40), life: .8 + rnd() * .4, c, s: 5 + rnd() * 2.5, g: 90, drag: 1.8, rot: rnd() * 6, vr: (rnd() - .5) * 6 });
+        break;
+      }
+      case 'kar': {            // kar taneleri: yavaş süzülür
+        const c = cols ? pick(cols) : '#ffffff';
+        P({ k: 'ice', x: tx + (rnd() - .5) * 12, y: ty + (rnd() - .5) * 22, vx: -face * (20 + rnd() * 30), vy: -(5 + rnd() * 30), life: .7 + rnd() * .4, c, s: 3.6 + rnd() * 2.4, g: 50, drag: 1.6, rot: rnd() * 6, vr: (rnd() - .5) * 4 });
+        if (rnd() < .3) P({ k: 'twinkle', x: tx + (rnd() - .5) * 16, y: ty + (rnd() - .5) * 24, vx: -face * 15, vy: -10, life: .3 + rnd() * .2, c: '#e6f8ff', s: 9 + rnd() * 5, add: true });
+        break;
+      }
+      case 'baloncuk': {       // sabun köpüğü: yukarı süzülür, patlar
+        const c = cols ? pick(cols) : '#bff4ff';
+        P({ k: 'bubble', x: tx + (rnd() - .5) * 10, y: ty + (rnd() - .5) * 20, vx: -face * (15 + rnd() * 25), vy: -(20 + rnd() * 35), life: .7 + rnd() * .5, c, s: 5 + rnd() * 5, g: -40, drag: 1.4 });
+        break;
+      }
+      case 'nota': {           // müzik notaları
+        const c = cols ? pick(cols) : '#ff6ec7';
+        P({ k: 'note', x: tx + (rnd() - .5) * 8, y: ty + (rnd() - .5) * 18, vx: -face * (20 + rnd() * 30), vy: -(30 + rnd() * 30), life: .8 + rnd() * .3, c, s: 5 + rnd() * 2.2, g: -60, drag: 1.4 });
+        break;
+      }
+      case 'simsek': {         // elektrik: kısa parlak kıvılcımlar + ara sıra ışıma
+        const c = cols ? pick(cols) : '#7df9ff';
+        const a = PI + (rnd() - .5) * 1.4;
+        P({ k: 'spark', x: tx + (rnd() - .5) * 8, y: ty + (rnd() - .5) * 18, vx: Math.cos(a) * face * (120 + rnd() * 160), vy: Math.sin(a) * (120 + rnd() * 160), life: .14 + rnd() * .14, c, s: 2.2, g: 0, add: true });
+        if (rnd() < .2) P({ k: 'glow', x: tx, y: ty, vx: -face * 30, vy: 0, life: .18, c: '#7df9ff', s: 18 + rnd() * 8, add: true });
+        break;
+      }
+      case 'piksel': {         // retro kare bloklar
+        const c = cols ? pick(cols) : '#3ddc84';
+        P({ k: 'pixel', x: tx + (rnd() - .5) * 8, y: ty + (rnd() - .5) * 20, vx: -face * (30 + rnd() * 40), vy: -(20 + rnd() * 50), life: .5 + rnd() * .3, c, s: 4 + rnd() * 3, g: 160, drag: 1.2 });
+        break;
+      }
+      case 'mavialev': {       // mavi alev (ateşle aynı ritim, mavi sprite)
+        P({ k: 'flame', blue: true, x: tx + (rnd() - .5) * 8, y: ty + (rnd() - .5) * 16, vx: -face * (40 + rnd() * 60) + num(r.vx, 0) * .12, vy: -(30 + rnd() * 60), life: .26 + rnd() * .2, c: '#ffffff', s: 5.5 + rnd() * 4, g: -170, drag: 2.6 });
+        if (rnd() < .18) P({ k: 'spark', x: tx, y: ty + (rnd() - .5) * 12, vx: -face * (60 + rnd() * 80), vy: -(60 + rnd() * 120), life: .3 + rnd() * .25, c: pick(['#8fe0ff', '#ffffff']), s: 1.6, g: 120, add: true });
+        if (rnd() < .16) P({ k: 'glow', x: tx, y: ty, vx: -face * 40, vy: -30, life: .22, c: '#4fb3ff', s: 16 + rnd() * 8, add: true });
+        break;
+      }
+      case 'galaksi': {        // yıldız tozu + mor ışıma
+        const c = cols ? pick(cols) : '#c084fc';
+        P({ k: rnd() < .6 ? 'star' : 'twinkle', x: tx + (rnd() - .5) * 12, y: ty + (rnd() - .5) * 22, vx: -face * (20 + rnd() * 30), vy: (rnd() - .5) * 40, life: .5 + rnd() * .4, c, s: rnd() < .6 ? 3 + rnd() * 2 : 9 + rnd() * 6, g: 20, drag: 1.5, rot: rnd() * 6, vr: (rnd() - .5) * 6, add: rnd() < .5 });
+        if (rnd() < .25) P({ k: 'glow', x: tx, y: ty, vx: -face * 30, vy: 0, life: .3, c: '#9a7bff', s: 22 + rnd() * 10, add: true });
+        break;
+      }
+      case 'altin': {          // altın yağmuru: paralar zıplayarak düşer
+        P({ k: 'coin', x: tx + (rnd() - .5) * 10, y: ty + (rnd() - .5) * 16, vx: -face * (40 + rnd() * 50), vy: -(80 + rnd() * 120), life: .7 + rnd() * .3, c: '#ffd23f', s: 6 + rnd() * 3, g: 520, drag: .6, rot: rnd() * 6, vr: (rnd() - .5) * 8 });
+        if (rnd() < .3) P({ k: 'twinkle', x: tx + (rnd() - .5) * 14, y: ty + (rnd() - .5) * 20, vx: -face * 20, vy: -10, life: .25 + rnd() * .2, c: '#fff6b0', s: 9 + rnd() * 5, add: true });
         break;
       }
     }
@@ -2939,6 +3043,139 @@
   }
   function updGhosts(dt) { for (let i = ghosts.length - 1; i >= 0; i--) { ghosts[i].t += dt; if (ghosts[i].t >= ghosts[i].max) ghosts.splice(i, 1); } }
 
+  /* =====================================================================
+     MAĞAZA 2.0 — ZAFER KUTLAMALARI (FM.COSMETICS.wins fx) ve ÖLÜM EFEKTLERİ (FM.COSMETICS.deaths fx)
+     Kutlama: 'finish' olayında yarışçının (r.win; yerel oyuncuda kuşanılan) kutlaması ~6 sn boyunca her ~0.75 sn tekrarlar.
+     Ölüm: 'death' olayında r.death'e göre ek parçacıklar (klasik puf/patlama game.js'te zaten var; 'none' ek yapmaz).
+     ===================================================================== */
+  const WINS = [];
+  function cosOf(type, id) { const L = FM.COSMETICS && FM.COSMETICS[type]; if (L) for (const it of L) if (it.id === id) return it; return null; }
+  function localCos(r, type) {
+    if (!r) return null;
+    const key = type === 'wins' ? 'win' : 'death';
+    let id = r[key];
+    if (id == null && r.ctrl === 'local' && !r.ghost && FM.meta && typeof FM.meta.equipped === 'function') { try { id = FM.meta.equipped(type); } catch (e) { id = null; } }
+    const it = id && id !== 'none' ? cosOf(type, id) : null;
+    return it && it.fx && it.fx.k ? it : null;
+  }
+  function headOf(r) {
+    let h = null;
+    try { if (typeof R.charHeadPos === 'function') h = R.charHeadPos(r); } catch (e) { h = null; }
+    return h && isFinite(h.x) && isFinite(h.y) ? h : { x: rcx(r), y: num(r.y, 0) + 6 };
+  }
+  function winBurst(r, fx, first) {
+    const cols = fx.cols && fx.cols.length ? fx.cols : ['#ffffff'];
+    const cx = rcx(r), fy = num(r.y, 0) + num(r.h, 42), hd = headOf(r), hy = hd.y;
+    if (!inView(cx, hy, 220)) return;
+    const k = fx.k;
+    if (first && fx.ring && FM.fx && FM.fx.ring) FM.fx.ring(cx, fy - 22, 34, fx.ring, .5, 6);
+    switch (k) {
+      case 'conf':
+        for (let i = 0; i < 22; i++) { const a = -PI / 2 + (rnd() - .5) * 1.8, v = 240 + rnd() * 260; P({ k: 'conf', x: cx, y: hy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1.4 + rnd() * .8, c: cols[i % cols.length], s: 5 + rnd() * 4, g: 380, rot: rnd() * 6, vr: (rnd() - .5) * 16, drag: 1.2 }); }
+        break;
+      case 'heart':
+        for (let i = 0; i < 9; i++) P({ k: 'heart', x: cx + (rnd() - .5) * 60, y: hy + 10 + rnd() * 30, vx: (rnd() - .5) * 50, vy: -(50 + rnd() * 70), life: 1.1 + rnd() * .5, c: cols[i % cols.length], s: 5 + rnd() * 3.5, g: -40, drag: 1.4 });
+        break;
+      case 'firework': {
+        const bx = cx + (rnd() - .5) * 120, by = hy - 70 - rnd() * 70, col = pick(cols);
+        for (let i = 0; i < 26; i++) { const a = rnd() * TAU, v = 110 + rnd() * 170; P({ k: i % 3 ? 'spark' : 'star', x: bx, y: by, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5 + rnd() * .5, c: i % 4 === 3 ? '#ffffff' : col, s: i % 3 ? 2.2 : 4, g: 160, drag: 1.6, rot: a, add: i % 3 !== 0 }); }
+        P({ k: 'glow', x: bx, y: by, vx: 0, vy: 0, life: .35, c: col, s: 90, add: true });
+        if (FM.fx && FM.fx.ring) FM.fx.ring(bx, by, 14, col, .4, 4);
+        break;
+      }
+      case 'twinkle':
+        for (let i = 0; i < 10; i++) P({ k: 'twinkle', x: cx + (rnd() - .5) * 70, y: fy - rnd() * 70, vx: (rnd() - .5) * 20, vy: -20 - rnd() * 30, life: .4 + rnd() * .4, c: cols[i % cols.length], s: 10 + rnd() * 10, add: true, rot: rnd() });
+        break;
+      case 'star':
+        for (let i = 0; i < 18; i++) { const a = rnd() * TAU, v = 150 + rnd() * 220; P({ k: 'star', x: cx, y: fy - 26, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, life: .7 + rnd() * .5, c: cols[i % cols.length], s: 3.5 + rnd() * 3, g: 320, drag: 1.4, rot: a, vr: (rnd() - .5) * 8 }); }
+        P({ k: 'glow', x: cx, y: fy - 26, vx: 0, vy: 0, life: .3, c: cols[0], s: 80, add: true });
+        break;
+      case 'note':
+        for (let i = 0; i < 6; i++) P({ k: 'note', x: cx + (rnd() - .5) * 50, y: hy + rnd() * 20, vx: (rnd() - .5) * 40, vy: -(50 + rnd() * 60), life: 1 + rnd() * .5, c: cols[i % cols.length], s: 5 + rnd() * 2.5, g: -50, drag: 1.3 });
+        break;
+      case 'flame':
+        for (let i = 0; i < 14; i++) { const a = i / 14 * TAU + rnd() * .3, rr = 30 + rnd() * 8; P({ k: 'flame', x: cx + Math.cos(a) * rr, y: fy - 4 + Math.sin(a) * rr * .3, vx: Math.cos(a) * 20, vy: -(70 + rnd() * 90), life: .5 + rnd() * .35, c: '#ffffff', s: 7 + rnd() * 5, g: -200, drag: 2.2 }); }
+        for (let i = 0; i < 6; i++) P({ k: 'spark', x: cx + (rnd() - .5) * 60, y: fy - 10, vx: (rnd() - .5) * 80, vy: -(120 + rnd() * 160), life: .4 + rnd() * .3, c: pick(cols), s: 1.8, g: 200, add: true });
+        break;
+      default:
+        for (let i = 0; i < 10; i++) P({ k: 'dot', x: cx + (rnd() - .5) * 40, y: hy, vx: (rnd() - .5) * 80, vy: -(60 + rnd() * 80), life: .6, c: pick(cols), s: 4, g: 200 });
+    }
+  }
+  function updWins(dt) {
+    for (let i = WINS.length - 1; i >= 0; i--) {
+      const w = WINS[i], r = w.r;
+      w.t += dt; w.next -= dt;
+      if (w.t > 6.5 || !r || !r.finished || r.dead > 0 || !(S.mode === 'race' || S.mode === 'end' || S.mode === 'podium')) { WINS.splice(i, 1); continue; }
+      if (w.next <= 0 && budget()) { w.next = w.k === 'firework' ? .55 : w.k === 'flame' ? .5 : .8; try { winBurst(r, w.fx, w.n === 0); } catch (e) { /* kutlama çizilemedi */ } w.n++; }
+    }
+  }
+  FM.on('finish', d => {
+    const r = d && d.r;
+    if (!r || S.mode === 'demo') return;
+    const it = localCos(r, 'wins');
+    if (!it) return;
+    for (const w of WINS) if (w.r === r) return;
+    if (WINS.length > 10) WINS.shift();
+    WINS.push({ r, fx: it.fx, k: it.fx.k, t: 0, next: 0.15, n: 0 });
+  });
+  function deathFx(r, fx) {
+    const cols = fx.cols && fx.cols.length ? fx.cols : ['#ffffff'];
+    const x = rcx(r), y = rcy(r), fy = num(r.y, 0) + num(r.h, 42);
+    if (!inView(x, y, 240)) return;
+    switch (fx.k) {
+      case 'puff':
+        for (let i = 0; i < 10; i++) P({ k: 'puff', x: x + (rnd() - .5) * 24, y: y + (rnd() - .5) * 20, vx: (rnd() - .5) * 220, vy: -30 - rnd() * 110, life: .8 + rnd() * .5, c: rgba(cols[i % cols.length], .7), s: 16 + rnd() * 12, g: -40, drag: 2.4, rot: rnd() * 6 });
+        break;
+      case 'bubble':
+        for (let i = 0; i < 14; i++) P({ k: 'bubble', x: x + (rnd() - .5) * 30, y: y + (rnd() - .5) * 30, vx: (rnd() - .5) * 70, vy: -(30 + rnd() * 80), life: .8 + rnd() * .7, c: cols[i % cols.length], s: 5 + rnd() * 7, g: -60, drag: 1.5 });
+        break;
+      case 'star':
+        for (let i = 0; i < 16; i++) { const a = rnd() * TAU, v = 120 + rnd() * 220; P({ k: i % 3 ? 'star' : 'twinkle', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: .6 + rnd() * .5, c: cols[i % cols.length], s: i % 3 ? 3.5 + rnd() * 3 : 12 + rnd() * 8, g: 260, drag: 1.5, rot: a, add: i % 3 === 0 }); }
+        P({ k: 'glow', x, y, vx: 0, vy: 0, life: .35, c: cols[0], s: 90, add: true });
+        break;
+      case 'ghost':
+        ghosts.push({ x, y: num(r.y, y) + num(r.h, 42) - 18, id: r.id, skin: r.skin, t: 0, max: 2.1, ph: rnd() * TAU });
+        if (ghosts.length > 6) ghosts.shift();
+        for (let i = 0; i < 6; i++) P({ k: 'puff', x: x + (rnd() - .5) * 20, y: y + (rnd() - .5) * 16, vx: (rnd() - .5) * 60, vy: -40 - rnd() * 50, life: .6 + rnd() * .3, c: 'rgba(232,224,255,.6)', s: 12 + rnd() * 8, g: -30, drag: 2 });
+        break;
+      case 'pixel': {
+        const ch = FM.CH[r.id], pc = ch ? [ch.col, ch.col2, ch.acc].filter(Boolean).concat(cols) : cols;
+        for (let i = 0; i < 24; i++) P({ k: 'pixel', x: x + (rnd() - .5) * 28, y: y + (rnd() - .5) * 40, vx: (rnd() - .5) * 260, vy: -(60 + rnd() * 240), life: .7 + rnd() * .5, c: pc[i % pc.length], s: 5 + rnd() * 4, g: 520, drag: .8 });
+        break;
+      }
+      case 'conf':
+        for (let i = 0; i < 30; i++) { const a = rnd() * TAU, v = 160 + rnd() * 260; P({ k: 'conf', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, life: 1.2 + rnd() * .8, c: cols[i % cols.length], s: 5 + rnd() * 4, g: 380, rot: rnd() * 6, vr: (rnd() - .5) * 16, drag: 1.2 }); }
+        break;
+      case 'bolt': {
+        // gökten inen zikzak + beyaz flaş + kıvılcım
+        let px = x + (rnd() - .5) * 20, py = y - 190;
+        for (let i = 0; i < 9; i++) { const nx = x + (rnd() - .5) * 28, ny = py + 22; const dx = nx - px, dy = ny - py, L = Math.hypot(dx, dy) || 1; P({ k: 'spark', x: (px + nx) / 2, y: (py + ny) / 2, vx: dx / L * .01, vy: dy / L * .01, life: .16 + i * .012, c: i % 2 ? '#ffffff' : cols[0], s: 3.2, g: 0, add: true, rot: Math.atan2(dy, dx) }); px = nx; py = ny; }
+        P({ k: 'glow', x, y: y - 10, vx: 0, vy: 0, life: .3, c: cols[1] || '#7df9ff', s: 120, add: true });
+        for (let i = 0; i < 16; i++) { const a = rnd() * TAU, v = 160 + rnd() * 260; P({ k: 'spark', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, life: .3 + rnd() * .3, c: cols[i % cols.length], s: 2, g: 500, add: true }); }
+        if (FM.fx && FM.fx.flash) FM.fx.flash('#ffffff', .18);
+        break;
+      }
+      case 'vortex': {
+        // kara delik: dışarıdan merkeze emilen yıldızlar + mor ışıma + büzülen halka hissi
+        for (let i = 0; i < 24; i++) { const a = rnd() * TAU, d = 60 + rnd() * 60, life = .35 + rnd() * .3; P({ k: i % 2 ? 'star' : 'dot', x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, vx: -Math.cos(a) * d / life, vy: -Math.sin(a) * d / life, life, c: cols[1 + (i % 2)] || '#a855f7', s: 3 + rnd() * 2, g: 0, drag: 0, rot: a, vr: 10, add: true }); }
+        P({ k: 'glow', x, y, vx: 0, vy: 0, life: .6, c: cols[0] || '#2a0e5a', s: 110 });
+        P({ k: 'glow', x, y, vx: 0, vy: 0, life: .5, c: cols[1] || '#a855f7', s: 60, add: true });
+        if (FM.fx && FM.fx.ring) FM.fx.ring(x, y, 70, cols[1] || '#a855f7', .45, 5);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  FM.on('death', d => {
+    const r = d && d.r;
+    if (!r || S.mode === 'demo') return;
+    const it = localCos(r, 'deaths');
+    if (!it) return;
+    try { deathFx(r, it.fx); } catch (e) { /* ölüm efekti çizilemedi */ }
+  });
+  FM.on('race:start', () => { WINS.length = 0; });
+
   /* ---------- Altın Avı: düşen altın saçılması (yerel olay + ağdan gelen dropCoins) ---------- */
   let coinL = null, coinN = 0;
   function scanDrops() {
@@ -3479,6 +3716,7 @@
     updRings(dt);
     updSwirls(dt);
     updGhosts(dt);
+    updWins(dt);
     updHits(dt);
     if (S.L) {
       updEnts(dt);

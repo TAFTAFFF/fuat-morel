@@ -75,16 +75,20 @@
     const m = FM.meta && FM.meta.mods ? FM.meta.mods(id) : null;
     return { abLv: (m && m.abLv) || 1, chargeMul: (m && m.chargeMul) || 1, startItem: (m && m.startItem) || 'speed' };
   }
+  /* Oyuncunun kuşandığı kozmetikler (Mağaza 2.0: skin, trail, plate, hat, win, death) — FM.meta.loadout; meta yoksa kayıttan */
   function cosmeticsFor(id) {
-    const sv = FM.save;
-    return { skin: (sv.equipped.skin && sv.equipped.skin[id]) || 'klasik', trail: sv.equipped.trail || 'dust', plate: sv.equipped.plate || 'basic' };
+    if (FM.meta && typeof FM.meta.loadout === 'function') { try { const lo = FM.meta.loadout(id); if (lo && lo.skin) return lo; } catch (e) { /* kayıttan devam */ } }
+    const sv = FM.save, eq = sv.equipped || {};
+    return { skin: (eq.skin && eq.skin[id]) || 'klasik', trail: eq.trail || 'dust', plate: eq.plate || 'basic', hat: eq.hat || 'none', win: eq.win || 'none', death: eq.death || 'none' };
   }
   function randomCosmetics(rnd) {
-    const sk = FM.COSMETICS.skins, tr = FM.COSMETICS.trails, pl = FM.COSMETICS.plates;
+    const C = FM.COSMETICS, sk = C.skins, tr = C.trails, pl = C.plates, ht = C.hats || [], wn = C.wins || [], dt = C.deaths || [];
+    const pick = (L, p, def) => (L.length > 1 && rnd() < p) ? L[1 + Math.floor(rnd() * (L.length - 1))].id : def;
     return {
       skin: rnd() < .7 ? 'klasik' : sk[1 + Math.floor(rnd() * (sk.length - 1))].id,
       trail: tr[1 + Math.floor(rnd() * (tr.length - 1))].id,
-      plate: rnd() < .6 ? 'basic' : pl[Math.floor(rnd() * pl.length)].id
+      plate: rnd() < .6 ? 'basic' : pl[Math.floor(rnd() * pl.length)].id,
+      hat: pick(ht, .45, 'none'), win: pick(wn, .6, 'none'), death: pick(dt, .5, 'none')
     };
   }
 
@@ -134,6 +138,8 @@
       r.abLv = pm.abLv; r.chargeMul = pm.chargeMul; r.startItem = pm.startItem;
       Object.assign(r, r === S.player ? cosmeticsFor(r.id) : randomCosmetics(Math.random));
     }
+    // yerel oyuncunun plakasında takma adı (kayıtta ayarlanmışsa) görünür; botlar karakter adıyla kalır
+    if (!opts.auto && sv.nickSet && typeof sv.nick === 'string' && sv.nick.trim()) S.player.name = S.player.nick = sv.nick.trim().slice(0, 14);
     nameDupes(S.racers);
     S.matchStats = { startedAt: Date.now() };
     game.startRound({ seed: opts.seed });
@@ -177,7 +183,7 @@
     const pure = S.gameMode === 'pure';
     S.racers.forEach((r, i) => {
       const keep = { id: r.id, idx: r.idx, bot: r.bot, total: r.total, abLv: r.abLv, chargeMul: r.chargeMul, startItem: r.startItem, skin: r.skin, trail: r.trail, plate: r.plate,
-        name: r.name, nick: r.nick, ctrl: r.ctrl, pid: r.pid };
+        hat: r.hat, win: r.win, death: r.death, name: r.name, nick: r.nick, ctrl: r.ctrl, pid: r.pid };
       Object.assign(r, mkRacer(r.id, r.idx, r.bot), keep);
       r.x = 80 + i * 4; r.y = S.L.startY - RH; r.safe = { x: r.x + r.w / 2, y: S.L.startY };
       r.item = pure ? null : (r.startItem || 'speed');

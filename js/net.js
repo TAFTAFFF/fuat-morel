@@ -2,8 +2,12 @@
    Herkese açık MQTT aracıları üzerinden (WebSocket, alt protokol 'mqtt', ikili çerçeve) kendi minimal MQTT 3.1.1 istemcimiz +
    oda protokolü: oda kodu, lobi (retain), katılma kabulü (en fazla 10), canlılık/ping, ev sahibi göçü, sürüm kontrolü,
    durum anlık görüntüsü akışı (~10 Hz) + alıcıda zaman damgalı ara değerleme tamponu, olay kanalı, ev sahibi kontrol mesajları, emoji.
+   TUR5: "odaya geri dön" kaydı (sayfa yenilenince / uygulama kapanıp açılınca 15 dk içinde aynı odaya, aynı kimlikle; yalnız ev sahibiyse
+   odayı geri alır), varlık (çevrimiçi listesi + profil kartları: _on/<pid> nabız, _pr/<pid> retain kart; oda bağlantısını paylaşır),
+   ?brokerUrl= (yerel test aracısı dev/broker.js), şapka/zafer/ölüm kozmetikleri.
    SADECE AĞ: oyun mantığına dokunmaz. Tüm API FM.net altında; bildirimler FM.emit('net:...') ile.
-   Hiçbir exception dışarı sızmaz (her giriş noktası try/catch). Oda işlemi yapılmadıkça hiçbir bağlantı/zamanlayıcı açılmaz. */
+   Hiçbir exception dışarı sızmaz (her giriş noktası try/catch). Oda işlemi yapılmadıkça oda bağlantısı açılmaz; varlık bağlantısı oyun
+   açılınca ('boot') başlar (presence(false) / ?pres=0 kapatır). Ağdan gelen her alan süzülür ('__proto__' gibi anahtarlar dahil). */
 'use strict';
 (function (FM) {
   if (!FM) return;
@@ -410,18 +414,27 @@
     const sv = FM.save || {}, P = R.prof || {};
     const c = isChar(P.char) ? P.char : (isChar(sv.selChar) ? sv.selChar : 'TAFTAF');
     const eq = isObj(sv.equipped) ? sv.equipped : {};
+    let lo = null; try { if (FM.meta && typeof FM.meta.loadout === 'function') lo = FM.meta.loadout(c); } catch (e) { lo = null; }   // kuşanılan kozmetikler (meta.js)
+    if (!isObj(lo)) lo = {};
     return {
       n: cleanNick(P.nick) || myNick(), c,
-      sk: tok(P.skin, '') || (isObj(eq.skin) && tok(eq.skin[c], '')) || 'klasik',
-      tr: tok(P.trail, '') || tok(eq.trail, '') || 'dust',
-      pl: tok(P.plate, '') || tok(eq.plate, '') || 'basic'
+      sk: tok(P.skin, '') || tok(lo.skin, '') || (isObj(eq.skin) && tok(eq.skin[c], '')) || 'klasik',
+      tr: tok(P.trail, '') || tok(lo.trail, '') || tok(eq.trail, '') || 'dust',
+      pl: tok(P.plate, '') || tok(lo.plate, '') || tok(eq.plate, '') || 'basic',
+      ht: cosId('hats', P.hat || lo.hat || eq.hat, 'none'), wn: cosId('wins', P.win || lo.win || eq.win, 'none'), dt: cosId('deaths', P.death || lo.death || eq.death, 'none')
     };
+  }
+  // kozmetik kimliği: katalog varsa (FM.COSMETICS[tür]) içinde olmalı; yoksa varsayılan
+  function cosId(type, id, def) {
+    const L = FM.COSMETICS && FM.COSMETICS[type];
+    return tok(id, null) && (!Array.isArray(L) || L.some(x => x && x.id === id)) ? id : def;
   }
   function sanitizeEntry(p) {
     if (!isObj(p) || !tok(p.id, null)) return null;
     return {
       id: p.id, n: cleanNick(p.n) || 'Oyuncu', c: isChar(p.c) ? p.c : 'TAFTAF',
       sk: tok(p.sk, 'klasik'), tr: tok(p.tr, 'dust'), pl: tok(p.pl, 'basic'),
+      ht: cosId('hats', p.ht, 'none'), wn: cosId('wins', p.wn, 'none'), dt: cosId('deaths', p.dt, 'none'),
       rd: p.rd ? 1 : 0, w: p.w ? 1 : 0, o: p.o ? 1 : 0, sn: tok(p.sn, '')
     };
   }
@@ -457,7 +470,7 @@
     return L.p.map((p, i) => {
       const inf = R.info[p.id];
       return {
-        pid: p.id, nick: p.n, char: p.c, skin: p.sk, trail: p.tr, plate: p.pl,
+        pid: p.id, nick: p.n, char: p.c, skin: p.sk, trail: p.tr, plate: p.pl, hat: p.ht || 'none', win: p.wn || 'none', death: p.dt || 'none',
         ready: !!p.rd, waiting: !!p.w, off: !!p.o, host: p.id === R.hostPid, me: p.id === me,
         alive: alive(p.id), ping: p.id === me ? (R.rttN ? Math.round(R.rtt) : null) : (inf && typeof inf.rtt === 'number' ? Math.round(inf.rtt) : null), idx: i
       };
@@ -471,7 +484,7 @@
   function emitPlayers(force) {
     if (R.phase !== 'in') return;
     const pl = playersList();
-    const sig = pl.map(p => [p.pid, p.nick, p.char, p.skin, p.ready, p.waiting, p.off, p.host, p.alive, p.ping == null ? '-' : Math.round(p.ping / 25)].join(',')).join(';');
+    const sig = pl.map(p => [p.pid, p.nick, p.char, p.skin, p.trail, p.plate, p.hat, p.win, p.death, p.ready, p.waiting, p.off, p.host, p.alive, p.ping == null ? '-' : Math.round(p.ping / 25)].join(',')).join(';');
     const t = now();
     if (!force && (sig === R.plSig || t - R.plT < 450)) return;
     R.plSig = sig; R.plT = t;
@@ -546,7 +559,7 @@
     if (R.phase === 'creating') {
       const me = myPid(), pr = myProfile();
       R.phase = 'in'; R.role = 'host'; R.everIn = true; R.hostPid = me; C.persistent = true; C.per = 6;
-      R.lob = { v: VER, h: me, e: 0, st: 'lobby', cfg: isObj(R.cfg0) ? R.cfg0 : {}, p: [{ id: me, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN }], x: [], ck: '', cl: null, ts: 0 };
+      R.lob = { v: VER, h: me, e: 0, st: 'lobby', cfg: isObj(R.cfg0) ? R.cfg0 : {}, p: [{ id: me, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, ht: pr.ht, wn: pr.wn, dt: pr.dt, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN }], x: [], ck: '', cl: null, ts: 0 };
       R.settleUntil = 0;
       publishLobby();
       statusChanged(); emitLobby(); rjWrite();
@@ -572,7 +585,7 @@
     R.joinLast = now();
     const pr = myProfile();
     // ck = gördüğümüz son kontrol mesajı: ev sahibi lobiye döndürdükten sonra yolda kalmış eski "hazır" bayrağı geri gelmesin
-    pub('join', { f: myPid(), sn: SN, v: VER, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, re: re ? 1 : 0, ck: R.lob ? R.lob.ck : '' });
+    pub('join', { f: myPid(), sn: SN, v: VER, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, ht: pr.ht, wn: pr.wn, dt: pr.dt, rd: R.ready ? 1 : 0, re: re ? 1 : 0, ck: R.lob ? R.lob.ck : '' });
   }
 
   /* ---------------- ev sahibi: lobi yayını ---------------- */
@@ -723,7 +736,7 @@
     if (L.x.indexOf(f) >= 0) { hostCtlRaw('rej', { to: f, sn: jsn, why: 'kicked' }); return; }
     seen(f);
     const inf = R.info[f] || (R.info[f] = {}); inf.sn = tok(m.sn, inf.sn);
-    const e = sanitizeEntry({ id: f, n: m.n, c: m.c, sk: m.sk, tr: m.tr, pl: m.pl, rd: m.rd, sn: m.sn });
+    const e = sanitizeEntry({ id: f, n: m.n, c: m.c, sk: m.sk, tr: m.tr, pl: m.pl, ht: m.ht, wn: m.wn, dt: m.dt, rd: m.rd, sn: m.sn });
     if (!e) return;
     // maç sonu lobiye dönüşü (ctl 'lobby') henüz görmemiş üyenin hazır bayrağı eskidir: sıfır say (geri sayım bayat bayrakla başlamasın)
     if (L.st === 'lobby' && L.cl && L.cl.t === 'lobby' && typeof m.ck === 'string' && m.ck !== L.ck) e.rd = 0;
@@ -970,7 +983,7 @@
     L.h = me; L.e = (L.e | 0) + 1;
     if (L.st === 'lobby') L.p = L.p.filter(p => p.id !== old); else for (const p of L.p) if (p.id === old) p.o = 1;
     const mine = L.p.find(p => p.id === me);
-    if (mine) { mine.o = 0; mine.sn = SN; } else { const pr = myProfile(); L.p.push({ id: me, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN }); }
+    if (mine) { mine.o = 0; mine.sn = SN; } else { const pr = myProfile(); L.p.push({ id: me, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, ht: pr.ht, wn: pr.wn, dt: pr.dt, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN }); }
     R.role = 'host'; R.lob = L; R.hostPid = me; R.provT = 0; R.kSeq = 0; R.settleUntil = 0;
     log('ev sahibi oldum, dönem', L.e);
     publishLobby();
@@ -989,7 +1002,7 @@
     }
     let mine = L.p.find(p => p.id === me);
     if (!mine) { mine = { id: me }; L.p.unshift(mine); }
-    Object.assign(mine, { n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN });
+    Object.assign(mine, { n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, ht: pr.ht, wn: pr.wn, dt: pr.dt, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN });
     L.h = me; L.e = (L.e | 0) + 1;
     log('ev sahipliği geri alındı', R.code, alone ? '(yalnız)' : '(lobide ' + L.p.length + ' kişi)');
     R.lob = L; R.phase = 'in'; R.role = 'host'; R.everIn = true; R.hostPid = me; R.provT = 0; R.kSeq = 0; R.settleUntil = 0; R.rejoin = false;
@@ -1179,7 +1192,7 @@
     const I = (v, max) => fin(v) && v >= 0 ? Math.min(max, Math.floor(v)) : 0;
     const okc = isChar;
     return {
-      pid, nick: cleanNick(c.nick) || 'Oyuncu', char: okc(c.char) ? c.char : 'TAFTAF', skin: tok(c.skin, 'klasik'),
+      pid, nick: cleanNick(c.nick) || 'Oyuncu', char: okc(c.char) ? c.char : 'TAFTAF', skin: tok(c.skin, 'klasik'), hat: cosId('hats', c.hat, 'none'),
       lvl: fin(c.lvl) ? Math.max(1, Math.min(999, Math.floor(c.lvl))) : 1, tr: I(c.tr, 1e7), play: I(c.play, 1e9),
       races: I(c.races, 1e8), wins: I(c.wins, 1e8), kills: I(c.kills, 1e8), best: okc(c.best) ? c.best : null,
       since: fin(c.since) && c.since > 1.4e12 && c.since < Date.now() + 864e5 ? Math.floor(c.since) : 0,
@@ -1194,10 +1207,10 @@
     if (!isObj(c)) {
       const sv = FM.save || {}, st = isObj(sv.stats) ? sv.stats : {}, pr = myProfile();
       let tr = 0; if (isObj(sv.trophies)) for (const k in sv.trophies) if (fin(sv.trophies[k]) && sv.trophies[k] > 0) tr += sv.trophies[k];
-      c = { nick: myNick(), char: pr.c, skin: pr.sk, lvl: sv.level, tr, play: st.playSec, races: st.races, wins: st.wins, kills: st.kills, best: null, since: sv.since || sv.created };
+      c = { nick: myNick(), char: pr.c, skin: pr.sk, hat: pr.ht, lvl: sv.level, tr, play: st.playSec, races: st.races, wins: st.wins, kills: st.kills, best: null, since: sv.since || sv.created };
     }
     const pr = myProfile();
-    c = sanitizeCard(Object.assign({}, c, { nick: cleanNick(c && c.nick) || pr.n }), myPid());
+    c = sanitizeCard(Object.assign({}, c, { nick: cleanNick(c && c.nick) || pr.n, hat: (c && c.hat) || pr.ht }), myPid());
     P.myCardC = c; P.myCardT = t;
     return c;
   }
@@ -1208,7 +1221,7 @@
     if (mode === 1 && t - P.lastCard < 1500) return false;
     P.myCardT = -1e9;
     const c = myCard(); if (!c) return false;
-    const sig = [c.nick, c.char, c.skin, c.lvl, c.tr, Math.floor(c.play / 60), c.races, c.wins, c.kills, c.best, c.since, c.lg].join('|');
+    const sig = [c.nick, c.char, c.skin, c.hat, c.lvl, c.tr, Math.floor(c.play / 60), c.races, c.wins, c.kills, c.best, c.since, c.lg].join('|');
     if (!mode) { if (sig === P.cardSig && t - P.lastCard < CARD_MS) { P.cardDirty = false; return false; } if (t - P.lastCard < CARD_MIN_MS) return false; }
     const out = Object.assign({}, c, { ls: Date.now(), v: VER });
     if (!pSend('_pr/' + c.pid, out, true, mode === 2)) return false;
@@ -1290,7 +1303,7 @@
   function pGone(pid) { delete P.peers[pid]; P.gone[pid] = now(); }
   function pView(e, t) {
     const c = P.cards[e.pid];
-    return { pid: e.pid, nick: e.nick, char: e.char, skin: c ? c.skin : 'klasik', st: e.st, code: e.code || null, n: e.n, max: e.max, open: !!e.open, me: false, age: Math.round((t || now()) - e.t) };
+    return { pid: e.pid, nick: e.nick, char: e.char, skin: c ? c.skin : 'klasik', hat: c ? c.hat : 'none', st: e.st, code: e.code || null, n: e.n, max: e.max, open: !!e.open, me: false, age: Math.round((t || now()) - e.t) };
   }
   function pCame(e) {
     const t = now(), pid = e.pid;
@@ -1314,7 +1327,7 @@
   function onlineList() {
     if (!P.on || P.conn !== 'open') return [];
     const t = now(), s = pState(), pr = myProfile(), out = [];
-    out.push({ pid: myPid(), nick: pr.n, char: pr.c, skin: pr.sk, st: s.st, code: s.code || null, n: s.n != null ? s.n : null, max: s.max || null, open: !!s.open, me: true, age: 0 });
+    out.push({ pid: myPid(), nick: pr.n, char: pr.c, skin: pr.sk, hat: pr.ht, st: s.st, code: s.code || null, n: s.n != null ? s.n : null, max: s.max || null, open: !!s.open, me: true, age: 0 });
     for (const k in P.peers) out.push(pView(P.peers[k], t));
     out.sort((a, b) => (b.me - a.me) || ((b.open ? 1 : 0) - (a.open ? 1 : 0)) || (ST_RANK[a.st] - ST_RANK[b.st]) || String(a.nick).localeCompare(String(b.nick), 'tr'));
     return out;
@@ -1329,7 +1342,7 @@
       if (pid === myPid()) continue;
       const c = P.cards[pid], e = P.peers[pid], on = !!e && e.st !== 'away';
       out.push({
-        pid, nick: e ? e.nick : c.nick, char: e ? e.char : c.char, skin: c ? c.skin : 'klasik',
+        pid, nick: e ? e.nick : c.nick, char: e ? e.char : c.char, skin: c ? c.skin : 'klasik', hat: c ? c.hat : 'none',
         lvl: c ? c.lvl : null, tr: c ? c.tr : null, play: c ? c.play : null, races: c ? c.races : null, wins: c ? c.wins : null, kills: c ? c.kills : null,
         best: c ? c.best : null, since: c && c.since ? c.since : null, lg: c ? c.lg : null,
         ls: Math.max(c ? c.ls : 0, P.ls[pid] || 0) || null, online: on, st: e ? e.st : 'off', away: !!e && e.st === 'away', code: e ? e.code : null, me: false
@@ -1346,7 +1359,7 @@
     if (sig !== P.onSig) { P.onSig = sig; emit('net:online', { list, n: list.filter(x => !x.me && x.st !== 'away').length }); }
     const t = now();
     const prof = profilesList();
-    const psig = prof.map(x => [x.pid, x.online ? 1 : 0, x.st, x.nick, x.char, x.skin, x.lvl, x.tr, Math.floor((x.play || 0) / 60), x.races, x.wins, x.kills, x.online ? 0 : Math.floor((x.ls || 0) / 60000)].join(',')).join(';');
+    const psig = prof.map(x => [x.pid, x.online ? 1 : 0, x.st, x.nick, x.char, x.skin, x.hat, x.lvl, x.tr, Math.floor((x.play || 0) / 60), x.races, x.wins, x.kills, x.online ? 0 : Math.floor((x.ls || 0) / 60000)].join(',')).join(';');
     if (psig === P.prSig) { P.prDirty = false; return; }
     if (t - P.prT < 1000) { P.prDirty = true; return; }        // seyreltme: tik birazdan tekrar dener
     P.prSig = psig; P.prT = t; P.prDirty = false;
@@ -1624,7 +1637,7 @@
     if (R.phase !== 'in') return;
     if (R.role === 'host' && R.lob) {
       const me = R.lob.p.find(p => p.id === myPid()), pr = myProfile();
-      if (me) { me.n = pr.n; me.c = pr.c; me.sk = pr.sk; me.tr = pr.tr; me.pl = pr.pl; me.rd = R.ready ? 1 : 0; }
+      if (me) { me.n = pr.n; me.c = pr.c; me.sk = pr.sk; me.tr = pr.tr; me.pl = pr.pl; me.ht = pr.ht; me.wn = pr.wn; me.dt = pr.dt; me.rd = R.ready ? 1 : 0; }
       lobbyChanged(false);
     } else sendJoin(false);
   }

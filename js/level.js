@@ -22,7 +22,8 @@
                                            Altın Avı'nda ölümde düşen altınlar da buraya eklenir: {x,y,got,drop:true,v,id,t,vx,vy}
                                            (v = değeri, t = kalan ömür sn; biri alınca got = FM.ALLBITS → kimseye çizilmez)
      decor     : [{x,y,type,layer:'back'|'front',s,flip,seed}]  süs (çarpışmasız). y = zemin üstü (taban noktası)
-     liq       : sıvı yüzeyinin y'si (çukurlarda görünen su/lav/çikolata...). Düşen yarışçı burada ölür.
+     liq       : eski sıvı yüzeyi y'si. ARTIK ÇUKUR/SIVI YOK: 1400 (zemin bloklarının içinde, hiç görünmez, kimseyi öldürmez);
+                                           yalnızca dünyanın altına düşme güvenlik sınırı (düşen ölmeden son güvenli noktaya taşınır).
      start     : başlangıç çizgisi x, startY: başlangıç zemini y
      end       : bitiş çizgisi x, finY: bitiş zemini y
      len       : toplam genişlik
@@ -52,7 +53,8 @@
        Komşu bloklar kesintisiz birleşir (bir yokuşun y2'si sonraki bloğun y'sine eşittir; dik basamak/duvar yine olabilir).
        Yardımcılar: FM.level.topAt(s, x) → x'teki yüzey y'si, FM.level.slopeOf(s) → dy/dx (+ aşağı iniş), FM.game.groundY(x, y).
      ÇUKUR YOK (5. tur sonrası): her boşluğun bir tabanı var (vadi/hendek); düşen ölmez, tırmanıp/yokuştan çıkıp biraz zaman kaybeder.
-     Sıvı (liq) yalnızca güvenlik ağı: zemin tabanları hep liq'in üstünde (≤ 560). */
+     Hiçbir temada/modda sıvı (su, lav, çikolata, buzlu su, plazma, neon) yok ve öldürmez: liq = 1400 yalnızca güvenlik sınırı.
+     Vadi/hendek tabanları ≤ 560. */
   const BASE = ['flat', 'pad', 'dip', 'ditch', 'step', 'wall', 'drop', 'spikes', 'spikes', 'crush', 'crush', 'belt', 'route', 'route', 'plat', 'saw',
     'hill', 'hill', 'ramp', 'ramp', 'roll', 'roll'];
   const TECH = ['flat', 'dip', 'ditch', 'step', 'wall', 'wall', 'drop', 'spikes', 'spikes', 'crush', 'crush', 'route', 'plat', 'plat', 'saw', 'saw',
@@ -63,7 +65,7 @@
   /* Isınma: başlangıçtan WARM_X'e kadar başlayan bölümler tehlikesiz ve düz (koşu mesafesiyle ~3 sn): start kalabalığı
      ilk saniyelerde dikene/vadiye yığılmasın. Yalnızca bunlar seçilebilir; diğerleri düz zemine döner. */
   const WARM_X = 1060, WARM_OK = { flat: 1, pad: 1, belt: 1 };
-  const FLOOR_MAX = 560;           // vadi/hendek tabanı en derin (sıvı 600'ün üstünde: kimse sıvıya düşmez)
+  const FLOOR_MAX = 560;           // vadi/hendek tabanı en derin (kamera ve okunurluk için; sıvı yok)
   const TOP_MIN = 220, TOP_MAX = 520;
   function poolFor(themeId, mode) {
     let p = (mode === 'pure' ? TECH : BASE).slice();
@@ -100,7 +102,7 @@
     const L = {
       theme, seed, mode, solids: [], spikes: [], crush: [], saws: [], boxes: [], pads: [], mush: [], belts: [], mud: [], coins: [], decor: [],
       ice: [], quicksand: [], boulders: [], vents: [], portals: [], lowg: [], tramp: [], bridges: [], gates: [],
-      liq: 600, start: 60, startY: 460, end: 0, finY: 460, len: 0
+      liq: 1400, start: 60, startY: 460, end: 0, finY: 460, len: 0
     };
     let x = 0, gy = 460, prev = '';
     const noBox = mode === 'pure';

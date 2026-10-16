@@ -49,7 +49,7 @@ window.FM = window.FM || {};
   FM.ITEMS = {
     saw:     { ic: '🪚', n: 'Testere',       col: '#a3adbd', d: 'Yerde yuvarlanır, duvardan seker. Değdiği herkesi öldürür — geri sekerse seni de! Nişanla geriye ya da kavisli yukarı fırlat.' },
     dyn:     { ic: '🧨', n: 'Dinamit',       col: '#e23b3b', d: 'Fırlatılır, 1 sn sonra patlar. Nişanla yayını sen seç (ileri, geri, yukarı). Yakındaysan sen de gidersin.' },
-    trap:    { ic: '🪤', n: 'Ayı Tuzağı',    col: '#9aa3b2', d: 'Arkana bırakılır ya da nişanla fırlatılır; yere düşüp oturunca kurulur. Basan ölür (sen dahil). Çukura düşen tuzak kaybolur.' },
+    trap:    { ic: '🪤', n: 'Ayı Tuzağı',    col: '#9aa3b2', d: 'Arkana bırakılır ya da nişanla fırlatılır; yere düşüp oturunca kurulur. Basan ölür (sen dahil).' },
     mis:     { ic: '🚀', n: 'Güdümlü Füze',  col: '#ff6b3d', d: 'Lideri (lider sensen ikinciyi) kovalar ve patlar. Geriye nişan alırsan arkandaki en yakın rakibi kovalar.' },
     bolt:    { ic: '🌩️', n: 'Yıldırım',      col: '#ffe14d', d: 'Önündeki rakiplerin (en yakın 4 kişi) üstünde bulut belirir, 1.8 sn sonra çakar. Kalkan ve balon korur.' },
     ice:     { ic: '❄️', n: 'Kar Fırtınası', col: '#9be7ff', d: 'Kısa bir hazırlıktan sonra etrafına buz dalgası yayar: dalganın ulaştığı herkes 2.2 sn donar.' },
@@ -95,9 +95,9 @@ window.FM = window.FM || {};
   // mech: haritanın özel mekaniği (arayüzde harita seçiminde gösterilebilir).
   FM.THEMES = [
     { id: 'forest', n: 'Çılgın Orman',      liquid: 'water',     sky: ['#3d9cf5', '#8fd0ff', '#e3f6ff'], mech: 'Mantarlar, yürüyen bantlar, testereler' },
-    { id: 'candy',  n: 'Şeker Diyarı',      liquid: 'chocolate', sky: ['#ff8fc8', '#ffc0e3', '#fff1fa'], mech: 'Çikolata çukurları, zıplatan mantarlar' },
+    { id: 'candy',  n: 'Şeker Diyarı',      liquid: 'chocolate', sky: ['#ff8fc8', '#ffc0e3', '#fff1fa'], mech: 'Şeker tepeleri, zıplatan mantarlar' },
     { id: 'snow',   n: 'Karlı Zirve',       liquid: 'icewater',  sky: ['#5b93dc', '#a9cdf3', '#eef6ff'], mech: 'Buzlu zemin: kaygan ve hızlı' },
-    { id: 'castle', n: 'Gün Batımı Kalesi', liquid: 'lava',      sky: ['#2b1a4a', '#ff6f61', '#ffc778'], mech: 'Lav çukurları, eziciler' },
+    { id: 'castle', n: 'Gün Batımı Kalesi', liquid: 'lava',      sky: ['#2b1a4a', '#ff6f61', '#ffc778'], mech: 'Kale surları, eziciler' },
     { id: 'desert', n: 'Çöl Tapınağı',      liquid: 'quicksand', sky: ['#f08a3c', '#ffc27a', '#fff0c8'], base: 'castle', mech: 'Yuvarlanan kayalar, bataklık kum' },
     { id: 'space',  n: 'Uzay İstasyonu',    liquid: 'plasma',    sky: ['#0b0a2a', '#2a1a6a', '#5a3aa0'], base: 'castle', mech: 'Düşük yerçekimi, ışınlanma kapıları' },
     { id: 'city',   n: 'Gece Şehri',        liquid: 'neon',      sky: ['#0d1033', '#3a1f6e', '#ff5fa2'], base: 'castle', mech: 'Çatı trambolinleri, rüzgâr bacaları' },

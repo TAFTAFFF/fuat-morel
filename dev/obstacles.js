@@ -1,8 +1,10 @@
 // Engel tasarımı denetleyicisi (deterministik): her engel örneği için TEK koşucuyu betikli politikalarla koşturur ve
 // "her engelin tek, net ve çalışan bir cevabı var mı?" sorusunu ölçer.
 // Kullanım: node dev/obstacles.js [seed sayısı=4] [modlar=classic,pure,coins] [temalar=all|0,3,desert] [--ayrinti] [--seed0=N]
-//   Engeller: spikes (zıpla), pit (çukur: kenarda zıpla), crush (ezici: kay), saw (testere makinesi: kay), boulder (kaya: zamanla zıpla),
-//   wall (duvar/basamak: tutarak tırman). Her biri için:
+//   Engeller: spikes (zıpla), ditch (hendek: kenarda zıpla; geniş olanda çift zıpla), crush (ezici: kay), saw (testere makinesi: kay),
+//   boulder (kaya: zamanla zıpla), wall (duvar/basamak: tutarak tırman), slope (yokuş: hiçbir şey yapmadan geçilmeli, havalanmadan).
+//   DÜŞÜP ÖLME YOK: dipsiz boşluk (pit) bulunursa İHLAL; hendeğe düşen ölmemeli ve tırmanıp çıkmalı (kaybettiği süre raporlanır).
+//   İpucu (FM.S.hint) denetimi: engelin ~120 px önünde ipucu bu engelin doğru hareketini göstermeli. Her biri için:
 //     • yok      : o engelin kuralı kapalıyken (diğer engeller normal) koşucu geçebiliyor mu? → geçiyorsa "bedava" İHLAL
 //                   (testere ve kayada her evrede denenir: kaymadan/zıplamadan geçilebilen evre varsa ihlal)
 //     • pencere  : doğru hareketin zamanlaması (zıplama/kayma mesafesi) taranır; geçen en uzun kesintisiz aralık ms'ye çevrilir
@@ -29,7 +31,8 @@ const RUN = C.RUN;
 /* ---------- politika: parametreli tepkisel koşucu (oyuncu gibi) ----------
    prm: {Le (çukur kenarından önce zıplama payı px), Ls (dikene kala zıplama px), Lc (ezici/testereye kala kayma px), Tb (kayaya temas sn)}
    ov: {o (engel), v (bu engel için taranan değer) | off: true (bu engelin kuralı kapalı) | wrong: true (yanlış hareket)} */
-function gw(L, px, py, d) { for (const s of L.solids) if (px >= s.x && px <= s.x + s.w && s.y >= py - 4 && s.y < py + d) return true; return false; }
+const topAt = FM.level.topAt;
+function gw(L, px, py, d, up) { up = up == null ? 4 : up; for (const s of L.solids) { if (px < s.x || px > s.x + s.w) continue; const t = topAt(s, px); if (t >= py - up && t < py + d) return true; } return false; }
 function within(o, x0, x1) { return o && x1 > o.x0 - 2 && x0 < o.x1 + 2; }
 function policy(P, prm, ov) {
   const L = S.L, fx = P.x + P.w, feet = P.y + P.h, cx = P.x + P.w / 2;
@@ -39,12 +42,12 @@ function policy(P, prm, ov) {
   const val = (k, o, def) => (O && o === O && ov.v != null ? ov.v : def);
   const off = o => !!(O && o === O && (ov.off || ov.wrong));
   if (P.onGround || P.coy > 0) {
-    // çukur kenarı
-    for (const o of OBS.pit) {
+    // çukur / hendek kenarı
+    for (const o of OBS.pit.concat(OBS.ditch)) {
       const le = val('Le', o, prm.Le);
       if (fx + le >= o.x0 && fx < o.x1 && Math.abs(o.y - feet) < 6 && !off(o)) { jump = true; break; }
     }
-    if (!jump && !gw(L, fx + prm.Le, feet, 240) && !OBS.pit.some(o => fx + 260 > o.x0 && fx < o.x1)) jump = true;   // tanımsız kenar (güvenlik)
+    if (!jump && !gw(L, fx + prm.Le, feet, 240, 20) && !OBS.pit.some(o => fx + 260 > o.x0 && fx < o.x1)) jump = true;   // tanımsız kenar (güvenlik)
     // diken
     for (const o of OBS.spikes) {
       const ls = val('Ls', o, prm.Ls), dx = o.x0 - fx;
@@ -65,9 +68,11 @@ function policy(P, prm, ov) {
         else if (!off(o)) slide = true;
       }
     }
-  } else if (!P.climb && P.jumps < 2 && P.vy > 120 && !(O && (ov.off || ov.wrong) && O.k === 'pit' && cx > O.x0 - 200 && cx < O.x1 + 40)) {
+  } else if (!P.climb && P.jumps < 2 && P.vy > 120 && !(O && (ov.off || ov.wrong) && (O.k === 'pit' || O.k === 'ditch') && cx > O.x0 - 200 && cx < O.x1 + 40)) {
     // çift zıplama: altında zemin yok ve ileride zemin var (yapay zekâ ile aynı kural; "hareketsiz" testinde o çukurda kapalı)
     if (!gw(L, cx + P.vx * .08, feet, 700) && !gw(L, cx + P.vx * .3, feet, 700) && gw(L, cx + 190, feet - 80, 440)) jump = true;
+    // hendek üstünde kenar hizasının altına inmek üzereyken (karşı kenara yetişemeyecekse) çift zıpla
+    for (const o of OBS.ditch) if (cx > o.x0 - 10 && cx < o.x1 && feet > o.y - 24 && P.x + P.w < o.x1 + 4 && !off(o)) { jump = true; break; }
   }
   if (P.slide) for (const o of OBS.slideOb) if (P.x + P.w > o.x0 - 4 && P.x < o.x1 + 4 && !off(o)) slide = true;   // altındayken kaymayı sürdür
   if (jump && !P.slide) I.jp = true;
@@ -80,7 +85,7 @@ function policy(P, prm, ov) {
 /* ---------- seviyeden engeller ---------- */
 let OBS = null;
 function obstaclesOf(L) {
-  const O = { spikes: [], pit: [], crush: [], saw: [], boulder: [], wall: [], slideOb: [] };
+  const O = { spikes: [], pit: [], ditch: [], crush: [], saw: [], boulder: [], wall: [], slope: [], slideOb: [] };
   // çukur: hiçbir katının (yüzen dahil) x aralığının kapsamadığı boşluklar
   const iv = L.solids.map(s => [s.x, s.x + s.w, s]).sort((a, b) => a[0] - b[0]);
   let end = -1e9, last = null;
@@ -95,9 +100,19 @@ function obstaclesOf(L) {
   for (const k of L.crush) { const o = { k: 'crush', x0: k.x, x1: k.x + k.w, y: k.y + k.h + 26 }; O.crush.push(o); O.slideOb.push(o); }
   for (const s of L.saws) { const o = { k: 'saw', x0: s.cx - s.r, x1: s.cx + s.r, y: s.cy + 80, s }; O.saw.push(o); O.slideOb.push(o); }
   for (const b of L.boulders) O.boulder.push({ k: 'boulder', x0: b.x0, x1: b.x1 + 2 * b.r, y: b.y, b });
-  // duvar/basamak: ardışık zeminlerde 46 px'ten (otomatik basamak) yüksek çıkış
+  // duvar/basamak: ardışık zeminlerde (bloğun BİTİŞ yüksekliği → sonrakinin BAŞLANGIÇ yüksekliği) 46 px'ten (otomatik basamak) yüksek çıkış
   const gr = L.solids.filter(s => !s.float).sort((a, b) => a.x - b.x);
-  for (let i = 1; i < gr.length; i++) if (Math.abs(gr[i].x - (gr[i - 1].x + gr[i - 1].w)) < 2 && gr[i - 1].y - gr[i].y > 46) O.wall.push({ k: 'wall', x0: gr[i].x - 10, x1: gr[i].x + 40, y: gr[i - 1].y, h: gr[i - 1].y - gr[i].y });
+  const endT = s => topAt(s, s.x + s.w), begT = s => topAt(s, s.x), joined = (a, b) => Math.abs(b.x - (a.x + a.w)) < 2;
+  for (let i = 1; i < gr.length; i++) if (joined(gr[i - 1], gr[i]) && endT(gr[i - 1]) - begT(gr[i]) > 46) O.wall.push({ k: 'wall', x0: gr[i].x - 10, x1: gr[i].x + 40, y: endT(gr[i - 1]), h: endT(gr[i - 1]) - begT(gr[i]) });
+  // hendek: düz taban, iki yanı (≥ 60 px) yüksek ve aynı seviyede (≤ 50 px fark), en çok 260 px geniş
+  for (let i = 1; i + 1 < gr.length; i++) {
+    const a = gr[i - 1], f = gr[i], b = gr[i + 1];
+    if (!joined(a, f) || !joined(f, b) || f.y2 != null || f.w > 260) continue;
+    const ya = endT(a), yb = begT(b);
+    if (f.y - ya > 60 && Math.abs(yb - ya) < 50) O.ditch.push({ k: 'ditch', x0: f.x, x1: f.x + f.w, y: ya, w: f.w, dep: f.y - ya });
+  }
+  // yokuş: eğimli her zemin bloğu (hiçbir şey yapmadan, havalanmadan geçilmeli)
+  for (const s of gr) if (s.y2 != null) O.slope.push({ k: 'slope', x0: s.x, x1: s.x + s.w, y: begT(s), sl: (s.y2 - s.y) / s.w });
   return O;
 }
 
@@ -110,13 +125,14 @@ function trimmedLevel(L, x0, x1) {
   T.coins = []; T.decor = []; T.boxes = [];   // denetimde gereksiz (hızlı)
   return T;
 }
-function placeAt(P, x0, L, xmax) {
+function placeAt(P, x0, L, xmax, py) {
   // x0'da (önce engele doğru ileride, sonra geride) zemin bul; tehlikesiz bir noktaya koy, tam hızda
   const cand = [];
   for (let x = x0; x <= (xmax != null ? xmax : x0); x += 20) cand.push(x);
   for (let k = 1; k < 40; k++) cand.push(x0 - k * 20);
   for (const x of cand) {
-    let gy = null; for (const s of L.solids) if (x >= s.x + 4 && x + P.w <= s.x + s.w - 4 && (gy === null || s.y < gy) && s.y > -500) gy = s.y;
+    // py verilirse o yüksekliğe en yakın yüzey (engelin seviyesi), yoksa en üstteki
+    let gy = null; for (const s of L.solids) { const t = topAt(s, x + P.w / 2); if (x >= s.x + 4 && x + P.w <= s.x + s.w - 4 && t > -500 && (gy === null || (py != null ? Math.abs(t - py) < Math.abs(gy - py) : t < gy))) gy = t; }
     if (gy === null) continue;
     const bad = L.spikes.some(s => s.x < x + 120 && s.x + s.w > x - 60) || L.crush.some(c => c.x < x + 120 && c.x + c.w > x - 60) || L.saws.some(s => Math.abs(s.cx - x) < 140) || (L.boulders || []).some(b => x + 120 > b.x0 && x < b.x1 + 2 * b.r + 10);   // kaya sola yuvarlanır: kapının sağı güvenli
     if (bad) continue;
@@ -135,18 +151,33 @@ function trial(o, lt, prm, ov) {
   if (!placeAt(P, o.x0 - 300, S.L, o.x0 - 150)) return null;
   S.lt = lt; S.raceT = 20; S.mode = 'race'; S.ents = []; S.parts = []; S.endTimer = null; S.finishedN = 0;
   const goal = o.x1 + 160;
-  let t = 0;
-  while (t < 6) {
+  let t = 0, air = 0, clT = -9;
+  trial.kop = 0;
+  while (t < 8) {
     policy(P, prm, ov);
+    const jp = I.jp || P.vy < 0;
     G.step(STEP); t += STEP;
+    // kopma: zıplamadan/fırlatılmadan havada (altında 20 px içinde zemin varken) 50 ms'den uzun
+    if (P.climb) clT = t;
+    if (!P.onGround && !P.climb && !jp && !P.inLift && P.fly <= 0 && t - clT > .4) { const g = G.groundY(P.x + P.w / 2, P.y + P.h - 2); air = g !== null && g - (P.y + P.h) < 20 ? air + STEP : 0; if (air > .05) trial.kop = 1; }
+    else air = 0;
     if (P.dead > 0) return false;
-    if (P.x > goal) return true;
-    if (S.mode !== 'race') return P.finished;
+    if (P.x > goal) return t;
+    if (S.mode !== 'race') return P.finished ? t : false;
   }
   return false;   // takıldı
 }
 const NOM = { Le: 18, Ls: 46, Lc: 36, Tb: .2 };
-const SWEEP = { spikes: ['Ls', 0, 230, 4], pit: ['Le', -12, 130, 3], crush: ['Lc', -24, 230, 4], saw: ['Lc', -24, 230, 4], boulder: ['Tb', .02, .7, .02] };
+const SWEEP = { spikes: ['Ls', 0, 230, 4], pit: ['Le', -12, 130, 3], ditch: ['Le', -12, 130, 3], crush: ['Lc', -24, 230, 4], saw: ['Lc', -24, 230, 4], boulder: ['Tb', .02, .7, .02] };
+// ipucunun beklenen hareketi (FM.S.hint.act)
+const HINT_OK = { spikes: ['jump'], ditch: ['jump', 'dbl'], crush: ['slide'], saw: ['slide'], wall: ['jump', 'climb'] };
+function hintAt(o) {
+  const P = S.player; S.L = FULL.T;
+  if (!placeAt(P, o.x0 - 130, S.L, o.x0 - 90, o.y)) return null;
+  S.lt = 10; S.raceT = 20; S.mode = 'race'; S.ents = [];
+  const h = G.updateHint && G.updateHint();
+  return h ? { act: h.act, kind: h.kind, x: h.x } : { act: null };
+}
 function sweep(o, lt) {
   const [key, a, b, st] = SWEEP[o.k];
   let best = 0, cur = 0, any = false, at = null, bestAt = null;
@@ -170,15 +201,33 @@ for (const mode of MODES) for (const th of THS) for (let si = 0; si < SEEDS; si+
   G.startMatch({ char: 'Kral', rounds: 1, auto: false, seed, theme: th, themeIdx: th, mode, n: 2 });
   const P = S.player; S.racers = [P]; P.bot = false; P.ctrl = 'local';
   FULL.L = S.L; OBS = obstaclesOf(S.L); levels++;
-  const all = [].concat(OBS.spikes, OBS.pit, OBS.crush, OBS.saw, OBS.boulder, OBS.wall);
+  for (const o of OBS.pit) if (o.x0 > 300 && o.x1 < FULL.L.end - 50) { st('pit').n++; st('pit').imkansiz++; viol.push(`${mode}/${FM.THEMES[th].id}/seed ${seed} x ${Math.round(o.x0)} dipsiz boşluk (${Math.round(o.w)} px): düşüp ölme olmamalı`); }
+  const all = [].concat(OBS.spikes, OBS.ditch, OBS.crush, OBS.saw, OBS.boulder, OBS.wall, OBS.slope);
   for (const o of all) {
     if (o.x0 < 900 || o.x1 > FULL.L.end - 100) continue;   // başlangıç/bitiş alanı
     FULL.T = trimmedLevel(FULL.L, o.x0 - 700, o.x1 + 900);
     const s = st(o.k); s.n++;
     const where = `${mode}/${FM.THEMES[th].id}/seed ${seed} x ${Math.round(o.x0)}`;
+    // ipucu: engelin önünde doğru hareket gösteriliyor mu (araya başka engel girdiyse sayılmaz)
+    if (HINT_OK[o.k]) {
+      const h = hintAt(o);
+      if (h && (h.act === null || (Math.abs(h.x - o.x0) < 60 && !HINT_OK[o.k].includes(h.act)) || (h.act && Math.abs(h.x - o.x0) >= 60 && h.x > o.x0))) { s.ipucu = (s.ipucu || 0) + 1; viol.push(`${where} ${o.k}: ipucu ${h.act || 'yok'}${h.kind ? ' (' + h.kind + ')' : ''}, beklenen ${HINT_OK[o.k].join('/')}`); }
+    }
     if (o.k === 'wall') {
       if (![10, 11.3, 12.6].some(lt => trial(o, lt, NOM, null))) { s.imkansiz++; viol.push(`${where} duvar (${Math.round(o.h)} px): tırmanılarak geçilemedi`); }
       continue;
+    }
+    if (o.k === 'slope') {
+      const ok = trial(o, 10, NOM, null);
+      if (!ok) { s.imkansiz++; viol.push(`${where} yokuş (eğim ${o.sl.toFixed(2)}): geçilemedi`); }
+      else if (trial.kop) { s.kopma = (s.kopma || 0) + 1; viol.push(`${where} yokuş (eğim ${o.sl.toFixed(2)}): zıplamadan havalanma`); }
+      continue;
+    }
+    if (o.k === 'ditch') {
+      // hendek: içine düşen ölmez, tırmanıp çıkar (zaman kaybı); doğru zamanda zıplayan düşmez
+      const tj = trial(o, 10, NOM, null), tf = trial(o, 10, NOM, { o, off: true });
+      if (!tf) { s.imkansiz++; viol.push(`${where} hendek (${Math.round(o.w)}×${Math.round(o.dep)} px): içine düşen çıkamıyor`); }
+      else if (tj) (s.kayip || (s.kayip = [])).push(Math.round((tf - tj) * 1000));
     }
     let minMs = 1e9, freeAny = false, wrongAll = true, worst = null;
     for (const lt of phasesFor(o)) {
@@ -188,21 +237,21 @@ for (const mode of MODES) for (const th of THS) for (let si = 0; si < SEEDS; si+
       // kaya: o evrede kaya zaten yoksa (geçilebilir) pencere ölçülmez
       if (o.k === 'boulder' && free) continue;
       if (w.ms < minMs) { minMs = w.ms; worst = { lt, w }; }
-      if ((o.k === 'crush' || o.k === 'saw' || o.k === 'spikes') && !trial(o, lt, NOM, { o, wrong: true })) { } else if (o.k !== 'boulder' && o.k !== 'pit') wrongAll = false;
+      if ((o.k === 'crush' || o.k === 'saw' || o.k === 'spikes') && !trial(o, lt, NOM, { o, wrong: true })) { } else if (o.k !== 'boulder' && o.k !== 'pit' && o.k !== 'ditch') wrongAll = false;
     }
     // çukur: koşucudan (28 px) dar boşluk düşülemez, mantar/trambolin/gayzer fırlatması ya da yüzen yol üstünden geçirir → çukur sayılmaz
     if (freeAny && o.k === 'pit') { s.n--; s.yol = (s.yol || 0) + 1; continue; }
-    if (freeAny && o.k !== 'boulder') { s.bedava++; viol.push(`${where} ${o.k}: hareketsiz geçilebiliyor${o.k === 'saw' || o.k === 'crush' ? ' (kaymadan geçiliyor)' : ''}`); }
+    if (freeAny && o.k !== 'boulder' && o.k !== 'ditch') { s.bedava++; viol.push(`${where} ${o.k}: hareketsiz geçilebiliyor${o.k === 'saw' || o.k === 'crush' ? ' (kaymadan geçiliyor)' : ''}`); }
     if (minMs === 1e9) continue;
     s.ms.push(minMs);
-    if (minMs === 0) { s.imkansiz++; viol.push(`${where} ${o.k}${o.w ? ' (' + Math.round(o.w) + ' px)' : ''}: doğru hareketle geçilemiyor (lt ${worst.lt.toFixed(2)})`); }
-    else if (minMs < DAR) { s.dar++; viol.push(`${where} ${o.k}${o.w ? ' (' + Math.round(o.w) + ' px)' : ''}: pencere dar ${minMs} ms ${JSON.stringify(worst.w.range)}`); }
+    if (minMs === 0 && o.k !== 'ditch') { s.imkansiz++; viol.push(`${where} ${o.k}${o.w ? ' (' + Math.round(o.w) + ' px)' : ''}: doğru hareketle geçilemiyor (lt ${worst.lt.toFixed(2)})`); }
+    else if (minMs < DAR && o.k !== 'ditch') { s.dar++; viol.push(`${where} ${o.k}${o.w ? ' (' + Math.round(o.w) + ' px)' : ''}: pencere dar ${minMs} ms ${JSON.stringify(worst.w.range)}`); }
     if (!wrongAll) s.yanlis++;
   }
 }
 const pct = (a, q) => { if (!a.length) return '-'; const b = a.slice().sort((x, y) => x - y); return b[Math.min(b.length - 1, Math.floor(q * b.length))]; };
 console.log(`Engel denetimi: ${levels} harita (${MODES.join(',')} × tema ${THS.join(',')} × ${SEEDS} seed), ${((Date.now() - t0) / 1000).toFixed(0)} sn`);
-for (const [k, s] of Object.entries(stat)) console.log(`  ${k.padEnd(8)} ${String(s.n).padStart(4)} örnek | bedava ${s.bedava} | imkânsız ${s.imkansiz} | dar(<${DAR}ms) ${s.dar} | yanlış hareketle de geçen ${s.yanlis} | pencere ms en kötü ${pct(s.ms, 0)} · %10 ${pct(s.ms, .1)} · medyan ${pct(s.ms, .5)}${s.yol ? ' | kendiliğinden aşılan boşluk ' + s.yol : ''}`);
+for (const [k, s] of Object.entries(stat)) console.log(`  ${k.padEnd(8)} ${String(s.n).padStart(4)} örnek | bedava ${s.bedava} | imkânsız ${s.imkansiz} | dar(<${DAR}ms) ${s.dar} | yanlış hareketle de geçen ${s.yanlis} | pencere ms en kötü ${pct(s.ms, 0)} · %10 ${pct(s.ms, .1)} · medyan ${pct(s.ms, .5)}${s.yol ? ' | kendiliğinden aşılan boşluk ' + s.yol : ''}${s.kayip ? ' | düşünce kayıp ms medyan ' + pct(s.kayip, .5) + ' · en çok ' + pct(s.kayip, 1) : ''}${s.kopma ? ' | havalanma ' + s.kopma : ''}${s.ipucu ? ' | yanlış ipucu ' + s.ipucu : ''}`);
 console.log(`İhlal: ${viol.length}`);
 for (const v of viol.slice(0, FL.ayrinti ? 400 : 40)) console.log('  ' + v);
 if (viol.length > 40 && !FL.ayrinti) console.log(`  … (+${viol.length - 40}; tamamı için --ayrinti)`);

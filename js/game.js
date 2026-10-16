@@ -187,7 +187,7 @@
     S.elimN = 0; S.spec = null; S.dropN = 0;
     S.limitT = null;
     S.meteorT = null; S.meteorQ = []; S.timeUpSent = false;
-    S.aim = null; S.threats = [];
+    S.aim = null; S.threats = []; S.hint = null;
     const pure = S.gameMode === 'pure';
     S.racers.forEach((r, i) => {
       const keep = { id: r.id, idx: r.idx, bot: r.bot, total: r.total, abLv: r.abLv, chargeMul: r.chargeMul, startItem: r.startItem, skin: r.skin, trail: r.trail, plate: r.plate,
@@ -750,7 +750,9 @@
       if (r.vx >= 0 && mx <= s.x + 2) {
         const face = topAt(s, s.x);
         if (feet <= face + 1.5 || seam(s, s.x, face)) continue;
-        const lip = feet - face;
+        let lip = feet - face;
+        // yokuşun tepesindeki basamak: yükseklik, yokuşun BİTTİĞİ yerden ölçülür (gövde merkezi yokuşta birkaç px aşağıda)
+        if (lip > 46 && r.onGround) { const lt = edgeTop(s, s.x, true); if (lt !== null && lt < feet && feet - lt < 30) lip = lt - face; }
         if (lip <= 46 && !r.climb && boxFree(r.x, face - r.h - .5, r.w, r.h)) { r.y = face - r.h - .5; continue; }
         r.x = s.x - r.w; r.blocked = true; if (r.vx > 0) r.vx = 0;
       } else if (r.vx < 0 && mx >= s.x + s.w - 2) {
@@ -873,10 +875,13 @@
         return;
       }
     }
+    // DÜŞÜP ÖLME YOK (Fun Run 4 gibi): hiçbir sıvı (su/lav/çikolata/plazma/neon...) öldürmez. Her boşluğun tabanı var; yine de
+    // dünyanın altına düşen olursa (beklenmez) ölüm sayılmadan son güvenli noktaya taşınır.
     if (r.y + r.h > L.liq + 18 && r.dead <= 0) {
-      r.inv = 0; r.shield = 0; r.dash = 0; r.frozen = 0;
-      FM.emit('splash', { x: cxOf(r), y: L.liq, liquid: L.theme.liquid, r });
-      die(r, assistOf(r), L.theme.liquid);
+      if (r.slide) setSlide(r, false);
+      r.x = r.safe.x - r.w / 2; r.y = r.safe.y - RH - 1; r.vx = r.vy = 0; r.climb = false; r.fly = 0; r.dash = 0; r.slam = false;
+      r.onGround = false; r.inv = Math.max(r.inv, 1); r.tp = (r.tp | 0) + 1;
+      FM.emit('rescue', { r, fall: true });
       return;
     }
     // güvenli nokta (route'un geniş yüzen platformları da sayılır; Nuss süzülürken altındaki zemin de)
@@ -1570,6 +1575,57 @@
     if (out.length > 1) out.sort((a, b) => a.eta - b.eta);
     return out;
   };
+  /* =================== İPUCU: sıradaki engelde ne yapmalı (yalnızca okuma) ===================
+     FM.S.hint = { act, x, y, dist, eta, kind } | null — YEREL oyuncunun önünde, HINT_T sn içindeki ilk eylem isteyen engel
+     (dev/obstacles.js'deki "doğru cevap" ile aynı):
+       act : 'jump' zıpla | 'slide' kay | 'climb' zıpla + basılı tut (duvara tırman) | 'dbl' çift zıpla (geniş hendek)
+       kind: 'spikes' diken | 'wall' duvar/yüksek basamak | 'ditch' hendek | 'crush' ezici | 'saw' testere makinesi | 'boulder' kaya
+             | 'sand' küçük bataklık | 'trap' tuzak | 'net' ağ | 'rollsaw' sana yuvarlanan testere
+       x, y: engelin başladığı dünya noktası (ikon/işaret için; y = engel tepesi ya da kenar zemini)
+       dist: oyuncunun önünden engele px (≥ 0; içindeyken 0);  eta: varış süresi (sn, 2 ondalık)
+     Oyunu etkilemez (ağda determinizm bozulmaz); main.js her çizilen karede çağırır. Kısa pencere taranır (~1.6 sn koşu). */
+  const HINT_T = 1.6;
+  const hintO = { act: '', x: 0, y: 0, dist: 0, eta: 0, kind: '' };
+  // ex'te biten / başlayan (düz ya da eğimli) zemin bloğunun o kenardaki yüzeyi
+  const edgeTop = (s, ex, end) => { for (const q of S.L.solids) if (!q.float && q !== s && Math.abs((end ? q.x + q.w : q.x) - ex) < 1) return topAt(q, ex); return null; };
+  game.updateHint = function () {
+    const P = S.player, L = S.L;
+    if (!P || !L || P.dead > 0 || P.finished || P.out || P.ghost || S.mode !== 'race') return (S.hint = null);
+    const fx = P.x + P.w, feet = P.y + P.h, cx = cxOf(P), v = Math.max(160, P.vx || 0), x1 = fx + v * HINT_T + 20;
+    let bt = HINT_T + 1e-6, ba = '', bk = '', bx = 0, by = 0, bd = 0;
+    const cand = (act, kind, x, y, d, eta) => { d = Math.max(0, d); if (eta == null) eta = d / v; if (eta < bt) { bt = eta; ba = act; bk = kind; bx = x; by = y; bd = d; } };
+    for (const s of L.spikes) if (s.x <= x1 && s.x + s.w >= fx - 6 && Math.abs(s.y + s.h - feet) < 60) cand('jump', 'spikes', s.x, s.y, s.x - fx);
+    for (const k of L.crush) if (k.x <= x1 && k.x + k.w >= P.x && Math.abs(k.y + k.h + 26 - feet) < 40) cand('slide', 'crush', k.x, k.y + k.h, k.x - fx);
+    for (const q of L.saws) if (q.cx - q.r <= x1 && q.cx + q.r >= P.x && Math.abs(q.cy + 80 - feet) < 40) cand('slide', 'saw', q.cx - q.r, q.py, q.cx - q.r - fx);
+    for (const q of L.quicksand) if (q.w < 260 && q.x <= x1 && q.x >= fx - 6 && Math.abs(q.y - feet) < 30) cand('jump', 'sand', q.x, q.y, q.x - fx);
+    // duvar / yüksek basamak / hendek: zemin bloklarının birleşim yerleri (≤ 46 px basamağa kendiliğinden çıkılır)
+    for (const s of L.solids) {
+      if (s.float || s.x > x1 || s.x < fx - 4) continue;
+      const lt = edgeTop(s, s.x, true);
+      if (lt === null || Math.abs(lt - feet) > 90) continue;
+      const face = topAt(s, s.x), lip = lt - face;
+      if (lip > 46) cand(lip <= 120 ? 'jump' : 'climb', 'wall', s.x, face, s.x - fx);
+      else if (lip < -60 && s.y2 == null && s.w <= 260) {
+        const rt = edgeTop(s, s.x + s.w, false);
+        if (rt !== null && Math.abs(rt - lt) < 50) cand(s.w > 190 ? 'dbl' : 'jump', 'ditch', s.x, lt, s.x - fx);
+      }
+    }
+    for (const b of L.boulders) {
+      if (fx < b.x0 - 60 - v * .9 || P.x > b.x1 + 2 * b.r || Math.abs(b.y - feet) > 40) continue;
+      const tc = boulderContact(b, P);
+      if (tc >= 0) cand('jump', 'boulder', b.bx != null ? b.bx : b.x1, b.y, Math.max(0, (b.bx != null ? b.bx : b.x1) - b.r - fx), tc);
+    }
+    for (const e of S.ents) {
+      if ((e.type === 'trap' || e.type === 'net') && !e.fly && !e.dead && e.o !== P && e.x <= x1 && e.x + e.w >= fx - 6 && Math.abs(e.y + e.h - feet) < 30) cand('jump', e.type, e.x, e.y, e.x - fx);
+      else if (e.type === 'saw' && e.o !== P && !e.dead && Math.abs(e.y + e.r - feet) < 40) {
+        const dx = e.x - cx, cl = dx < 0 ? e.vx - P.vx : P.vx - e.vx;
+        if (cl > 30) { const d = Math.max(0, Math.abs(dx) - e.r - P.w / 2); cand('jump', 'rollsaw', e.x, e.y, d, d / cl); }
+      }
+    }
+    if (!ba) return (S.hint = null);
+    hintO.act = ba; hintO.kind = bk; hintO.x = bx; hintO.y = by; hintO.dist = Math.round(bd); hintO.eta = Math.round(bt * 100) / 100;
+    return (S.hint = hintO);
+  };
   // bırakılan nişanın son yönü: ekranda görülen (yardımlı) yön aynen kullanılır; darbe tüketilince ham yön sıfırlanır
   function fireAim(r, kind) {
     const I = FM.input, A = S.aim;
@@ -1934,13 +1990,12 @@
 
   /* =================== ADIM =================== */
   // Tur bittikten sonra (end/podium) bitiremeyen yarışçı: tehlike, mantar, ped, kutu, altın, olay YOK.
-  // Yere düz iner ve durur; çukurdaysa sıvının altında sessizce gizlenir (ölüm sayılmaz).
+  // Yere düz iner ve durur.
   function settle(r, dt) {
     const c = r.ctl; c.jp = c.dp = c.use = c.ab = false;
     if (r.dead > 0) return;
     r.climb = false; r.fly = 0; r.dash = 0; r.sled = 0; r.vx = 0;
     if (r.onGround) { r.vy = 0; return; }
-    if (r.y + r.h > S.L.liq + 18) { r.vy = 0; r.dead = 1e9; return; }
     r.vy = Math.min(1500, r.vy + G * dt);
     const f0 = r.y + r.h;
     r.y += r.vy * dt;

@@ -38,6 +38,8 @@
   const JBUF = .12;                // zıplama tamponu (yere değmeden önce basılan zıplama sayılır)
   // Fun Run gibi: zıplamak ve kaymak hız keser (boşuna zıplamak/kaymak cezalı; kusursuz zıplama muaf)
   const JUMP_KEEP = .92, DJ_KEEP = .85, AIR_MUL = .9, SLIDE_MUL = .8;
+  const SPAWN_T = .5;              // yeniden doğunca yerinde hazırlık süresi
+  const SAFE_AHEAD = 260, SAFE_BACK = 80;   // güvenli nokta: önünde ~260 px tehlike olmamalı (doğan oyuncunun tepki payı)
   const PERF_WIN = .08, PERF_T = .7, PERF_MUL = 1.1;   // kusursuz iniş/zıplama penceresi ve hız ödülü
   const DRAFT_MIN = 40, DRAFT_MAX = 160, DRAFT_T = .6, DRAFT_K = .07;   // rüzgâr arkası
   const NM_CD = 2;                 // kıl payı olayı en sık 2 sn'de bir
@@ -350,7 +352,9 @@
     r.lastHitBy = null; r.lastHitT = -9;
     // kilitlenme önleyici: aynı güvenli noktadan arka arkaya çok ölüm → güvenli noktayı ilerideki sağlam zemine taşı
     const lp = r.loop || (r.loop = { sx: -1, n: 0 });
-    if (Math.abs(r.safe.x - lp.sx) < 40) lp.n++; else { lp.sx = r.safe.x; lp.n = 1; }
+    // doğduktan sonraki 3 sn içinde ölmek (oyuncu tepki veremeden) iki kez sayılır → iki hızlı ölümde kurtarma
+    const quick = S.raceT - (r.spawnAt == null ? -9 : r.spawnAt) < 3;
+    if (Math.abs(r.safe.x - lp.sx) < 40) lp.n += quick ? 2 : 1; else { lp.sx = r.safe.x; lp.n = 1; }
     if (lp.n >= (r.bot ? 4 : 3)) {
       const dx = Math.max(r.x, r.safe.x) + 40;
       let best = null;
@@ -381,7 +385,9 @@
     }
   }
   function respawn(r) {
-    r.x = r.safe.x - r.w / 2; r.y = r.safe.y - RH - 1; r.h = RH; r.slide = false; r.vx = RUN * .7; r.vy = 0; r.inv = 1.6; r.onGround = false;
+    // doğunca yarım saniye yerinde hazırlan (oyuncu ne olduğunu görsün; zıplarsa hemen koşar), 2 sn dokunulmaz
+    r.x = r.safe.x - r.w / 2; r.y = r.safe.y - RH - 1; r.h = RH; r.slide = false; r.vx = 0; r.vy = 0; r.inv = 2; r.onGround = false;
+    r.spawnT = SPAWN_T; r.spawnAt = S.raceT;
     r.tp = (r.tp | 0) + 1;
     if (near(r)) FM.fx.puff(cxOf(r), cyOf(r), 10, 'rgba(255,255,255,.9)', 14, 80);
     FM.emit('respawn', { r });
@@ -548,7 +554,8 @@
     if (r.airJ && !r.onGround && r.fly <= 0 && r.dash <= 0) mult *= AIR_MUL;           // zıplayan havada daha yavaş
     if (r.dash > 0) mult = DASH_V * (r.dashX == null ? 1 : r.dashX);   // yönlü atılımda yatay pay
     if (r.bot) mult *= 1 + .035 * Math.sin(S.T * .55 + r.idx * 2.1);   // ortalaması 0: yalnızca görsel ayrışma
-    let tgt = locked ? 0 : RUN * mult;
+    if (r.spawnT > 0) { r.spawnT = (c.jp || c.dp) ? 0 : r.spawnT - dt; }   // hazırlık: zıplarsa/kayarsa hemen koşar
+    let tgt = (locked || r.spawnT > 0) ? 0 : RUN * mult;
     if (r.onBelt && !locked) tgt += 200;
     if (r.pull > 0) tgt = -300;
     if (r.frozen > 0) r.vx *= Math.max(0, 1 - .4 * dt);
@@ -757,10 +764,11 @@
       else if (r.fly > 0) { const gy = groundY(cx, feet); if (gy !== null && gy - feet <= 300) sy = gy; }
       if (sy !== null) {
         let ok = false;
-        for (const s of L.solids) if ((!s.float || s.w >= 200) && cx > s.x + 60 && cx < s.x + s.w - 60 && Math.abs(sy - s.y) < 2) { ok = true; break; }
-        if (ok) for (const s of L.spikes) if (Math.abs(s.x + s.w / 2 - cx) < s.w / 2 + 80) { ok = false; break; }
-        if (ok) for (const k of L.crush) if (Math.abs(k.x + k.w / 2 - cx) < k.w / 2 + 80) { ok = false; break; }
-        if (ok) for (const s of L.saws) if (Math.abs(s.cx - cx) < 110) { ok = false; break; }
+        for (const s of L.solids) if ((!s.float || s.w >= 200) && cx > s.x + 60 && cx < s.x + s.w - 160 && Math.abs(sy - s.y) < 2) { ok = true; break; }
+        const A0 = cx - SAFE_BACK, A1 = cx + SAFE_AHEAD;
+        if (ok) for (const s of L.spikes) if (s.x + s.w > A0 && s.x < A1) { ok = false; break; }
+        if (ok) for (const k of L.crush) if (k.x + k.w > A0 && k.x < A1) { ok = false; break; }
+        if (ok) for (const s of L.saws) if (s.cx + 110 > A0 && s.cx - 110 < A1) { ok = false; break; }
         if (ok) for (const b of L.boulders) if (cx > b.x0 - 80 && cx < b.x1 + 80) { ok = false; break; }
         if (ok && r.onSand) ok = false;
         if (ok) { r.safe.x = cx; r.safe.y = sy; }

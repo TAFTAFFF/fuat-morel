@@ -8,16 +8,20 @@
   const touchNow = () => !!FM.isTouch;   // FM.isTouch core.js'de belirlenir (ui.js ilk dokunuşta güncelleyebilir)
 
   /* ---------- uyarlanır çözünürlük ----------
-     Telefon yarışta yavaşsa çizim çözünürlüğü kademeli düşer (adaptDpr). Karar yarış ortasında verilse bile
-     önbellek yenilemesi (takılma) yarış DIŞINDA uygulanır. Öğrenilen değer kayıtta saklanır.
-     Kalite ayarı 'low' ise hep 1. Yüksek DPR'li ekranlarda alt sınır 1.25 (HUD yazıları bulanıklaşmasın). */
+     Herkes YÜKSEK çözünürlükte oynar: varsayılan cihazın kendi DPR'si (en çok 3). Telefon yarışta çok yavaşsa
+     çözünürlük kademeli düşer ama yüksek DPR'li ekranlarda 2'nin altına inmez (karakterler bulanıklaşmasın).
+     Karar yarış ortasında verilse bile önbellek yenilemesi (takılma) yarış DIŞINDA uygulanır. Öğrenilen değer kayıtta
+     `adaptDpr3` olarak saklanır (eski `adaptDpr` anahtarındaki öğrenilmiş düşük değerler yok sayılır).
+     Kalite ayarı 'low' ise hep 1. */
   const devDpr = () => window.devicePixelRatio || 1;
-  const dprFloor = () => devDpr() >= 2 ? 1.25 : 1;
-  const stepDown = d => d > 1.5 ? 1.5 : d > 1.25 ? 1.25 : 1;
-  const stepUp = d => d < 1.25 ? 1.25 : d < 1.5 ? 1.5 : 2;
+  const DPR_MAX = 3;
+  const dprFloor = () => devDpr() >= 2 ? 2 : 1;
+  const LV = [1, 1.25, 1.5, 2, 2.5, 3];
+  const stepDown = d => { for (let i = LV.length - 1; i >= 0; i--) if (LV[i] < d - 1e-6) return LV[i]; return 1; };
+  const stepUp = d => { for (const v of LV) if (v > d + 1e-6) return v; return DPR_MAX; };
   const settings = () => (FM.save && FM.save.settings) || {};
-  let adaptDpr = 2;
-  { const sv = +settings().adaptDpr; if (sv >= 1 && sv <= 2) adaptDpr = sv; }
+  let adaptDpr = DPR_MAX;
+  { const sv = +settings().adaptDpr3; if (sv >= 1 && sv <= DPR_MAX) adaptDpr = sv; }
   adaptDpr = Math.max(adaptDpr, dprFloor());
   let pendingDpr = 0;
   let lastQuality = settings().quality;
@@ -42,14 +46,14 @@
     const q = settings().quality;
     if (q !== lastQuality) {
       // kullanıcı kaliteyi 'düşük'ten geri aldıysa öğrenilmiş düşük çözünürlüğü unut
-      if (lastQuality === 'low' && q !== 'low') { adaptDpr = 2; pendingDpr = 0; saveDpr(); }
+      if (lastQuality === 'low' && q !== 'low') { adaptDpr = DPR_MAX; pendingDpr = 0; saveDpr(); }
       lastQuality = q;
     }
     const touch = touchNow();
     const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
     let dpr = Math.min(devDpr(), q === 'low' ? 1 : adaptDpr);
-    // dokunmatikte toplam piksel sınırı (tablet / büyük ekran): ~2.4 MP üstüne çıkma
-    if (touch) dpr = Math.min(dpr, Math.max(1, Math.sqrt(2.4e6 / (w * h))));
+    // dokunmatikte toplam piksel sınırı (tablet / büyük ekran): ~3.6 MP üstüne çıkma (telefonlar 3x'e kadar tam çözünürlük)
+    if (touch) dpr = Math.min(dpr, Math.max(1, Math.sqrt(3.6e6 / (w * h))));
     dpr = Math.round(dpr * 100) / 100;
     const key = w + 'x' + h + '@' + dpr + (touch ? 't' : 'm');
     if (key === lastKey && !force) return;   // boyut değişmediyse hiçbir şey yapma (önbellekler korunur, takılma yok)
@@ -82,7 +86,7 @@
   window.addEventListener('resize', () => queueResize(120));
   window.addEventListener('orientationchange', () => queueResize(300));
   FM.resize = function () { resize(true); };   // ui.js (kalite değişimi) çağırır
-  function saveDpr() { try { settings().adaptDpr = adaptDpr; if (FM.persist) FM.persist(); } catch (e) { } }
+  function saveDpr() { try { settings().adaptDpr3 = adaptDpr; if (FM.persist) FM.persist(); } catch (e) { } }
   function applyPendingDpr() {
     if (!pendingDpr) return;
     adaptDpr = pendingDpr; pendingDpr = 0; saveDpr();
@@ -97,7 +101,7 @@
   const cam = { t: null, gy: null };
   /* Kamera ayarları (5. tur, docs/TUR5.md §4): zemin telefonda ekranın üstten ~%71'inde, masaüstünde ~%68'inde
      ("harita üstte kalıyor" şikâyeti); telefonda görünen dünya yüksekliği 400 (karakterler biraz büyük). */
-  const CAM = { VH_TOUCH: 400, KF_TOUCH: .71, KF_DESK: .68 };
+  const CAM = { VH_TOUCH: 520, KF_TOUCH: .71, KF_DESK: .68 };   // VH_TOUCH 520: karakterler Fun Run 4 oranında (ekran yüksekliğinin ~%12'si)
   FM.CAM = CAM;
   function camTarget() {
     if (S.mode === 'demo') { // demoda öndekini izle
@@ -229,7 +233,7 @@
     const cur = pendingDpr || adaptDpr;
     if (perf.slow >= 2 && cur > dprFloor()) {
       pendingDpr = Math.max(dprFloor(), stepDown(cur)); perf.slow = 0; perf.good = 0; perf.downs++;
-    } else if (perf.good >= 12 && perf.downs <= 1 && perf.ups < 1 && cur < 2 && settings().quality !== 'low' && devDpr() > cur) {
+    } else if (perf.good >= 12 && perf.downs <= 1 && perf.ups < 1 && cur < DPR_MAX && settings().quality !== 'low' && devDpr() > cur) {
       // yük kalktı (ör. arka plan uygulaması kapandı): oturum başına bir kez bir kademe geri çık
       pendingDpr = stepUp(cur); perf.good = 0; perf.ups++;
     }

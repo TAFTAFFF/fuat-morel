@@ -38,8 +38,9 @@ Hepsinin hızı, zıplaması ve güç dolumu aynı; fark sadece görünüş ve �
 İlerleme (altın, görevler, geliştirmeler) her oyuncunun kendi tarayıcısında saklanır.
 
 ## Geliştirici
-- `node dev/sim.js 8` — oyun mantığını tarayıcısız simüle eder.
-- `node dev/shot.js "scene=race&t=8&theme=0" cikti.png 1280 720` — headless Chrome ile ekran görüntüsü (scene: race | podium | menu, theme: 0 orman, 1 şeker, 2 kar, 3 kale).
+- `node dev/sim.js 8 [mod] [tema|all] [yarışçı]` — oyun mantığını tarayıcısız simüle eder (ör. `node dev/sim.js 8 elim all 10`; mod: classic, elim, coins, pure, chaos; tema 0-7 ya da id).
+- `node dev/deathloop.js 20 1000 [tema] [mod]` — ölüm döngüsü / bitiremeyen yarışçı avcısı.
+- `node dev/shot.js "scene=race&t=8&theme=0" cikti.png 1280 720` — headless Chrome ile ekran görüntüsü (scene: race | podium | menu, theme: 0 orman, 1 şeker, 2 kar, 3 kale, 4 çöl, 5 uzay, 6 şehir, 7 tropik; mode=elim, n=10 gibi parametreler de olur).
 - `node dev/net-test.js 1` — çok oyunculu ağ katmanını gerçek MQTT aracısına karşı sahte oyuncularla dener (0 EMQX, 1 Mosquitto, 2 HiveMQ, all).
 - `node dev/net-browser.js` — oyunu headless Chrome'da ev sahibi yapıp node oyuncularla aynı odada dener.
 - Modül sözleşmesi: `docs/CONTRACT.md`; çok oyunculu tasarım ve `FM.net` API'si: `docs/MULTIPLAYER.md`.

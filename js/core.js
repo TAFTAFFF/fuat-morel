@@ -13,8 +13,36 @@ window.FM = window.FM || {};
     VH: 540,                     // mantıksal ekran yüksekliği (görünen dünya yüksekliği)
     STEP: 1 / 120                // sabit fizik adımı
   };
-  FM.PTS = [10, 6, 3, 1];
-  FM.TROPHY = [30, 12, -5, -15];
+  /* Puan / kupa tabloları 10 kişilik (FM.MAXR). n kişilik yarışta FM.ptsFor(n) / FM.trophyFor(n) kullan:
+     tablo n sıraya eşit aralıklarla örneklenir (4 kişide puan 15/8/4/1, kupa 30/12/-5/-15 — eski 4 kişilik kupa aynen).
+     Kupa: ilk yarı +, son yarı −; tek sayıda yarışçıda ortadaki 0. */
+  FM.MAXR = 10;
+  FM.PTS = [15, 12, 10, 8, 6, 5, 4, 3, 2, 1];
+  FM.TROPHY = [30, 24, 18, 12, 6, -2, -5, -8, -12, -15];
+  function sampleTable(tab, n) {
+    n = Math.max(1, Math.min(tab.length, n | 0));
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(tab[n === 1 ? 0 : Math.round(i * (tab.length - 1) / (n - 1))]);
+    return out;
+  }
+  FM.ptsFor = n => sampleTable(FM.PTS, n);
+  FM.trophyFor = function (n) {
+    const t = sampleTable(FM.TROPHY, n);
+    if (t.length > 2 && t.length % 2 === 1) t[(t.length - 1) / 2] = 0;
+    return t;
+  };
+
+  /* ---------------- oyun modları (S.gameMode) ---------------- */
+  FM.MODES = [
+    { id: 'classic', n: 'Klasik Yarış', ic: '🏁', d: 'Bitişe ilk varan kazanır.' },
+    { id: 'elim',    n: 'Eleme',        ic: '🚪', d: 'Eleme kapılarından en son geçen elenir. Son kalan ya da bitişe ilk varan kazanır.' },
+    { id: 'coins',   n: 'Altın Avı',    ic: '🪙', d: '75 saniyede en çok altını topla! Ölünce altınının %20\'sini düşürürsün; bitişe varan +15 altın alır.' },
+    { id: 'pure',    n: 'Saf Parkur',   ic: '🧗', d: 'Eşya kutusu yok, yalnızca özel güç. Daha teknik bir harita.' },
+    { id: 'chaos',   n: 'Kaos',         ic: '☄️', d: 'Kutular hemen yenilenir, güç iki kat hızlı dolar, gökten meteor yağar!' }
+  ];
+  FM.modeById = id => FM.MODES.find(m => m.id === id) || null;
+  FM.COINS_TIME = 75;      // Altın Avı süresi (sn)
+  FM.COINS_FINISH = 15;    // Altın Avı'nda bitişe varana bonus altın
 
   /* ---------------- eşyalar ---------------- */
   // col: eşyanın tema rengi (HUD/çizim için)
@@ -23,7 +51,7 @@ window.FM = window.FM || {};
     dyn:     { ic: '🧨', n: 'Dinamit',       col: '#e23b3b', d: 'İleri fırlatılır, 1 sn sonra patlar. Yakındaysan sen de gidersin.' },
     trap:    { ic: '🪤', n: 'Ayı Tuzağı',    col: '#9aa3b2', d: 'Arkana bırakılır. Basan ölür (sen dahil).' },
     mis:     { ic: '🚀', n: 'Güdümlü Füze',  col: '#ff6b3d', d: 'Lideri (lider sensen ikinciyi) kovalar ve patlar.' },
-    bolt:    { ic: '🌩️', n: 'Yıldırım',      col: '#ffe14d', d: 'Önündeki herkesin üstünde bulut belirir, 1.8 sn sonra çakar. Kalkan ve balon korur.' },
+    bolt:    { ic: '🌩️', n: 'Yıldırım',      col: '#ffe14d', d: 'Önündeki rakiplerin (en yakın 4 kişi) üstünde bulut belirir, 1.8 sn sonra çakar. Kalkan ve balon korur.' },
     ice:     { ic: '❄️', n: 'Kar Fırtınası', col: '#9be7ff', d: 'Diğer herkesi 2.2 sn dondurur, buzda kayarlar.' },
     mag:     { ic: '🧲', n: 'Mıknatıs',      col: '#c084fc', d: 'Öndekileri sana doğru geri çeker.' },
     net:     { ic: '🕸️', n: 'Elektrik Ağı',  col: '#7be3ff', d: 'Havaya kurulur, yakalananı 1.5 sn tutar.' },
@@ -62,18 +90,35 @@ window.FM = window.FM || {};
 
   /* ---------------- temalar ---------------- */
   // Renderer'lar ek alanları kendi içinde id'ye göre tanımlayabilir; burada çekirdek palet var.
+  // Dizinin SIRASI kalıcıdır (ağda tema indeksle gider): yeni tema yalnızca SONA eklenir.
+  // base: yeni temalar için en yakın eski tema (render-world henüz bilmediği temayı geçici olarak bununla çizebilir).
+  // mech: haritanın özel mekaniği (arayüzde harita seçiminde gösterilebilir).
   FM.THEMES = [
-    { id: 'forest', n: 'Çılgın Orman',      liquid: 'water',     sky: ['#3d9cf5', '#8fd0ff', '#e3f6ff'] },
-    { id: 'candy',  n: 'Şeker Diyarı',      liquid: 'chocolate', sky: ['#ff8fc8', '#ffc0e3', '#fff1fa'] },
-    { id: 'snow',   n: 'Karlı Zirve',       liquid: 'icewater',  sky: ['#5b93dc', '#a9cdf3', '#eef6ff'] },
-    { id: 'castle', n: 'Gün Batımı Kalesi', liquid: 'lava',      sky: ['#2b1a4a', '#ff6f61', '#ffc778'] }
+    { id: 'forest', n: 'Çılgın Orman',      liquid: 'water',     sky: ['#3d9cf5', '#8fd0ff', '#e3f6ff'], mech: 'Mantarlar, yürüyen bantlar, testereler' },
+    { id: 'candy',  n: 'Şeker Diyarı',      liquid: 'chocolate', sky: ['#ff8fc8', '#ffc0e3', '#fff1fa'], mech: 'Çikolata çukurları, zıplatan mantarlar' },
+    { id: 'snow',   n: 'Karlı Zirve',       liquid: 'icewater',  sky: ['#5b93dc', '#a9cdf3', '#eef6ff'], mech: 'Buzlu zemin: kaygan ve hızlı' },
+    { id: 'castle', n: 'Gün Batımı Kalesi', liquid: 'lava',      sky: ['#2b1a4a', '#ff6f61', '#ffc778'], mech: 'Lav çukurları, eziciler' },
+    { id: 'desert', n: 'Çöl Tapınağı',      liquid: 'quicksand', sky: ['#f08a3c', '#ffc27a', '#fff0c8'], base: 'castle', mech: 'Yuvarlanan kayalar, bataklık kum' },
+    { id: 'space',  n: 'Uzay İstasyonu',    liquid: 'plasma',    sky: ['#0b0a2a', '#2a1a6a', '#5a3aa0'], base: 'castle', mech: 'Düşük yerçekimi, ışınlanma kapıları' },
+    { id: 'city',   n: 'Gece Şehri',        liquid: 'neon',      sky: ['#0d1033', '#3a1f6e', '#ff5fa2'], base: 'castle', mech: 'Çatı trambolinleri, rüzgâr bacaları' },
+    { id: 'tropic', n: 'Tropik Ada',        liquid: 'water',     sky: ['#1fb5e8', '#7fe0f5', '#e8fbff'], base: 'forest', mech: 'Gayzerler, sallanan köprüler' }
   ];
-  // Her temada üretilecek dekor tipleri (render-world.js hepsini çizmek ZORUNDA)
+  FM.themeIndex = function (v) {
+    if (typeof v === 'number' && isFinite(v)) return ((v | 0) % FM.THEMES.length + FM.THEMES.length) % FM.THEMES.length;
+    const i = FM.THEMES.findIndex(t => t.id === v);
+    return i >= 0 ? i : -1;
+  };
+  // Her temada üretilecek dekor tipleri (render-world.js hepsini çizmek ZORUNDA; bilinmeyen tip çizilmeden atlanır)
   FM.DECOR = {
     forest: { back: ['tree', 'tree2', 'bush', 'rock_big'],          front: ['flower', 'grass', 'mushroom_s', 'rock', 'sign'] },
     candy:  { back: ['lollipop', 'candycane', 'cupcake', 'gumtree'], front: ['gumdrop', 'sprinkle', 'candy', 'donut'] },
     snow:   { back: ['pine', 'pine_big', 'snowman', 'iceblock'],     front: ['snowtuft', 'crystal', 'rock_snow', 'lantern'] },
-    castle: { back: ['banner', 'torch', 'pillar', 'statue'],         front: ['barrel', 'crate', 'skull', 'weed'] }
+    castle: { back: ['banner', 'torch', 'pillar', 'statue'],         front: ['barrel', 'crate', 'skull', 'weed'] },
+    // yeni temalar (adlar render-world ile sözleşme: docs/MULTIPLAYER.md "Uygulama Notları")
+    desert: { back: ['obelisk', 'temple_pillar', 'cactus_big', 'sphinx'],     front: ['cactus_s', 'urn', 'bones', 'dry_bush'] },
+    space:  { back: ['antenna', 'fuel_tank', 'sat_dish', 'reactor'],         front: ['sci_crate', 'cables', 'floor_lamp', 'canister'] },
+    city:   { back: ['streetlamp', 'neon_sign', 'water_tower', 'crane'],      front: ['trash_can', 'hydrant', 'traffic_cone', 'ac_unit'] },
+    tropic: { back: ['palm', 'palm_big', 'tiki', 'beach_hut'],               front: ['shell', 'starfish', 'beach_grass', 'coconut'] }
   };
 
   /* ---------------- kozmetik (görsel, güç vermez) ---------------- */
@@ -170,6 +215,9 @@ window.FM = window.FM || {};
     return {
       v: 2, coins: 300, gems: 10, xp: 0, level: 1,
       selChar: 'TAFTAF', rounds: 3,
+      mode: 'classic',          // tek oyunculu son seçilen mod (FM.MODES id)
+      map: 'random',            // tek oyunculu son seçilen harita: 'random' | FM.THEMES id
+      rivals: 3,                // tek oyunculu rakip (bot) sayısı 1..9
       trophies,
       upgrades: {},             // meta.js doldurur: { key: level } veya { 'key:charId': level }
       owned: { skins: { }, trails: ['none', 'dust'], plates: ['basic'] }, // skins: { charId: ['klasik', ...] }
@@ -210,6 +258,9 @@ window.FM = window.FM || {};
       if (typeof s.equipped.plate !== 'string') s.equipped.plate = d.equipped.plate;
       s.settings = Object.assign({}, d.settings, obj(s.settings) ? s.settings : {});
       if (typeof s.selChar !== 'string' || !FM.CH[s.selChar]) s.selChar = 'TAFTAF';
+      if (!FM.modeById(s.mode)) s.mode = 'classic';
+      if (s.map !== 'random' && FM.themeIndex(s.map) < 0) s.map = 'random';
+      s.rivals = Math.max(1, Math.min(FM.MAXR - 1, Math.round(num(s.rivals, d.rivals))));
       return s;
     } catch (e) {
       try { console.warn('[kayıt] bozuk kayıt yok sayıldı', e); } catch (e2) { }

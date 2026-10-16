@@ -174,3 +174,99 @@ x→x, y→y, vx→vx, vy→vy, h→h, face→fc, onGround→g, slide→sl, clim
 Start mesajı herkese 3–6 ms farkla ulaştı (ev sahibi dahil).
 
 **Testler.** `node dev/net-test.js [0|1|2|all|cerceve]` — node sahte oyuncular, gerçek aracı: kurma, katılma, lobi eşitlemesi, ayar/hazır/profil, start, durum akışı + ara değerleme, olay/emoji, yok oda, sürüm, üye kopması, ev sahibi kısa kopması, ev sahibi düşüp göç, eski ev sahibinin dönüşü, end/next/toLobby, aynı pid ikinci oturum, atma, 10 kişilik dolu oda, retain temizliği (+ çevrimdışı MQTT çerçeve testi). `node dev/net-browser.js [aracı]` — gerçek oyun sayfası headless Chrome'da (1 Chrome) ev sahibi + 2 node oyuncu; sayfa dondurma (telefon arka planı) → göç → geri dönüş, `?oda=` linki, konsol hataları.
+
+### Motor — modlar, yeni haritalar, 10 yarışçı (motor ajanı: core.js, level.js, game.js, main.js, dev/)
+Tek oyunculu (botlarla) tamamen çalışır; ağ entegrasyonu henüz YOK ama aşağıdaki kancalar onun için kuruldu. Eski 4 temada klasik haritalar birebir aynı (aynı seed → önceki sürümle aynı harita; kar yalnızca ayrı bir RNG ile buz parçası kazandı).
+
+**Başlatma.** `FM.game.startMatch({char, rounds, mode, theme, n, seed?, auto?})`
+- `mode` ∈ `classic | elim | coins | pure | chaos` (yoksa `FM.save.mode`, o da yoksa classic).
+- `theme`: `'random'` (her tur farklı, yalnızca "hazır" temalardan — aşağıda `readyThemes`) | indeks 0..7 | id (`'desert'`) → o tema TÜM turlarda. Yoksa `FM.save.map` (varsayılan 'random'). Eski `themeIdx` (geliştirici) hâlâ kabul edilir.
+- `n`: toplam yarışçı 2..10 (yoksa `FM.save.rivals + 1`, varsayılan 4). 7'den fazla yarışçıda karakterler tekrar eder: ikinci kopya `name = nick = 'Kral 2'`, bot kopyalarına farklı kostüm.
+- Tur başına tema `S.themeSeq[round-1]`; `game.next()` aynı modda sonraki tura geçer. `startMatch` her seferinde `S.netRole = null` yapar.
+
+**core.js**
+- `FM.MAXR = 10`. `FM.PTS = [15,12,10,8,6,5,4,3,2,1]`, `FM.TROPHY = [30,24,18,12,6,-2,-5,-8,-12,-15]`. n kişilik tablo: `FM.ptsFor(n)`, `FM.trophyFor(n)` (eşit aralıklı örnekleme; 4 kişi: puan 15/8/4/1, kupa 30/12/-5/-15 — eski kupa aynen; tek sayıda ortadaki kupa 0). PTS/TROPHY'yi doğrudan indekslemeyin.
+- `FM.MODES = [{id, n, ic, d}]` (Türkçe ad/açıklama, arayüzde aynen gösterilebilir), `FM.modeById(id)`. `FM.COINS_TIME = 75`, `FM.COINS_FINISH = 15`.
+- `FM.THEMES` 8 tema; SIRA KALICI (ağda indeks gider; yeni tema yalnızca sona). Yeni alanlar: `mech` (kısa Türkçe mekanik açıklaması, hepsinde), `base` (yalnızca yeni temalarda: desert/space/city → 'castle', tropic → 'forest'; render-world bilmediği temayı geçici olarak bununla çizebilir). Yeni sıvılar: desert `quicksand`, space `plasma`, city `neon`, tropic `water`.
+- `FM.themeIndex(v)` → indeks ya da -1 (sayı veya id kabul eder).
+- `FM.DECOR` yeni tipler (render-world hepsini çizmeli; bilinmeyen tip şimdilik atlanıyor):
+  desert back `obelisk, temple_pillar, cactus_big, sphinx` / front `cactus_s, urn, bones, dry_bush` ·
+  space back `antenna, fuel_tank, sat_dish, reactor` / front `sci_crate, cables, floor_lamp, canister` ·
+  city back `streetlamp, neon_sign, water_tower, crane` / front `trash_can, hydrant, traffic_cone, ac_unit` ·
+  tropic back `palm, palm_big, tiki, beach_hut` / front `shell, starfish, beach_grass, coconut`.
+- `FM.ALLBITS = 1023` (level.js; 10 yarışçının altın biti).
+- Kayıt: `FM.save.mode` ('classic'), `FM.save.map` ('random' | tema id), `FM.save.rivals` (1..9, varsayılan 3) — yoksa varsayılanla eklenir, bozuksa düzeltilir. Arayüz tek oyunculu seçimleri buraya yazıp `startMatch`'i parametresiz de çağırabilir.
+- `FM.ITEMS.bolt.d` güncellendi: yıldırım artık en yakın 4 öndekini vurur.
+
+**Harita** `FM.genLevel(round, {seed, theme, mode, len?})` — yalnızca (seed, tema, mod, len) ile belirlenir, yarışçı sayısından bağımsız; Math.random kullanmaz. Uzunluk ~16 bin (Altın Avı ~22 bin). Tüm yeni diziler her zaman var (boşsa `[]`), `L.mode` da var. Bölüm havuzu temaya göre: çöl ezici yerine kaya + kum çukuru, rota çamuru yerine bataklık kum; uzay + düşük yerçekimi çukuru + ışınlanma; şehir + çatı trambolini + rüzgâr bacası; tropik + gayzer + köprü; kar = eski harita + buz. Saf Parkur: kutu yok, daha çok duvar/platform/ezici/testere. Altın Avı: ~4 kat altın (kümeler, `stairs` yüksek yol basamakları). Kaos: kutular ~2 kat sık. Eleme: parkurun %24/44/64/84'ünde düz zeminde kapı.
+
+**Yeni öğeler: fizik + ÇİZİM sözleşmesi** (koordinatlar dünya; "y = zemin üstü" = yürünen yüzey)
+| Öğe | Veri | Fizik (game.js) | Çizim isteği |
+|---|---|---|---|
+| buz (kar) | `ice [{x,y,w}]` | üstünde hız ×1.1 (kayarken ×1.3), hızlanma ×0.35, yavaşlama ×0.15 (kayar) | zemin yüzeyinde parlak mavi-beyaz buz tabakası, x..x+w |
+| bataklık kum (çöl) | `quicksand [{x,y,w}]` | hız ×0.45, zıplama ×0.82; güvenli nokta sayılmaz | zemine gömülü koyu, kabarcıklı/dönen kum çukuru, x..x+w (rota içinde genişi de olur) |
+| kaya (çöl) | `boulders [{x0,x1,y,r=30,sp,warn,per,ph, bx,by,st,k,rot}]` | st 2'de değen ölür (yer tehlikesi: ertan kızağı/TAFTAF atılımı/kalkan korur). Döngü `game.boulderAt(b, t)` (saf) | x1'in hemen sağında tapınak kapısı/tünel ağzı (yüksekliği ~2r+20). st 0: kapı karanlık; st 1 (k 0→1, 0.8 sn): kapı sarsılır + toz, kaya kapıda (bx = x1+2r→x1) yarı görünür; st 2: (bx,by) merkezli kaya, `rot` radyan döner, arkasında toz; x0'da parçalanma efekti (k→1) |
+| rüzgâr bacası (şehir) | `vents` `kind:'lift'` (hep `act`) | bölgede (x..x+w, y-h..y) yukarı ivme, en fazla 700 px/sn tırmanış; yüksek duvarın dibinde → asansör | duvar dibinde ızgaralı baca ağzı (x..x+w, y'de) + yukarı akan hava çizgileri/yapraklar, h boyunca |
+| gayzer (tropik) | `vents` `kind:'burst'`, `per,on,ph`, anlık `act,k` | `act` iken ağzın üstünden geçen yukarı fırlar (vy −1250, tuş basılı sayılır) → yukarıdaki altınlı platform | ağız (x..x+w, y): k 0→1 kabarcık/titreme (fışkırma öncesi 0.6 sn), act iken ~h yüksekliğinde su/buhar sütunu |
+| ışınlanma (uzay) | `portals [{ax,ay,bx,by,r=22,h=38}]` | A elipsine (ax±r, ay±h; havada, zıplayınca) giren B'ye taşınır (`r.tp++`, 1 sn bekleme) | A: (ax,ay) merkezli mor dönen halka/elips; B: (bx, by−40) merkezli turkuaz çıkış halkası (yerde). İkisini ince noktalı yay ile bağlamak okunabilirliği artırır |
+| düşük yerçekimi (uzay) | `lowg [{x,w}]` | gövde merkezi x..x+w içindeyken yerçekimi ×0.55 | bölge boyunca hafif mor/yıldızlı dikey sis + yukarı süzülen parçacıklar (tüm yükseklik) |
+| trambolin (şehir) | `tramp [{x,y,w=60,sq}]` | mantar gibi, vy −1400, tuş basılı sayılır → çatılar arası boşluğu hep aşar; `mush {r, kind:'tramp'}` | çatı kenarında çerçeveli trambolin; sq>0 iken esneme (sq en çok 0.35) |
+| köprü (tropik) | `bridges [{x,y,w}]` + solids'te `{float:true, bridge:true}` | normal yüzen zemin | `bridge` katısını yüzen platform gibi ÇİZME; halat + tahtalı sallanan köprü çiz (görsel sallanma) |
+| eleme kapısı | `gates [{x,y,n,off,pass,done}]` | x'i geçen kaydedilir (`r.gates`), eleme `checkGates` | x'te zeminde (y) büyük kemer/kapı; `off`: soluk/gri (bu yarışçı sayısında kullanılmıyor); açık iken yeşil/parlak; `done`: kapanmış/kırmızı. HUD sırada kaç kişinin geçtiğini `pass` ile gösterebilir |
+| düşen altın (Altın Avı) | `coins` öğesi `{drop:true, v, id, t, ready, rest}` | ilk dokunan alır (`got = ALLBITS`), 12 sn ömür | normal altın gibi; `t < 3` iken yanıp sönsün, `v ≥ 3` ise biraz büyük çizilebilir |
+| meteor (kaos) | `S.ents` `{type:'meteor', x,y,t,max,r=62,age}` | t=0'da (x, y−8) merkezli r yarıçaplı patlama (`explode`, sahipsiz, cause 'meteor') | render-fx: yerde (x,y) büyüyen kırmızı uyarı gölgesi (oran 1−t/max), son ~0.5 sn gökten çapraz düşen alevli kaya. Çizince `FM.R.meteorFx = true` yapın (game.js'teki yedek kırmızı parıltı kapanır) |
+
+**Modlar (kurallar, game.js)**
+- `classic`: değişmedi. İlk bitirenden sonra kalanlara 12 sn; 4'ten fazla yarışçıda kişi başı +1.5 sn (10 kişide 21 sn), kaosta +4.
+- `elim`: yalnızca son `min(4, n−1)` kapı etkin (2 kişide 1 kapı). Etkin bir kapıda, hayattaki (elenmemiş) herkesten `k = max(1, floor((kalan−1)/kalan etkin kapı))` kişi dışında hepsi geçince geçemeyen k kişi elenir → son kapıda 1 kişi kalır ve kazanır (`finished`, `place 1`, `finish {survivor:true}`). Güvenlik: ilk geçişten 40 sn sonra en geridekiler elenir. Elenen: `r.out = r.elim = true`, `outN` (sıra), `dead = 1e9` (çizilmez/hedef alınmaz/doğmaz), `eliminated {r, gate}`; oyuncuysa kamera `S.spec`'i izler. Sıralama: bitirenler → kalanlar (x) → elenenler (son elenen önde). HERKES sırasına göre puan alır.
+- `coins`: `S.limitT = 75` (kalan `game.timeLeft()`); süre dolunca `timeup {}` + tur biter. Sıralama altına göre (eşitlikte bitiren/önde olan). Bitişe varan +15 (`coins:bonus`) ve onun için yarış biter (12 sn kuralı yok). Ölen altınının %20'sini düşürür (`coins:drop`; çukurda öldüyse son güvenli zemine saçılır). Herkes sırasına göre puan alır. Botlar üstteki altınlar için zıplar.
+- `pure`: kutu yok, başlangıç eşyası yok, özel güç var.
+- `chaos`: kutu bekleme 1.5 sn (normalde 3.5), güç 2 kat hızlı dolar, saldırı eşyaları ×1.7 (savunma ×0.6), 6-8. sn'den itibaren 7-11 sn'de bir 3-5 meteorluk yağmur (hedef: rastgele bir yarışçının 1.25 sn sonraki tahmini yeri ± sapma). Botlar inişten hemen önce zıplayarak kaçar.
+- Kalabalık yarış dengesi (tüm modlar): atılan testere en fazla 2 kişiyi biçip kırılır; yıldırım en yakın 4 öndekini vurur; 5+ kişide (kaos hariç) saldırı eşyası olasılığı %30'a kadar (yıldırım %50) azalır. Sonuç: 10 kişide yarışçı başına ölüm ~1.9 (4 kişide ~2.1).
+
+**Yarışçı alanları (yeni)**: `ctrl` ('local'|'bot'|'remote'), `pid` (null), `nick`, `out`, `elim` (= out; net FIELDS `el`), `outN`, `outT`, `gates` (bit maskesi), `tp` (yeniden doğma ve portalda artar), `onIce`, `onSand`, `inLift`, `bounceT`, `portCd`, `ventCd`. `resetRace` `name/nick/ctrl/pid`'i korur.
+
+**`FM.S` (yeni)**: `gameMode`, `themeSeq`, `lt` (seviye saati: her turun `resetRace`'inde 0, geri sayımda da akar; testere/kaya/gayzer evreleri buna bağlı — `S.T` değil), `limitT`, `spec`, `elimN`, `netRole` (null|'host'|'member'), `meteorT/meteorQ/timeUpSent/dropN` (iç).
+
+**Olaylar (yeni)** — game.js yayınlar:
+`portal {r,i,ax,ay,bx,by}` · `vent {r,i,kind:'lift'|'burst'}` (baca: girişte bir kez; gayzer: her fırlatmada) · `mush {r, kind:'tramp'}` (trambolin; mantar sesi/görevi aynen çalışsın diye 'mush' adıyla) · `gate {r,n}` (etkin kapıdan geçiş) · `eliminated {r,gate}` · `finish {r,place,time,survivor?}` · `meteor:shower {n}` · `meteor:warn {x,y,t}` · `meteor {x,y}` (+ her zamanki `explode {owner:null}`) · `coins:drop {r,x,y,n,key,ids}` · `coins:pick {r,id,n}` · `coins:bonus {r,n}` · `coin {r,x,y,n?,drop?}` (düşen altında n = değer) · `timeup {}` · `match:start`/`race:start`/`race:end` yüklerine `mode` (+ race:end'e `n`).
+
+**`FM.game` (yeni API)**
+| Çağrı | Not |
+|---|---|
+| `startMatch(opts)`, `startRound({seed?, themeIdx?})` | yukarıda. startRound temayı `S.themeSeq`'ten alır |
+| `readyThemes()` | rastgele seçilebilen tema indeksleri: eski 4 + `FM.R.themeReady(id)` true dönen yeni temalar. **render-world yeni bir temayı tam çizebildiğinde `FM.R.themeReady = id => …` tanımlamalı**; o zamana kadar yeni temalar demo/rastgelede çıkmaz, yalnızca açıkça seçilince açılır |
+| `themeSeqFor(theme, rounds, rnd?)` | 'random'/indeks/id → tur başına indeks dizisi (ağda ev sahibi kullanabilir) |
+| `ranking()` | moda göre (yukarıda) |
+| `timeLeft()` | Altın Avı kalan sn, yoksa null |
+| `finishNow()` | yarıştaysa turu o anki sıralamayla bitirir (elenen oyuncuya "Sonuçlara geç" için) |
+| `eliminate(r, gate)` | yarışçıyı ele (ağda üyeler ev sahibinin kararını böyle uygular) |
+| `checkGates()`, `markGates(r)` | eleme kararı (yalnız `netRole !== 'member'`) / x'e göre kapı geçişi kaydı |
+| `spawnMeteor(x, warn?, y?)` | meteor uyarısı başlatır (y verilmezse x'teki en üst zemin); `meteor:warn` yayar |
+| `dropCoins(x, y, n, key)` → ids | key'den deterministik saçılma: aynı key her istemcide aynı parçalar (`key:i`) |
+| `takeDrop(id)` | düşen altını herkes için kaldır (başkası aldı) |
+| `boulderAt(b, t, out?)` | kayanın t seviye saatindeki `{st,k,bx,by}` durumu (saf) |
+| `boulderContact(b, r)`, `inLowG(x)`, `focus()` | yapay zekâ/yardımcı: kaya temas süresi; düşük yerçekimi mi; efekt/kamera odağı (elenmişse izlenen) |
+| `onRemote` (atanır) | `ctrl === 'remote'` yarışçılar için fizik YERİNE her adımda `game.onRemote(r, dt)` çağrılır (geri sayım dahil); ardından yarışta `markGates(r)` |
+| `endRound()`, `die()`, `harm()`, `respawn()`, `nameDupes(racers)` | dışa açık iç fonksiyonlar (ağ/test) |
+
+**main.js**: kamera, oyuncu `out` (ya da `spec`) iken `S.spec`'i izler (game.js her adımda öndeki bitirmemiş yarışçıyı seçer, 150 px eşikle; titremez). `?dev=1&scene=race&mode=elim&n=10&theme=desert` parametreleri eklendi (theme id de olur).
+
+**Ağ entegrasyonu için (sonraki ajan)**
+- Aynı harita: herkes `FM.genLevel(round, {seed, theme: indeks, mode})` (ya da `S.gameMode` + `S.themeSeq` kurup `game.startRound({seed})`). Kadroyu `game.mkRacer(id, idx, bot)` ile kurun; `idx` herkeste aynı sırada olsun (kutu `cd[idx]`, altın biti ve düşen altın `key = idx-ölüm` buna bağlı); uzaklara `ctrl:'remote'`, `pid`, `nick`/`name`; sonra `game.nameDupes` gerekirse. `startMatch` netRole'u sıfırlar → ağ yarışında başlattıktan SONRA `S.netRole = 'host'|'member'` yapın.
+- `S.lt` geri sayım başında 0 → aynı anda başlayan herkeste kaya/testere/gayzer aynı evrede. Geç katılan: `S.lt = start'tan beri geçen süre` (geri sayım 3.6 sn dahil).
+- `S.netRole === 'member'` iken game.js eleme kararı, meteor üretimi ve tur sonu (endRound) YAPMAZ; ev sahibinin yayınlarını uygulayın: `eliminated` → `game.eliminate(r, gate)`, `meteor:warn` → `game.spawnMeteor(x, t, y)` (gecikme kadar t'den düşün), bitiş → `net:end`. Ev sahibinde uzak yarışçının kapı geçişi `markGates` ile ara değerlenmiş x'ten otomatik kaydedilir (~130 ms gecikmeli; istenirse `gate` olayıyla da işaretlenebilir: `r.gates |= 1 << n`).
+- Altın Avı: yerel ölümde game.js zaten düşürür ve `coins:drop {key,x,y,n}` yayar → diğerleri `game.dropCoins(x, y, n, key)`; yerel alım `coins:pick {id}` → diğerleri `game.takeDrop(id)`. Harita altınları yarışçı başına (bit) olduğundan eşitleme gerekmez; uzak altın sayısı durumdaki `co`'dan. Süre: ev sahibi `timeup`'ta bitirir.
+- `r.elim` = `r.out` (FIELDS `el`). Geç katılan izleyici için öneri: yerel yarışçı `out = elim = spec = true`, `dead = 1e9`, `outN = 0` (sıralamada en sonda kalır; sonuçta gösterme) → kamera `S.spec`'i izler.
+
+**Diğer ajanlara istekler**
+- render-world: yeni 4 temanın paleti/arka planı/sıvıları (`quicksand`, `plasma`, `neon`; tropik `water` = deniz), yukarıdaki dekor tipleri ve öğe tablosundaki çizimler; geçici olarak `PAL[theme.id] || PAL[theme.base]` kullanılabilir; hazır olunca `FM.R.themeReady`.
+- render-fx: `meteor` varlığı + `FM.R.meteorFx = true`; portal/gayzer/eleme için olay efektleri isteğe bağlı.
+- render-hud: 10 kişilik HUD; Altın Avı sayacı (`game.timeLeft()`) ve altın sıralaması; elemede kalan kapı/kişi ve "ELENDİN — izliyorsun: `S.spec.name`" + "Sonuçlara geç" (`game.finishNow()`); kürsüde `ptsFor/trophyFor`.
+- ui: tek oyunculu mod/harita/rakip seçimi (`FM.MODES`, `FM.THEMES[i].n/.mech`, `FM.save.mode/map/rivals`, `startMatch({mode, theme, n})`); yardım ekranındaki puan tablosu `FM.ptsFor(4)`/`FM.trophyFor(4)` olmalı (şu an PTS/TROPHY'nin ilk 4'ünü gösteriyor → 15/12/10/8 yanlış); sonuçta mod adı.
+- meta: `race:end`'de `playerRank` 0..3'e kırpılıyor → n kişilik ödül (`res.n`); Altın Avı'nda toplanan altın 100-250 (ödül tavanı düşünülebilir), Altın Avı'nda "kazanma" bitişe değil altın sırasına göre (`res.mode === 'coins' && playerRank === 0`).
+- audio: yeni olay sesleri (portal, vent, gate, eliminated, meteor:warn/meteor, coins:drop/pick/bonus, timeup) ve yeni temaların müziği (`theme.base` ile geçici).
+
+**Testler** (`dev/`): `node dev/sim.js N [mod] [tema|all] [yarışçı]` (ör. `node dev/sim.js 8 elim all 10`) — her koşuda NaN/takılma (25 sn ilerlememe) denetimi, mod beklentisi (elemede 1 kalan, diğerlerinde herkes bitirir), olay sayaçları. `node dev/deathloop.js N SEED [tema 0..7|id] [mod]` — bitiremeyenlerin yerini ve son ölümlerini de yazar. Sonuçlar (bu bilgisayar): 5 mod × 8 tema, 4/6/7/10 yarışçı, toplam ~150 yarış: hata 0, takılma 0; klasik ~50-55 sn, eleme ~38-41 sn, Altın Avı 65-75 sn (çoğu bitirir, bazıları süreye takılır), kaos 10 kişide ~67 sn ve herkes bitiriyor. Deathloop 20'şer yarış (çöl/uzay/şehir/tropik/kar): kilitlenme yok (tek "bitiremeyen" bitişe 25 px kala süresi dolan bir yarışçı). Eski 4 temanın 100 klasik haritası önceki üreticiyle birebir aynı.
+
+**Bilinen eksikler**: yeni öğeler ve temalar render-world/render-fx'e kadar görünmez (kaya, gayzer, kapı vb. çizilmiyor; yalnızca meteorun yedek parıltısı var) → bu yüzden yeni temalar rastgele/demoda kapalı (`readyThemes`). HUD/arayüz/meta/ses henüz modları bilmiyor (yukarıdaki istekler). Ağ entegrasyonu yok (kancalar hazır).

@@ -1,6 +1,6 @@
 # FUAT MOREL — Modül Sözleşmesi (tüm ajanlar bunu okumalı)
 
-Fuat Morel, Fun Run 4 tarzı, tarayıcıda oynanan 4 kişilik 2D engelli koşu yarışı. Oyuncu bir klanın 7 üyesinden birini seçer (TAFTAF, Caner, LUL, ertan, Kral, Nuss, baso), diğer 3'ü bot. Oyun GitHub Pages'te yayınlanacak, telefon ve bilgisayardan oynanacak. **Tüm oyun içi metinler TÜRKÇE** (ç, ğ, ı, İ, ö, ş, ü doğru yazılmalı).
+Fuat Morel, Fun Run 4 tarzı, tarayıcıda oynanan 2D engelli koşu yarışı (2-10 yarışçı; tek oyunculuda varsayılan 4, 5 mod, 8 harita). Oyuncu bir klanın 7 üyesinden birini seçer (TAFTAF, Caner, LUL, ertan, Kral, Nuss, baso), diğerleri bot (7'den fazla yarışçıda karakterler tekrar eder) ya da arkadaşlar (çok oyunculu, docs/MULTIPLAYER.md). Oyun GitHub Pages'te yayınlanacak, telefon ve bilgisayardan oynanacak. **Tüm oyun içi metinler TÜRKÇE** (ç, ğ, ı, İ, ö, ş, ü doğru yazılmalı).
 
 ## KALİTE ÇITASI (en önemli kısım)
 Kullanıcının tek şikâyeti: **"görünüş kötü"**. Hedef: Fun Run 4'ten daha kaliteli görünen, olabilecek en kaliteli 2D çizgi film görünümü.
@@ -58,15 +58,18 @@ mode: 'demo' | 'count' | 'race' | 'end' | 'podium' | 'menu'
    demo  = menü arkasında 4 botla dönen tanıtım yarışı (HUD çizilmez)
    count = 3-2-1 geri sayım (S.countT: kalan sn; sayı = ceil(countT-.6), 0 ise "HAZIR/KOŞ")
    race  = yarış; end = tur bitti (1.5 sn); podium = kürsü sahnesi + sonuç paneli
-L: seviye (aşağıda)    racers: [4 yarışçı]   player: oyuncunun yarışçısı (demoda racers[0])
+L: seviye (aşağıda)    racers: [2..10 yarışçı; tek oyunculuda varsayılan 4]   player: oyuncunun yarışçısı (demoda racers[0])
 ents: varlıklar   parts: parçacıklar   rings: halkalar   toasts: [{m,t,max,col}]   feed: [{a,icon,b,t}] (öldürme akışı)
 T: toplam zaman   raceT: yarış süresi   countT   endTimer (null veya kalan sn)   finishedN
 round, ROUNDS   cam:{x,y}   shake (0..~.4)   flash:{a,col}   paused   lastResult (son tur sonucu)   podiumT (kürsü süresi)
+gameMode: 'classic'|'elim'|'coins'|'pure'|'chaos' (FM.MODES)   themeSeq: [tur başına tema indeksi]
+lt: seviye saati (tur başında 0; testere/kaya/gayzer döngüleri buna bağlı)   limitT: süre sınırı sn (Altın Avı 75, yoksa null; kalan = FM.game.timeLeft())
+spec: oyuncu elendiyse kameranın izlediği yarışçı (yoksa null)   elimN: elenen sayısı   netRole: null | 'host' | 'member' (ağ; 'member' dünya kararı vermez)
 ```
 
 ### Yarışçı (racer) alanları
 ```
-id ('TAFTAF'...), name, idx (0..3), bot (bool), x,y (sol-üst), w=28, h (42 ayakta / 22 kayarken), vx, vy
+id ('TAFTAF'...), name, idx (0..9; kutu cd[idx] ve altın biti 1<<idx), bot (bool), x,y (sol-üst), w=28, h (42 ayakta / 22 kayarken), vx, vy
 onGround, jumps (0/1/2), slide, climb, slam, fly (>0 süzülüyor, Nuss), dash (>0 atılım, TAFTAF), sled (>0 kızak, ertan)
 item (FM.ITEMS anahtarı | null), charge (0..100 özel güç), boost (>0 hızlı), shield (>0), balloon (bool), padT (>0 hız pedi)
 dead (>0 ölü — ÇİZME), inv (>0 dokunulmaz; 0<inv<100 iken yanıp sön), stun, frozen (buz bloğu içinde), netted (ağda), slowT (yavaş, nota efekti), pull (mıknatıs), inked
@@ -74,11 +77,15 @@ finished, place, ftime, rp (tur puanı), total, deaths, kills, coins, td (oyuncu
 ph (animasyon fazı, koşarken artar), land (0..1 inişte ezilme, azalır), jumpT (0..1 zıplamada esneme, azalır), face (1 = sağa)
 skin ('klasik'|'altin'|'gece'|'neon'|'buz'), trail (FM.COSMETICS.trails id), plate (FM.COSMETICS.plates id)
 abLv (özel güç seviyesi), chargeMul
+nick (görünen ad; aynı karakterden birden çok yarışçıda name/nick "Kral 2"), ctrl ('local'|'bot'|'remote'), pid (ağ kimliği | null)
+out (bool: ELENDİ → izleyici; dead=1e9 tutulur, çizilmez), elim (= out, ağ alanı), outN (kaçıncı elenen), outT, gates (geçilen kapı bit maskesi)
+tp (ışınlanma sayacı: yeniden doğma/portal → ara değerleme kaydırmasın), onIce, onSand (bataklık kum), inLift (rüzgâr bacasında), bounceT (trambolin/gayzer fırlatması)
 ```
 Ayaklar `y+h`'de, gövde merkezi `x+14`. Karakter görseli çarpışma kutusundan en fazla ~1.3 kat büyük çizilebilir (Fun Run gibi okunaklı olsun, 1.2-1.3 öneriliyor).
 
 ### Seviye `FM.S.L`
-level.js başındaki açıklamaya bak. Özet: `theme {id,n,liquid,sky}`, `solids [{x,y,w,h,float?}]`, `spikes`, `crush` (tavandan sarkan ezici: öldüren bölge {x,y,w,h}, alt kenar zeminin 26 px üstü; zincir yukarı doğru ekran dışına uzanmalı), `saws [{cx,cy,r,amp,sp,ph,px,py}]` (dikey salınan testere makinesi; ray cx'te cy±amp), `boxes [{x,y,w,h,cd}]` (oyuncunun `cd[player.idx]>0` iken soluk/yok göster), `pads`, `mush [{x,y,w,sq}]`, `belts`, `mud`, `coins [{x,y,got}]` (`got & (1<<player.idx)` ise çizme), `decor [{x,y,type,layer,s,flip,seed}]`, `liq` (sıvı yüzeyi y=600, `theme.liquid` ∈ water/chocolate/icewater/lava), `start` (x=60, startY), `end` (bitiş çizgisi x), `finY`.
+level.js başındaki açıklamaya bak. Özet: `theme {id,n,liquid,sky}`, `solids [{x,y,w,h,float?}]`, `spikes`, `crush` (tavandan sarkan ezici: öldüren bölge {x,y,w,h}, alt kenar zeminin 26 px üstü; zincir yukarı doğru ekran dışına uzanmalı), `saws [{cx,cy,r,amp,sp,ph,px,py}]` (dikey salınan testere makinesi; ray cx'te cy±amp), `boxes [{x,y,w,h,cd}]` (oyuncunun `cd[player.idx]>0` iken soluk/yok göster), `pads`, `mush [{x,y,w,sq}]`, `belts`, `mud`, `coins [{x,y,got}]` (`got & (1<<player.idx)` ise çizme), `decor [{x,y,type,layer,s,flip,seed}]`, `liq` (sıvı yüzeyi y=600, `theme.liquid` ∈ water/chocolate/icewater/lava/quicksand/plasma/neon), `start` (x=60, startY), `end` (bitiş çizgisi x), `finY`.
+Yeni (hepsi her zaman dizi): `mode`, `ice [{x,y,w}]` (kaygan buz, kar), `quicksand [{x,y,w}]` (bataklık kum, çöl), `boulders [{x0,x1,y,r,...,bx,by,st,k,rot}]` (yuvarlanan kaya, çöl), `vents [{x,y,w,h,kind:'lift'|'burst',per,on,ph,act,k}]` (rüzgâr bacası/gayzer), `portals [{ax,ay,bx,by,r,h}]` (ışınlanma, uzay), `lowg [{x,w}]` (düşük yerçekimi, uzay), `tramp [{x,y,w,sq}]` (trambolin, şehir), `bridges [{x,y,w}]` (sallanan köprü, tropik; tabanı solids'te `{float,bridge}`), `gates [{x,y,n,off,pass,done}]` (eleme kapısı). Altın Avı'nda ölümde düşen altınlar `coins`'e `{drop:true,v,id,t,...}` olarak eklenir. Ayrıntı ve çizim sözleşmesi: level.js başı + docs/MULTIPLAYER.md "Uygulama Notları → Motor".
 Zemin blokları yüzeyden y=1500'e kadar uzanır; sıvı (liq=600) çukurlarda görünür. Görünür alanın altı (cam.y+VH) en fazla ~690.
 
 ### Varlıklar `FM.S.ents` (type alanına göre)
@@ -93,6 +100,7 @@ flash{strike(x),sy,flash,tgt}             yıldırım çakması (flash = kalan s
 mag  {o,t}                                mıknatıs şarjı (sahibinin etrafında)
 crow {x,y,tgt,fx,age,ph}                  Caner'in kargaları (fx = yön)
 wave {x,y,life,age}                       baso'nun ses dalgası (sağa ilerleyen)
+meteor {x,y,t,max,r,age}                  Kaos meteoru: (x,y) iniş noktası (zemin üstü); t = inişe kalan sn (max'tan 0'a). Yerde büyüyen uyarı gölgesi, son ~0.5 sn gökten düşen kaya. r = öldürme yarıçapı
 ```
 `o` = sahibi yarışçı.
 
@@ -103,14 +111,16 @@ k ∈ `dot | puff | spark | conf | glow | star | note | heart | spade | ice | le
 ## OLAYLAR (`FM.on(ad, fn)`)
 game.js yayınlar (r = yarışçı; çoğu ses/görev için `r === FM.S.player && FM.S.mode !== 'demo'` kontrolü yap):
 ```
-match:start {racers, player, rounds}        race:start {round, rounds, theme}       countdown {n: 3,2,1,0}     go {}
+match:start {racers, player, rounds, mode} race:start {round, rounds, theme, mode}       countdown {n: 3,2,1,0}     go {}
 jump {r, dbl}   land {r, hard}   slide {r}   slam {r}   slamLand {r}   climb {r}   vault {r}   flap {r}
 pad {r}   mush {r}   box {r, item|null}   coin {r,x,y}   item:use {r, item}   ability {r, id}
 hit {victim, src, kind, cause}   blocked {r, by:'shield'|'balloon', src, cause}
 death {r, src, killer, cause, self}   (cause: eşya anahtarı | 'spikes'|'crush'|'saw'| sıvı adı)
 respawn {r}   splash {x,y,liquid,r}   explode {x,y,rad,owner}   trap:snap {e,r}   bolt:strike {r}
-finish {r, place, time}
-race:end {ranking, player, playerRank, round, rounds, theme, trophyDelta, last}
+finish {r, place, time, survivor?}   (survivor: elemede son kalan, bitişe varmadan kazandı)
+race:end {ranking, player, playerRank, round, rounds, theme, trophyDelta, last, mode, n}
+portal {r,i,ax,ay,bx,by}   vent {r,i,kind:'lift'|'burst'}   mush {r, kind:'tramp'} (trambolin)   gate {r,n}   eliminated {r,gate}
+meteor:shower {n}   meteor:warn {x,y,t}   meteor {x,y}   coins:drop {r,x,y,n,key,ids}   coins:pick {r,id,n}   coins:bonus {r,n}   coin {r,x,y,n?,drop?}   timeup {}
 ui:podium (aynı sonuç nesnesi, 1.5 sn sonra; mode='podium')
 match:end {standings, player, champion}
 ui:menu {}   ui:pause {toggle?, force?}   ui:hide {}   boot {}   resize (FM.view)
@@ -118,7 +128,8 @@ ui:menu {}   ui:pause {toggle?, force?}   ui:hide {}   boot {}   resize (FM.view
 meta.js yayınlar: `meta:change {}`, `meta:rewards {rewards}`, `meta:levelup {level}`, `meta:mission {mission}`.
 
 ## OYUN API (`FM.game`)
-`startMatch({char, rounds})`, `next()` (sonraki tur veya maç sonu → 'match:end'), `startDemo()`, `toMenu()` (demoya dön + 'ui:menu'), `quitRace()`, `ranking()`.
+`startMatch({char, rounds, mode, theme: 'random'|indeks|id, n})` (n = toplam yarışçı 2..10; verilmeyenler FM.save.mode/map/rivals'tan), `next()` (sonraki tur veya maç sonu → 'match:end'), `startDemo()`, `toMenu()` (demoya dön + 'ui:menu'), `quitRace()`, `ranking()` (moda göre: Altın Avı'nda altına göre, elemede elenenler sonda), `timeLeft()`, `finishNow()` (turu hemen bitir), ağ/test yardımcıları: docs/MULTIPLAYER.md "Uygulama Notları → Motor".
+Puan/kupa: `FM.PTS`/`FM.TROPHY` 10 kişilik tablolar; n kişilik yarışta `FM.ptsFor(n)`/`FM.trophyFor(n)` kullan (4 kişide puan 15/8/4/1, kupa 30/12/-5/-15).
 Duraklatma: `FM.S.paused = true/false`. Girdi: `FM.input = {jh, jp, dh, dp, use, ab}` — jp/dp/use/ab "basıldı" darbeleri (game tüketir), jh/dh "basılı tutuluyor".
 Klavye main.js'de: Boşluk/↑/W zıpla (basılı tut = tırmanma), ↓/S kayma/çakılma, E/Shift eşya, Q/F özel güç, Esc/P duraklat.
 

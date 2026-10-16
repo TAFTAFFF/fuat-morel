@@ -100,7 +100,10 @@
       for (const r of S.racers) if (!r.finished && r.dead <= 0 && r.x > lead.x) lead = r;
       return lead;
     }
-    return S.player;
+    // oyuncu elendi / izleyici: game.js'in seçtiği izlenen yarışçı (S.spec: öndeki, titremesin diye eşikli)
+    const p = S.player;
+    if (p && (p.out || p.spec) && S.spec && S.racers.indexOf(S.spec) >= 0) return S.spec;
+    return p;
   }
   function updateCamera(dt, snap) {
     const t = camTarget(); if (!t || !S.L) return;
@@ -290,9 +293,10 @@
      Simülasyonu senkron ilerletip tek kare çizer (headless ekran görüntüsü için). */
   function devScene() {
     const P = FM.params, scene = P.scene || 'race', t = +(P.t || 6);
-    const theme = P.theme != null ? +P.theme : undefined;
+    const theme = P.theme != null ? (isFinite(+P.theme) ? +P.theme : P.theme) : undefined;
     if (scene === 'race' || scene === 'podium' || scene === 'hud') {
-      FM.game.startMatch({ char: P.char, rounds: +(P.rounds || 3), theme, themeIdx: theme, auto: P.auto !== '0', seed: P.seed != null ? +P.seed : undefined });
+      FM.game.startMatch({ char: P.char, rounds: +(P.rounds || 3), theme, themeIdx: theme, auto: P.auto !== '0', seed: P.seed != null ? +P.seed : undefined,
+        mode: P.mode, n: P.n != null ? +P.n : undefined });
       FM.emit('ui:hide');
       S.countT = .01;
       const until = scene === 'podium' ? 240 : t;

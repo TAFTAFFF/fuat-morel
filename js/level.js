@@ -3,66 +3,139 @@
 (function (FM) {
   const { clamp } = FM;
 
-  /* Seviye veri yapısı (renderer'lar bunu okur):
-     theme     : FM.THEMES öğesi
-     solids    : [{x,y,w,h,float?}]       zemin blokları (y = üst yüzey). float=true -> havada platform (h=22)
+  /* Seviye veri yapısı (renderer'lar bunu okur). Harita YALNIZCA (seed, tema, mod, len) ile belirlenir (deterministik:
+     aynı girdi → her cihazda aynı harita; ağda yarış bu sayede eşitlenir). Yarışçı sayısına bağlı değildir.
+     theme     : FM.THEMES öğesi                mode : 'classic'|'elim'|'coins'|'pure'|'chaos'
+     solids    : [{x,y,w,h,float?,bridge?}]  zemin blokları (y = üst yüzey). float=true -> havada platform (h=22)
+                                           bridge=true -> tropik sallanan köprünün yürünen tabanı (L.bridges ile aynı yer)
      spikes    : [{x,y,w,h}]              yer dikenleri (her 36 px bir diken), y = diken tepesi
      crush     : [{x,y,w,h}]              tavandan sarkan ezici. ÖLDÜREN bölge {x,y,w,h}; alt kenarı (y+h) zeminin 26 px üstü
      saws      : [{cx,cy,r,amp,sp,ph,px,py}] dikey salınan testere makinesi (px,py anlık merkez)
-     boxes     : [{x,y,w,h,cd:[4]}]        eşya kutuları (her yarışçı için ayrı bekleme süresi cd[idx])
+     boxes     : [{x,y,w,h,cd:[10]}]       eşya kutuları (her yarışçı için ayrı bekleme süresi cd[idx])
      pads      : [{x,y,w}]                 hız pedi (y = zemin üstü)
      mush      : [{x,y,w,sq}]              zıplatan mantar (y = zemin üstü, sq>0 iken ezilme animasyonu)
      belts     : [{x,y,w}]                 ileri iten yürüyen bant
      mud       : [{x,y,w}]                 yavaşlatan çamur
      coins     : [{x,y,got}]               altın (merkez x,y). got = bit maskesi: (got & (1<<racer.idx)) ise o yarışçı almış.
                                            Ekranda yalnızca OYUNCUNUN almadıkları çizilir.
+                                           Altın Avı'nda ölümde düşen altınlar da buraya eklenir: {x,y,got,drop:true,v,id,t,vx,vy}
+                                           (v = değeri, t = kalan ömür sn; biri alınca got = FM.ALLBITS → kimseye çizilmez)
      decor     : [{x,y,type,layer:'back'|'front',s,flip,seed}]  süs (çarpışmasız). y = zemin üstü (taban noktası)
-     liq       : sıvı yüzeyinin y'si (çukurlarda görünen su/lav/çikolata). Düşen yarışçı burada ölür.
+     liq       : sıvı yüzeyinin y'si (çukurlarda görünen su/lav/çikolata...). Düşen yarışçı burada ölür.
      start     : başlangıç çizgisi x, startY: başlangıç zemini y
      end       : bitiş çizgisi x, finY: bitiş zemini y
      len       : toplam genişlik
+     --- yeni öğeler (hepsi her zaman dizi; yoksa boş) ---
+     ice       : [{x,y,w}]                 kaygan buz zemin (kar). y = zemin üstü
+     quicksand : [{x,y,w}]                 bataklık kum (çöl; çamurdan daha yavaşlatır, zıplama zayıflar). y = zemin üstü
+     boulders  : [{x0,x1,y,r,sp,warn,per,ph, bx,by,st,k,rot}] yuvarlanan kaya (çöl). Kaya x1'deki tapınak kapısından çıkıp
+                                           sola (koşuculara doğru) x0'a kadar yuvarlanır ve orada parçalanır. y = zemin üstü.
+                                           Anlık: bx,by = merkez; st: 0 içeride (yok), 1 uyarı (kapı sarsılıyor, k = 0..1 ilerleme,
+                                           kaya kapıda yarı görünür ve ZARARSIZ), 2 yuvarlanıyor (ÖLDÜRÜR; k = yol ilerlemesi 0..1); rot = dönüş açısı
+     vents     : [{x,y,w,h,kind,per,on,ph, act,k}] yukarı iten akım. Bölge x..x+w, (y-h)..y; y = ağız (zemin üstü).
+                                           kind 'lift' = rüzgâr bacası (şehir; hep açık, sürekli kaldırır);
+                                           kind 'burst' = gayzer (tropik; per sn'lik döngünün ilk 'on' sn'si fışkırır, fırlatır).
+                                           Anlık: act = şu an etkin mi, k = 0..1 (gayzerde fışkırma öncesi 0.6 sn'lik uyarı ilerlemesi; etkinken 1)
+     portals   : [{ax,ay,bx,by,r,h}]       ışınlanma kapısı (uzay). A merkezi (ax,ay) havada (zıplayarak girilir), yarıçap r × yarı yükseklik h;
+                                           B çıkışı yerde: (bx, by) = çıkış zemini noktası (kapı görseli by-40 civarı)
+     lowg      : [{x,w}]                   düşük yerçekimi bölgesi (uzay; yerçekimi ×0.55), tüm yükseklik
+     tramp     : [{x,y,w,sq}]              trambolin (şehir çatıları; mantar gibi ama daha güçlü). sq>0 iken esneme animasyonu
+     bridges   : [{x,y,w}]                 sallanan halat köprü (tropik) — yürünen taban solids'te {float,bridge}
+     gates     : [{x,y,n, off,pass,done}]  eleme kapısı (yalnız 'elim'). y = zemin üstü. Yarışta: off = bu yarışçı sayısında
+                                           kullanılmıyor (soluk çiz), pass = geçenlerin sayısı, done = kapı kapandı (eleme yapıldı)
   */
+  const BASE = ['flat', 'pad', 'gap', 'gap', 'step', 'wall', 'drop', 'spikes', 'spikes', 'crush', 'crush', 'belt', 'route', 'route', 'plat', 'saw'];
+  const TECH = ['flat', 'gap', 'gap', 'step', 'wall', 'wall', 'drop', 'spikes', 'spikes', 'crush', 'crush', 'route', 'plat', 'plat', 'saw', 'saw'];
+  // bu bölümlerden sonra iniş noktası belirsiz: hemen ardından tehlike gelmesin
+  const LANDY = { route: 1, drop: 1, plat: 1, wall: 1, step: 1, gap: 1, lowg: 1, portal: 1, roof: 1, chimney: 1, geyser: 1, bridge: 1, stairs: 1, boulder: 1 };
+  const HAZ = { spikes: 1, crush: 1, saw: 1, boulder: 1, portal: 1 };
+  function poolFor(themeId, mode) {
+    let p = (mode === 'pure' ? TECH : BASE).slice();
+    switch (themeId) {
+      case 'desert': p = p.map(t => t === 'crush' ? 'boulder' : t).concat(['sandpit', 'sandpit']); break;
+      case 'space': p = p.concat(['lowg', 'lowg', 'portal', 'portal']); break;
+      case 'city': p = p.concat(['roof', 'roof', 'roof', 'chimney', 'chimney']); break;
+      case 'tropic': p = p.concat(['geyser', 'geyser', 'bridge', 'bridge']); break;
+    }
+    if (mode === 'coins') p = p.concat(['stairs', 'stairs', 'plat', 'route']);
+    return p;
+  }
+  FM.ALLBITS = (1 << FM.MAXR) - 1;
+
   FM.genLevel = function (rd, opts) {
     opts = opts || {};
     const seed = opts.seed != null ? opts.seed : ((Math.random() * 1e9) | 0);
     const rnd = FM.mulberry32(seed);
+    const rndB = FM.mulberry32((seed ^ 0x5bd1e995) | 0);   // ek süsler (buz vb.): ana dizi değişmesin → eski haritalar aynı kalır
     const R = (a, b) => a + rnd() * (b - a), I = (a, b) => Math.floor(R(a, b + 1));
-    const theme = opts.theme != null ? FM.THEMES[opts.theme % FM.THEMES.length] : FM.THEMES[(rd - 1 + FM.S.themeOff) % FM.THEMES.length];
-    const L = { theme, seed, solids: [], spikes: [], crush: [], saws: [], boxes: [], pads: [], mush: [], belts: [], mud: [], coins: [], decor: [], liq: 600, start: 60, startY: 460, end: 0, finY: 460, len: 0 };
+    const RB = (a, b) => a + rndB() * (b - a);
+    // tema: indeks (sayı ya da sayı metni) veya id ('desert'); verilmezse tur + S.themeOff ile dönüşümlü
+    let ti = -1;
+    if (opts.theme != null) ti = FM.themeIndex(typeof opts.theme === 'string' && !isFinite(+opts.theme) ? opts.theme : +opts.theme);
+    const theme = ti >= 0 ? FM.THEMES[ti] : FM.THEMES[(rd - 1 + FM.S.themeOff) % FM.THEMES.length];
+    const mode = FM.modeById(opts.mode) ? opts.mode : 'classic';
+    const tid = theme.id;
+    const L = {
+      theme, seed, mode, solids: [], spikes: [], crush: [], saws: [], boxes: [], pads: [], mush: [], belts: [], mud: [], coins: [], decor: [],
+      ice: [], quicksand: [], boulders: [], vents: [], portals: [], lowg: [], tramp: [], bridges: [], gates: [],
+      liq: 600, start: 60, startY: 460, end: 0, finY: 460, len: 0
+    };
     let x = 0, gy = 460, prev = '';
-    const BOX_GAP = 2400;   // kutular arası en az mesafe: yarışçı başına yarışta ~5-6 eşya (çok sık olunca yarış kaosa dönüyor)
+    const noBox = mode === 'pure';
+    const coinsM = mode === 'coins';
+    // kutular arası en az mesafe: yarışçı başına yarışta ~5-6 eşya (çok sık olunca yarış kaosa dönüyor). Kaos: çok daha sık
+    const BOX_GAP = mode === 'chaos' ? 1300 : 2400;
     let lastBox = 1200 - BOX_GAP;   // ilk kutu ~1200. px'ten sonra (başlangıç eşyası kilidi bittikten sonra)
     const ground = w => { L.solids.push({ x, y: gy, w, h: 1500 - gy }); const s = x; x += w; return s; };
-    const box = (bx, by) => { L.boxes.push({ x: bx - 16, y: by - 16, w: 32, h: 32, cd: [0, 0, 0, 0] }); lastBox = bx; };
-    const coinRow = (x0, y0, n, dx) => { for (let i = 0; i < n; i++) L.coins.push({ x: x0 + i * dx, y: y0, got: 0 }); };
-    const coinArc = (x0, x1, y0, h, n) => { for (let i = 0; i < n; i++) { const t = n === 1 ? .5 : i / (n - 1); L.coins.push({ x: x0 + (x1 - x0) * t, y: y0 - Math.sin(t * Math.PI) * h, got: 0 }); } };
+    const box = (bx, by) => { if (noBox) return; L.boxes.push({ x: bx - 16, y: by - 16, w: 32, h: 32, cd: new Array(FM.MAXR).fill(0) }); lastBox = bx; };
+    const coinRow = (x0, y0, n, dx) => { if (coinsM) { n += 2; x0 -= dx; } for (let i = 0; i < n; i++) L.coins.push({ x: x0 + i * dx, y: y0, got: 0 }); };
+    const coinArc = (x0, x1, y0, h, n) => { if (coinsM) n += 2; for (let i = 0; i < n; i++) { const t = n === 1 ? .5 : i / (n - 1); L.coins.push({ x: x0 + (x1 - x0) * t, y: y0 - Math.sin(t * Math.PI) * h, got: 0 }); } };
+    // Altın Avı: zıplama yüksekliğinde altın kümesi (2 sıra)
+    const cluster = (cx, gyy) => { for (let r = 0; r < 2; r++) for (let i = 0; i < 4; i++) L.coins.push({ x: cx - 45 + i * 30, y: gyy - 95 - r * 32, got: 0 }); };
     ground(700);
-    const len = opts.len || 15500;
-    const pool = ['flat', 'pad', 'gap', 'gap', 'step', 'wall', 'drop', 'spikes', 'spikes', 'crush', 'crush', 'belt', 'route', 'route', 'plat', 'saw'];
+    const len = opts.len || (coinsM ? 21000 : 15500);
+    const pool = poolFor(tid, mode);
+    // eleme kapıları: parkurun %24/44/64/84'ünde düz bir bölüm
+    const gateAt = mode === 'elim' ? [.24, .44, .64, .84].map(f => f * len) : [];
     while (x < len) {
+      if (gateAt.length && x >= gateAt[0]) {
+        gateAt.shift();
+        const w = R(380, 460), s = ground(w);
+        L.gates.push({ x: s + w / 2, y: gy, n: L.gates.length, off: false, pass: 0, done: false });
+        prev = 'flat';
+        continue;
+      }
       let t = pool[I(0, pool.length - 1)];
       const afterRoute = prev === 'route';
       if (t === prev && t !== 'gap') t = 'flat';
-      if (['route', 'drop', 'plat', 'wall', 'step', 'gap'].includes(prev) && ['spikes', 'crush', 'saw'].includes(t)) t = 'flat';
+      if (LANDY[prev] && HAZ[t]) t = 'flat';
       // route'un yüksek platformundan inen yarışçı doğrudan çukura/basamağa düşmesin: route'tan sonra hep geniş düz zemin
       if (afterRoute) t = 'flat';
       if (t === 'wall' && gy < 300) t = 'drop';
+      if (t === 'chimney' && gy < 330) t = 'drop';
       if (t === 'drop' && gy > 420) t = 'step';
       prev = t;
       // kutu merkezi zeminden 50 px yukarıda: koşarken başa değer (zıplayınca üstünden aşılmaz); kutular seyrek
-      if (x - lastBox > BOX_GAP && t !== 'route') { const w = afterRoute ? R(380, 460) : R(260, 340), s = ground(w); box(s + w / 2, gy - 50); continue; }
+      if (!noBox && x - lastBox > BOX_GAP && t !== 'route') { const w = afterRoute ? R(380, 460) : R(260, 340), s = ground(w); box(s + w / 2, gy - 50); continue; }
       switch (t) {
-        case 'flat': { const w = afterRoute ? R(380, 460) : R(260, 420), s = ground(w); if (rnd() < .45) coinRow(s + w / 2 - 60, gy - 36, 5, 30); break; }
+        case 'flat': {
+          const w = afterRoute ? R(380, 460) : R(260, 420), s = ground(w);
+          if (rnd() < .45) coinRow(s + w / 2 - 60, gy - 36, 5, 30);
+          else if (coinsM) cluster(s + w / 2, gy);
+          break;
+        }
         case 'pad': { const w = R(420, 560), s = ground(w); L.pads.push({ x: s + w * .35, y: gy, w: 120 }); coinRow(s + w * .35 + 150, gy - 36, 4, 32); break; }
         case 'gap': { const gw = R(100, 170), gx = x; x += gw; coinArc(gx - 30, gx + gw + 30, gy - 60, 70, 5); ground(R(260, 380)); break; }
         case 'step': {
           const o = [-40, -90, -120, 60, 110].filter(d => gy + d >= 220 && gy + d <= 520);
           // duvardan sonra zemin çok yüksekte (gy < 110) kalınca hiçbir seçenek uymuyordu → gy NaN, haritanın geri kalanı bozuluyordu
           if (o.length) gy += o[I(0, o.length - 1)]; else gy = clamp(gy + 110, 220, 520);
-          ground(R(300, 420)); break;
+          const w = R(300, 420), s = ground(w);
+          if (coinsM) cluster(s + w / 2, gy);
+          break;
         }
         case 'wall': { gy -= I(160, 220); ground(R(380, 520)); break; }
-        case 'drop': { gy = Math.min(520, gy + I(110, 200)); ground(R(300, 420)); break; }
+        case 'drop': { gy = Math.min(520, gy + I(110, 200)); const w = R(300, 420), s = ground(w); if (coinsM) cluster(s + w / 2, gy); break; }
         case 'spikes': {
           const w = R(500, 640), s = ground(w);
           const x1 = s + w * .3, w1 = 36 * I(1, 3);
@@ -85,7 +158,8 @@
         case 'route': {
           const w = R(820, 980), s = ground(w);
           L.mush.push({ x: s + 60, y: gy, w: 54, sq: 0 });
-          L.mud.push({ x: s + 180, y: gy, w: w - 260 });
+          // çölde çamur yerine bataklık kum
+          (tid === 'desert' ? L.quicksand : L.mud).push({ x: s + 180, y: gy, w: w - 260 });
           const py = gy - 190;
           L.solids.push({ x: s + 200, y: py, w: 300, h: 22, float: true });
           L.solids.push({ x: s + 560, y: py - 30, w: w - 620, h: 22, float: true });
@@ -112,6 +186,97 @@
           L.saws.push({ cx: s + w / 2, cy: gy - 80, r: 28, amp: 36, sp: R(1.6, 2.2), ph: rnd() * 6.28, px: s + w / 2, py: gy - 80 });
           break;
         }
+        /* ---------- ÇÖL ---------- */
+        case 'sandpit': {
+          // zeminde bataklık kum: üstünden zıplanırsa hız kaybı yok, içinden geçen çok yavaşlar
+          const w = R(520, 640), s = ground(w), qx = s + w * .42, qw = R(130, 200);
+          L.quicksand.push({ x: qx, y: gy, w: qw });
+          coinArc(qx - 20, qx + qw + 20, gy - 52, 66, 5);
+          break;
+        }
+        case 'boulder': {
+          // kaya x1'deki kapıdan çıkar, sola yuvarlanır (koşuculara doğru), x0'da parçalanır. Zıplayarak aşılır
+          // (kapanma hızı ~590 px/sn; zıplama penceresi geniş). Çıkmadan önce 0.8 sn kapı sarsılır (uyarı).
+          const w = R(820, 960), s = ground(w);
+          const r = 30, x0 = s + 110, x1 = s + w - 60, sp = R(245, 285), warn = .8;
+          const per = warn + (x1 - x0) / sp + R(.9, 1.7);
+          L.boulders.push({ x0, x1, y: gy, r, sp, warn, per, ph: rnd() * per, bx: x1, by: gy - r, st: 0, k: 0, rot: 0 });
+          if (coinsM) cluster(s + w * .5, gy);
+          break;
+        }
+        /* ---------- UZAY ---------- */
+        case 'lowg': {
+          // geniş çukur + düşük yerçekimi (×0.55): uzun süzülen zıplayışlar; ortada basamak platformu
+          const w1 = R(200, 280); const s1 = ground(w1);
+          const gw = R(400, 520), gx = x; x += gw;
+          const pw = R(100, 130), py = gy - R(30, 80);
+          L.solids.push({ x: gx + gw / 2 - pw / 2, y: py, w: pw, h: 22, float: true });
+          coinArc(gx + 10, gx + gw - 10, gy - 150, 120, 7);
+          L.lowg.push({ x: s1 + w1 - 140, w: gw + 300 });
+          ground(R(320, 420));
+          break;
+        }
+        case 'portal': {
+          // A havada (zıplayarak girilir) → B yerde, dikenlerin ötesinde (kestirme). Altından koşan dikenleri aşar.
+          const w = R(980, 1120), s = ground(w);
+          const ax = s + 230, ay = gy - 112;
+          const w1 = 36 * I(1, 2), sx1 = s + 420;
+          L.spikes.push({ x: sx1, y: gy - 26, w: w1, h: 26 });
+          const w2 = 36 * I(1, 2), sx2 = sx1 + w1 + R(185, 230);
+          L.spikes.push({ x: sx2, y: gy - 26, w: w2, h: 26 });
+          const bx = Math.max(sx2 + w2 + 150, s + 800);
+          L.portals.push({ ax, ay, bx, by: gy, r: 22, h: 38 });
+          coinArc(ax - 30, ax + 30, ay - 40, 20, 3);
+          coinRow(bx + 50, gy - 36, 3, 30);
+          break;
+        }
+        /* ---------- ŞEHİR ---------- */
+        case 'roof': {
+          // çatı kenarında trambolin → çatılar arası boşluk (trambolin otomatik fırlatır; atlayan çift zıplamayla geçer)
+          const w = R(360, 460), s = ground(w);
+          L.tramp.push({ x: s + w - 84, y: gy, w: 60, sq: 0 });
+          const gw = R(180, 250), gx = x; x += gw;
+          gy = clamp(gy + [-30, 0, 30, 60][I(0, 3)], 240, 520);
+          coinArc(gx - 60, gx + gw + 60, gy - 150, 150, 6);
+          ground(R(340, 440));
+          break;
+        }
+        case 'chimney': {
+          // yüksek duvarın dibinde rüzgâr bacası: içine giren yukarı taşınır (tırmanmaktan hızlı)
+          const w = R(300, 380), s = ground(w);
+          const wh = I(200, 250);
+          L.vents.push({ x: s + w - 100, y: gy, w: 100, h: wh + 90, kind: 'lift', per: 0, on: 0, ph: 0, act: true, k: 1 });
+          gy -= wh;
+          ground(R(380, 500));
+          break;
+        }
+        /* ---------- TROPİK ---------- */
+        case 'geyser': {
+          // periyodik gayzer: fışkırırken üstünden geçeni yukarıdaki altınlı platforma fırlatır (isteğe bağlı yol)
+          const w = R(640, 760), s = ground(w);
+          const per = R(2.6, 3.2);
+          L.vents.push({ x: s + 150, y: gy, w: 64, h: 300, kind: 'burst', per, on: 1.1, ph: rnd() * per, act: false, k: 0 });
+          const py = gy - 250;
+          L.solids.push({ x: s + 250, y: py, w: 300, h: 22, float: true });
+          coinRow(s + 290, py - 36, 6, 34);
+          if (s + 450 - lastBox > BOX_GAP * .5) box(s + 470, py - 50);
+          break;
+        }
+        case 'bridge': {
+          const gw = R(280, 400), gx = x; x += gw;
+          L.solids.push({ x: gx - 10, y: gy, w: gw + 20, h: 22, float: true, bridge: true });
+          L.bridges.push({ x: gx, y: gy, w: gw });
+          coinRow(gx + gw / 2 - 45, gy - 36, 4, 30);
+          ground(R(300, 400));
+          break;
+        }
+        /* ---------- ALTIN AVI: yüksek yol ---------- */
+        case 'stairs': {
+          const w = R(700, 820), s = ground(w);
+          let py = gy;
+          for (let i = 0; i < 3; i++) { py -= R(80, 96); const px = s + 100 + i * 190; L.solids.push({ x: px, y: py, w: 130, h: 22, float: true }); coinRow(px + 20, py - 36, 4, 30); }
+          break;
+        }
       }
     }
     const s = ground(1400);
@@ -122,8 +287,37 @@
       if (!opts._retry || opts._retry < 5) return FM.genLevel(rd, Object.assign({}, opts, { seed: (seed + 7919) | 0, _retry: (opts._retry || 0) + 1 }));
     }
 
+    /* ---- kar: buzlu zemin parçaları (tehlikelerden uzak düz kısımlarda) ---- */
+    if (tid === 'snow') {
+      const keep = [];
+      for (const o of L.spikes) keep.push([o.x - 170, o.x + o.w + 40]);
+      for (const o of L.crush) keep.push([o.x - 170, o.x + o.w + 40]);
+      for (const o of L.saws) keep.push([o.cx - 200, o.cx + 70]);
+      for (const o of L.pads) keep.push([o.x - 20, o.x + o.w + 20]);
+      for (const o of L.belts) keep.push([o.x - 20, o.x + o.w + 20]);
+      for (const o of L.mud) keep.push([o.x - 20, o.x + o.w + 20]);
+      for (const o of L.mush) keep.push([o.x - 30, o.x + o.w + 30]);
+      for (const o of L.boxes) keep.push([o.x - 40, o.x + o.w + 40]);
+      for (const o of L.gates) keep.push([o.x - 60, o.x + 60]);
+      for (const sd of L.solids) {
+        if (sd.float || sd.w < 300 || sd.x < 900 || sd.x + sd.w > L.end - 300) continue;
+        if (rndB() > .5) continue;
+        // katının içinde engelsiz en uzun aralık
+        let a = sd.x + 50; const b = sd.x + sd.w - 50;
+        const cuts = keep.filter(k => k[1] > a && k[0] < b).sort((p, q) => p[0] - q[0]);
+        let best = null;
+        for (const k of cuts) { if (k[0] - a > (best ? best[1] - best[0] : 0)) best = [a, k[0]]; a = Math.max(a, k[1]); }
+        if (b - a > (best ? best[1] - best[0] : 0)) best = [a, b];
+        if (best && best[1] - best[0] >= 170) {
+          const w = Math.min(best[1] - best[0], RB(220, 460));
+          const x0 = best[0] + RB(0, best[1] - best[0] - w);
+          L.ice.push({ x: x0, y: sd.y, w });
+        }
+      }
+    }
+
     /* ---- dekor üretimi ---- */
-    const set = FM.DECOR[theme.id] || FM.DECOR.forest;
+    const set = FM.DECOR[tid] || FM.DECOR.forest;
     const busy = [];
     const mark = (a, b) => busy.push([a, b]);
     for (const o of L.spikes) mark(o.x - 50, o.x + o.w + 50);
@@ -134,6 +328,12 @@
     for (const o of L.belts) mark(o.x - 30, o.x + o.w + 30);
     for (const o of L.mud) mark(o.x - 20, o.x + o.w + 20);
     for (const o of L.boxes) mark(o.x - 30, o.x + o.w + 30);
+    for (const o of L.quicksand) mark(o.x - 20, o.x + o.w + 20);
+    for (const o of L.boulders) mark(o.x0 - 40, o.x1 + 70);
+    for (const o of L.vents) mark(o.x - 30, o.x + o.w + 30);
+    for (const o of L.portals) { mark(o.ax - 50, o.ax + 50); mark(o.bx - 50, o.bx + 50); }
+    for (const o of L.tramp) mark(o.x - 30, o.x + o.w + 30);
+    for (const o of L.gates) mark(o.x - 70, o.x + 70);
     mark(L.start - 80, L.start + 160); mark(L.end - 120, L.end + 200);
     const free = (a, b) => !busy.some(([p, q]) => a < q && b > p);
     let ds = 1;

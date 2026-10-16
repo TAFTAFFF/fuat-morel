@@ -1426,6 +1426,262 @@
   };
 
   /* =====================================================================
+     ŞAPKALAR / AKSESUARLAR (FM.COSMETICS.hats)
+     Şapka uzayı: orijin = karakterin kafa tepesi çapası (HEAD_ANCHOR, kafa yerel koordinatı), +x yüz yönü, +y aşağı.
+     Yüz aksesuarı: orijin = iki gözün ortası, ölçek = göz açıklığı / 22. Boyun aksesuarı: gövde uzayında boyun pivotu.
+     Her şapka bir kez dış hatlı sprite olarak üretilir (outlined), karakterden bağımsız; kafayla birlikte döner/esner.
+     ===================================================================== */
+  const HEAD_ANCHOR = {
+    TAFTAF: { x: -0.5, y: -19.5, rot: -0.05 }, Caner: { x: 1, y: -13.5 }, LUL: { x: 0, y: -14.8 }, ertan: { x: 0.5, y: -13.8 },
+    Kral: { x: -0.5, y: -24, s: 0.95 }, Nuss: { x: 1, y: -13.8 }, baso: { x: -1, y: -16.2 }
+  };
+  const FACE_ANCHOR = { LUL: { x: 4.5, y: -11.4, span: 21, rot: -0.1 } };   // LUL'un kendi gözlüğü var: ikinci gözlük alna itilmiş durur
+  function faceAnchor(id) {
+    if (FACE_ANCHOR[id]) return FACE_ANCHOR[id];
+    const e = DEF[id].eyes, a = e[0], b = e[1];
+    const A = { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 - 0.4, span: abs(a[0] - b[0]) + a[2] + b[2] + 2, rot: 0 };
+    FACE_ANCHOR[id] = A; return A;
+  }
+  const HAT_COL = { line: '#1b1024' };
+  function stripesClip(g, path, cols, w, ang) {   // path içini eğik şeritlerle doldur
+    g.save(); g.beginPath(); path(g); g.clip(); g.rotate(ang);
+    for (let i = -14; i <= 14; i++) { g.fillStyle = cols[((i % cols.length) + cols.length) % cols.length]; g.fillRect(-80, i * w, 160, w + 0.3); }
+    g.restore();
+  }
+  const HAT_DEF = {
+    kasket: { box: [-32, -18, 22, 8], up: 15, draw(g, P) {
+      const c = '#3b82f6', d = '#2457b8', l = '#8fbcff';
+      cel(g, B([-19, 1, -22, -9, -12, -16, 0, -17.6, 11, -15.4, 18, -8, 19, 1, 0, 3]), c, { lt: l, dk: d, hl: [-7, -11, 4, 2, -0.5, 0.35] });
+      lines(g, [[-2, -17.4, -3, -8, -1, 1.6], [-2, -17.4, 7.6, -11, 11.6, 0.4], [-2, -17.4, -12, -11.4, -15, 0]], rgba(d, 0.9), 1.1);
+      cel(g, EL(-1.6, -17.4, 2.2, 1.6), d, { light: false, lw: 0.9 });
+      // ters çevrilmiş siper (arkada)
+      cel(g, B([-18, -2.4, -30, -1.6, -31.4, 2.4, -27.6, 5, -18, 3]), d, { lt: c, dk: sh(d, -0.3), ld: [0.6, 1], dd: [0.4, 1.2] });
+      cel(g, B([-19.4, 0, -12, -1.8, -3, -2.4, 6, -1.8, 13, 0.4, 19.4, 1.8, 19, 3.4, 9, 1.8, 0, 1.2, -9, 1.8, -19, 3.2]), d, { lt: c, light: true, ld: [0.4, 0.8], dd: [0.3, 0.8], lw: 1 });
+    } },
+    bere: { box: [-24, -28, 24, 8], up: 25, draw(g, P) {
+      const c = '#e0632a', d = '#a8411a', l = '#ffa070';
+      cel(g, B([-19, 2, -20, -8, -13, -17.6, 0, -21, 13, -17.6, 20, -8, 19, 2]), c, { lt: l, dk: d, hl: [-8, -13, 4, 2.2, -0.5, 0.32],
+        fn: g2 => lines(g2, [[-16, -6, -12, -17], [-9, -11, -6, -20], [-1, -14, -1, -21], [7, -11, 5, -20], [14, -6, 11, -16]], rgba(d, 0.55), 1) });
+      cel(g, B([-20, -3, 0, -5.4, 20, -3, 20, 4, 0, 5.6, -20, 4]), d, { lt: c, dk: sh(d, -0.3), ld: [0.6, 1], dd: [0.4, 1],
+        fn: g2 => { g2.strokeStyle = rgba(sh(d, -0.35), 0.7); g2.lineWidth = 1; g2.beginPath(); for (let x = -18; x <= 18; x += 3.4) { g2.moveTo(x, -4.6); g2.lineTo(x + 1, 5); } g2.stroke(); } });
+      // ponpon
+      cel(g, EL(0, -22.6, 5.4, 5), '#fff1e0', { dk: '#d8b8a0', ld: [1, 1], dd: [0.8, 1.6], hl: [-1.6, -24.4, 1.6, 1, 0, 0.6],
+        fn: g2 => { g2.strokeStyle = 'rgba(200,160,130,0.7)'; g2.lineWidth = 0.8; g2.beginPath(); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; g2.moveTo(cos(a) * 1.5, -22.6 + sin(a) * 1.5); g2.lineTo(cos(a) * 4.6, -22.6 + sin(a) * 4.2); } g2.stroke(); } });
+    } },
+    parti: { box: [-18, -34, 18, 8], up: 31, draw(g, P) {
+      g.save(); g.rotate(-0.14);
+      const cone = B([-9.6, 3, 1, -27.6, 10.6, 3, 0, 5], 0.3);
+      cel(g, cone, '#ff6ec7', { light: false, dark: false, fn: g2 => stripesClip(g2, cone, ['#ff6ec7', '#ffffff', '#ffe14d', '#ffffff'], 4.2, 0.9) });
+      g.save(); g.beginPath(); cone(g); g.clip();
+      g.fillStyle = 'rgba(0,0,0,0.14)'; g.beginPath(); g.moveTo(1, -28); g.lineTo(11, 4); g.lineTo(3, 4); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.moveTo(1, -27); g.lineTo(-6.6, 4); g.lineTo(-3, 4); g.closePath(); g.fill();
+      g.fillStyle = '#4fb3ff'; for (const d of [[-3, -8], [4, -14], [-1, -18], [3, -3], [-5, 0]]) { g.beginPath(); g.arc(d[0], d[1], 1.1, 0, TAU); g.fill(); }
+      g.restore();
+      cel(g, EL(1, -28, 3.2, 3), '#ffe14d', { dk: '#d8a020', ld: [0.6, 0.6], dd: [0.5, 1], hl: [0, -29, 1, 0.7, 0, 0.7] });
+      g.restore();
+    } },
+    tavsan: { box: [-22, -38, 24, 8], up: 35, draw(g, P) {
+      const ear = (x0, tip, tilt) => {
+        const pts = [x0 - 4.6, 1, x0 - 5.6 + tilt * 0.5, -12, x0 - 3 + tilt, -26, x0 + tip, -33, x0 + 3.6 + tilt, -27, x0 + 5.2 + tilt * 0.5, -12, x0 + 4.6, 1];
+        cel(g, B(pts, 0.9), '#ffc4d0', { lt: '#fff0f4', dk: '#e08aa0', ld: [1, 1.2], dd: [0.8, 2] });
+        const inn = [x0 - 2.2, -2, x0 - 3 + tilt * 0.5, -12, x0 - 1 + tilt, -24, x0 + tip * 0.6, -28, x0 + 1.6 + tilt, -24, x0 + 2.8 + tilt * 0.5, -12, x0 + 2.2, -2];
+        cel(g, B(inn, 0.9), '#ff7aa8', { lt: '#ffa6c6', dk: '#d8507e', ld: [0.6, 0.8], dd: [0.5, 1.2], lw: 0.8 });
+      };
+      ear(-7.4, -2.4, -1.6); ear(7.6, 1.4, 1.2);
+      cel(g, B([-13, -1, 0, -3.6, 13, -1, 13, 2.6, 0, 1.4, -13, 2.6]), '#ffc4d0', { lt: '#fff0f4', dk: '#e08aa0', ld: [0.4, 0.8], dd: [0.3, 1], lw: 1 });
+    } },
+    gunes: { slot: 'face', box: [-20, -9, 18, 9], up: 0, draw(g, P) {
+      const lens = (cx, w, h) => {
+        const path = B([cx - w, -h * 0.55, cx - w * 0.2, -h, cx + w * 0.9, -h * 0.7, cx + w, h * 0.2, cx + w * 0.4, h, cx - w * 0.6, h * 0.8, cx - w * 1.05, h * 0.1]);
+        g.beginPath(); path(g);
+        const gr = g.createLinearGradient(0, -h, 0, h); gr.addColorStop(0, '#2a2a40'); gr.addColorStop(0.55, '#121220'); gr.addColorStop(1, '#5a5a80');
+        g.fillStyle = gr; g.fill();
+        g.save(); g.clip(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.beginPath(); g.moveTo(cx - w * 0.9, h * 0.3); g.lineTo(cx - w * 0.1, -h); g.lineTo(cx + w * 0.3, -h); g.lineTo(cx - w * 0.5, h * 0.4); g.closePath(); g.fill(); g.restore();
+        g.beginPath(); path(g); g.lineWidth = 1.4; g.strokeStyle = '#e0b040'; g.stroke(); g.lineWidth = 0.6; g.strokeStyle = '#fff2a0'; g.stroke();
+      };
+      lines(g, [[-7, -1.4, -19, -3.6]], '#e0b040', 1.6);
+      lens(-5.6, 5.4, 4.8); lens(7.8, 6.4, 5.4);
+      lines(g, [[-0.4, -3, 1.4, -4.2, 1.8, -3], [-0.4, -1.6, 1.8, -1.6]], '#e0b040', 1.2);
+      g.fillStyle = '#e0b040'; g.beginPath(); g.arc(-19, -3.6, 1.1, 0, TAU); g.fill();
+    } },
+    papyon: { slot: 'neck', box: [-12, -8, 12, 8], up: 0, draw(g, P) {
+      const c = '#e0243a', d = '#9a0c1e', l = '#ff6a7a';
+      cel(g, B([-1.6, -1.4, -6, -5.6, -10.4, -5, -10.6, 5, -6, 5.6, -1.6, 1.4]), c, { lt: l, dk: d, ld: [0.6, 0.8], dd: [0.5, 1.2],
+        fn: g2 => { g2.fillStyle = 'rgba(255,255,255,0.7)'; for (const p of [[-7.6, -2.6], [-5, 2.4], [-8.6, 2.4]]) { g2.beginPath(); g2.arc(p[0], p[1], 0.8, 0, TAU); g2.fill(); } } });
+      cel(g, B([1.6, -1.4, 6, -5.6, 10.4, -5, 10.6, 5, 6, 5.6, 1.6, 1.4]), c, { lt: l, dk: d, ld: [0.6, 0.8], dd: [0.5, 1.2],
+        fn: g2 => { g2.fillStyle = 'rgba(255,255,255,0.7)'; for (const p of [[7.6, -2.6], [5, 2.4], [8.6, 2.4]]) { g2.beginPath(); g2.arc(p[0], p[1], 0.8, 0, TAU); g2.fill(); } } });
+      cel(g, B([-2.4, -2.6, 2.4, -2.6, 2.6, 2.6, -2.6, 2.6]), d, { lt: c, ld: [0.4, 0.5], dd: [0.3, 0.6], lw: 0.9 });
+    } },
+    atki: { slot: 'neck', box: [-30, -8, 14, 22], up: 0, draw(g, P) {
+      const c = '#c0182e', w = '#f6f0f0', d = '#7c0a1a';
+      const tail = (pts) => {
+        const path = B(pts, 0.8);
+        cel(g, path, c, { lt: '#ff5a6a', dk: d, ld: [0.6, 0.8], dd: [0.5, 1.4], fn: g2 => stripesClip(g2, path, [c, c, w], 3.2, 0.35) });
+      };
+      tail([-6, 0, -13, -1, -22, 5, -27, 14, -22, 17, -14, 10, -8, 5]);
+      tail([-4, 2, -10, 3, -16, 10, -17, 19, -12, 20, -8, 13, -3, 6]);
+      lines(g, [[-26.4, 15.2, -24.6, 17.4], [-23.6, 16.4, -22.4, 18.2], [-16.6, 18.6, -15.4, 20.8], [-13.6, 19.2, -12.4, 21.2]], d, 1);
+      const band = B([-11, -3.6, 0, -5.2, 11.6, -3.6, 12.4, 2.6, 0, 4.6, -11.4, 2.6]);
+      cel(g, band, c, { lt: '#ff5a6a', dk: d, ld: [0.6, 1], dd: [0.5, 1.4], hl: [-5, -2.6, 2.6, 0.9, -0.1, 0.35], fn: g2 => stripesClip(g2, band, [c, c, w], 3.2, 0.1) });
+    } },
+    kulaklik: { box: [-26, -14, 26, 12], up: 11, draw(g, P) {
+      const band = g2 => { g2.moveTo(-16.6, 4); g2.bezierCurveTo(-17, -6, -9, -11, 0, -11.2); g2.bezierCurveTo(9, -11, 17, -6, 16.6, 4); g2.lineTo(13.4, 4.4); g2.bezierCurveTo(13.6, -3.2, 7.4, -7.6, 0, -7.6); g2.bezierCurveTo(-7.4, -7.6, -13.6, -3.2, -13.4, 4.4); g2.closePath(); };
+      cel(g, band, '#262636', { lt: '#4a4a62', dk: '#101018', ld: [0.6, 1], dd: [0.4, 1.2] });
+      cel(g, B([-7, -10.6, 0, -11.4, 7, -10.6, 7, -7.6, 0, -8.2, -7, -7.6]), '#1b1b26', { light: false, lw: 0.9, dd: [0.3, 0.6],
+        fn: g2 => lines(g2, [[-5, -9.4, 5, -9.4]], 'rgba(255,255,255,0.35)', 0.8) });
+      const cup = (x) => {
+        cel(g, B([x - 4.6, -5, x + 4.6, -5, x + 5.6, 0, x + 4.6, 8.6, x - 4.6, 8.6, x - 5.6, 0]), '#2a2a3a', { lt: '#505068', dk: '#101018', ld: [0.8, 1], dd: [0.6, 1.6], hl: [x - 2, -2.4, 1.2, 2.6, 0.2, 0.4] });
+        g.beginPath(); ell(g, x, 1.8, 3.4, 4.6); g.lineWidth = 1.4; g.strokeStyle = '#22d3e6'; g.stroke();
+        g.beginPath(); ell(g, x, 1.8, 1.6, 2.2); g.fillStyle = '#7ff3ff'; g.fill();
+      };
+      cup(-16.6); cup(16.6);
+    } },
+    korsan: { box: [-32, -22, 32, 8], up: 19, draw(g, P) {
+      const c = '#2a2a36', d = '#121218', l = '#4a4a5e';
+      cel(g, B([-26, 2, -27, -8, -22, -15, -14, -6, -4, -8, 6, -8, 16, -6, 25, -13, 28, -6, 26, 2, 0, 4]), c, { lt: l, dk: d, ld: [0.8, 1.2], dd: [0.6, 1.8] });
+      cel(g, B([-13, -5, -11, -13, -2, -17.4, 8, -16.6, 14, -11, 14, -4, 0, -2]), c, { lt: l, dk: d, ld: [0.8, 1.2], dd: [0.6, 1.8], hl: [-6, -11, 2.6, 1.3, -0.5, 0.28] });
+      lines(g, [[-26.4, -7.6, -22.6, -13.2], [25.2, -11.6, 27, -6.4]], '#e0b040', 1.4);
+      lines(g, [[-25, 0.4, 0, 1.6, 25, 0.4]], '#e0b040', 1.3);
+      // kuru kafa + kemikler
+      lines(g, [[-4.6, -5.6, 7, -12.6], [-4.6, -12.6, 7, -5.6]], '#ffffff', 2);
+      cel(g, B([-2.4, -12.6, 3.8, -12.6, 5, -8.4, 3.2, -5.4, -2, -5.4, -3.6, -8.4]), '#ffffff', { dk: '#c8c8d0', ld: [0.4, 0.6], dd: [0.4, 0.8], lw: 0.8 });
+      g.fillStyle = d; g.beginPath(); g.arc(-0.8, -9.4, 1.1, 0, TAU); g.arc(2.6, -9.4, 1.1, 0, TAU); g.fill();
+      g.fillRect(-0.4, -6.8, 0.8, 1.2); g.fillRect(1.4, -6.8, 0.8, 1.2);
+    } },
+    boynuz: { box: [-20, -18, 20, 6], up: 15, draw(g, P) {
+      const horn = (x0, dir) => {
+        const pts = [x0 - 3.4 * dir, 2, x0 - 4.2 * dir, -5, x0 - 1 * dir, -11, x0 + 4.6 * dir, -15.4, x0 + 3 * dir, -9, x0 + 2.4 * dir, -3, x0 + 3.2 * dir, 2];
+        cel(g, B(pts, 0.85), '#e0243a', { lt: '#ff6a7a', dk: '#8a0a1a', ld: [0.8, 1], dd: [0.6, 1.6], hl: [x0 - 0.6 * dir, -4, 0.8, 2.4, 0.2 * dir, 0.4] });
+      };
+      horn(-9, -1); horn(9.6, 1);
+      cel(g, B([-13, 0, 0, -2.4, 13, 0, 13, 3, 0, 1.6, -13, 3]), '#9a0c1e', { lt: '#e0243a', ld: [0.4, 0.6], dd: [0.3, 0.8], lw: 0.9 });
+    } },
+    sihirbaz: { box: [-30, -44, 30, 10], up: 40, draw(g, P) {
+      const c = '#6a2bb0', d = '#3e1270', l = '#a066e0';
+      const cone = B([-15, 0, -8, -14, -3, -26, -10, -38, -2, -34, 4, -24, 13, -2]);
+      cel(g, cone, c, { lt: l, dk: d, ld: [1, 1.2], dd: [0.8, 2.2], hl: [-5, -14, 2.2, 5, 0.2, 0.3],
+        fn: g2 => { g2.fillStyle = '#ffd23f'; for (const s of [[-6, -8, 2.6], [2, -16, 1.8], [-5, -22, 1.6], [6, -6, 1.5]]) { g2.beginPath(); starPath(g2, s[0], s[1], s[2], s[2] * 0.45, 5); g2.fill(); }
+          g2.beginPath(); g2.arc(-9, -28, 2, 0, TAU); g2.arc(-8, -28.4, 1.6, 0, TAU, true); g2.fill(); } });
+      cel(g, B([-23, 0, -16, -1.6, 0, -3, 16, -1.6, 23, 0, 24, 4, 0, 6.6, -24, 4]), d, { lt: c, dk: sh(d, -0.3), ld: [0.6, 1], dd: [0.5, 1.2] });
+      cel(g, B([-13, -1.4, 0, -3.4, 12, -1.4, 12.6, 2, 0, 3.4, -13.4, 2]), '#ffd23f', { lt: '#fff2a0', dk: '#c9850c', ld: [0.4, 0.6], dd: [0.3, 0.8], lw: 0.9 });
+    } },
+    silindir: { box: [-26, -32, 26, 8], up: 29, draw(g, P) {
+      const c = '#2a1a3a', d = '#140a20', l = '#5a4070';
+      cel(g, B([-14, 0, -13.4, -14, -14.6, -27.6, 0, -29, 14.6, -27.6, 13.4, -14, 14, 0, 0, 1.6]), c, { lt: l, dk: d, ld: [1.2, 1], dd: [1, 2], hl: [-8, -16, 1.6, 8, 0, 0.22] });
+      cel(g, B([-14, -8.4, 0, -9.6, 14, -8.4, 14, -3, 0, -1.8, -14, -3]), '#c0182e', { lt: '#ff5262', dk: '#7c0a1a', ld: [0.5, 0.8], dd: [0.4, 1], lw: 0.9 });
+      cel(g, B([-22, -1, 0, -3.4, 22, -1, 22.6, 3.4, 0, 5.6, -22.6, 3.4]), c, { lt: l, dk: d, ld: [0.6, 1], dd: [0.5, 1.4] });
+    } },
+    defne: { box: [-26, -12, 26, 20], up: 9, draw(g, P) {
+      const cx = 0, cy = 14, R = 16.6;
+      const leaf = (a, flip, k) => {
+        const x = cx + cos(a) * R, y = cy + sin(a) * R, ta = a + (flip ? -1 : 1) * 1.25;
+        g.save(); g.translate(x, y); g.rotate(ta);
+        cel(g, B([0, 0, 2.6, -2.2, 6.4, -1.4, 8.2, 0.2, 6.4, 1.8, 2.6, 2.4], 0.9), k ? '#5ec54a' : '#3fa236', { lt: '#9ae07a', dk: '#2a7a24', ld: [0.5, 0.6], dd: [0.4, 0.9], lw: 0.9, fn: g2 => lines(g2, [[0.6, 0.2, 7.4, 0.2]], 'rgba(30,90,30,0.6)', 0.6) });
+        g.restore();
+      };
+      for (let i = 0; i < 6; i++) { leaf(-PI / 2 - 0.25 - i * 0.33, true, i % 2); leaf(-PI / 2 + 0.25 + i * 0.33, false, i % 2); }
+      cel(g, B([-3, -2.6, 3, -2.6, 2, 1.4, -2, 1.4]), '#ffd23f', { lt: '#fff2a0', dk: '#c9850c', ld: [0.3, 0.4], dd: [0.3, 0.6], lw: 0.8 });
+    } },
+    viking: { box: [-34, -30, 34, 10], up: 26, draw(g, P) {
+      const horn = (dir) => {
+        const x0 = 16 * dir;
+        const pts = [x0 - 3 * dir, 4, x0 - 2 * dir, -5, x0 + 2 * dir, -14, x0 + 10 * dir, -23, x0 + 9 * dir, -14, x0 + 6 * dir, -4, x0 + 6 * dir, 4];
+        cel(g, B(pts, 0.85), '#f0e6c8', { lt: '#ffffff', dk: '#b8a070', ld: [0.8, 1], dd: [0.6, 1.6], fn: g2 => { g2.fillStyle = '#5a4a30'; g2.beginPath(); g2.moveTo(x0 + 8 * dir, -16); g2.lineTo(x0 + 10.6 * dir, -23.6); g2.lineTo(x0 + 10 * dir, -14); g2.closePath(); g2.fill(); } });
+      };
+      horn(-1); horn(1);
+      const c = '#9aa3b2', d = '#5a6270', l = '#dde3ec';
+      cel(g, B([-19, 4, -19.6, -5, -13, -13.6, 0, -16.6, 13, -13.6, 19.6, -5, 19, 4]), c, { lt: l, dk: d, ld: [1, 1.2], dd: [0.8, 2], hl: [-8, -10, 3.4, 1.8, -0.5, 0.4] });
+      cel(g, B([-20, -1.4, 0, -3.6, 20, -1.4, 20, 4.6, 0, 6, -20, 4.6]), d, { lt: c, dk: sh(d, -0.3), ld: [0.5, 0.8], dd: [0.4, 1], lw: 1,
+        fn: g2 => { g2.fillStyle = '#e8edf5'; for (const x of [-15, -8, 0, 8, 15]) { g2.beginPath(); g2.arc(x, 1.4, 1, 0, TAU); g2.fill(); } } });
+      lines(g, [[0, -16, 0, -3.4]], rgba(d, 0.8), 1.2);
+    } },
+    tiara: { box: [-18, -18, 18, 8], up: 15, draw(g, P) {
+      const gold = '#ffd23f', gd = '#c9850c', gl = '#fff2a0';
+      cel(g, g2 => { g2.moveTo(-14, 3); g2.lineTo(-13, -5); g2.lineTo(-8, -1); g2.lineTo(-4.4, -9); g2.lineTo(0, -13.6); g2.lineTo(4.4, -9); g2.lineTo(8, -1); g2.lineTo(13, -5); g2.lineTo(14, 3); g2.quadraticCurveTo(0, 0.6, -14, 3); g2.closePath(); }, gold,
+        { lt: gl, dk: gd, ld: [0.8, 1], dd: [0.6, 1.4], hl: [-7, -2, 1.2, 2, 0.3, 0.6] });
+      for (const b of [[-13, -5.4], [0, -14], [13, -5.4]]) cel(g, EL(b[0], b[1], 1.4, 1.4), gold, { lt: gl, dk: gd, ld: [0.3, 0.4], dd: [0.3, 0.5], lw: 0.8 });
+      cel(g, EL(0, -5.6, 2.6, 3), '#ff5aa0', { lt: '#ffb0d0', dk: '#a0205a', ld: [0.5, 0.6], dd: [0.4, 0.9], lw: 0.9, hl: [-0.8, -6.8, 0.9, 1.1, 0, 0.9] });
+      cel(g, EL(-7.4, -1.6, 1.5, 1.6), '#7df9ff', { lt: '#ffffff', dk: '#1a90b0', ld: [0.3, 0.4], dd: [0.3, 0.5], lw: 0.8 });
+      cel(g, EL(7.4, -1.6, 1.5, 1.6), '#7df9ff', { lt: '#ffffff', dk: '#1a90b0', ld: [0.3, 0.4], dd: [0.3, 0.5], lw: 0.8 });
+    } },
+    hale: { box: [-20, -18, 20, 2], up: 15, anim: 'float', draw(g, P) {
+      const ring = g2 => { ell(g2, 0, -9, 13.4, 4.2); ell(g2, 0, -9, 10.4, 2.6); };
+      g.beginPath(); ring(g); g.fillStyle = '#ffe680'; g.fill('evenodd');
+      g.save(); g.beginPath(); ring(g); g.clip('evenodd');
+      g.fillStyle = 'rgba(255,255,255,0.75)'; g.beginPath(); ell(g, -5, -11.8, 6, 1); g.fill();
+      g.fillStyle = 'rgba(200,140,20,0.55)'; g.beginPath(); ell(g, 2, -6.2, 7, 1.1); g.fill();
+      g.restore();
+      g.beginPath(); ring(g); g.lineWidth = 1.1; g.strokeStyle = '#c9850c'; g.stroke();
+    }, post(g, P) {
+      const gs = FM.gfx.glowSprite('rgba(255,230,120,0.7)', 20);
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.55; g.drawImage(gs.c, -20, -29, 40, 40); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+    } },
+    astronot: { box: [-30, -14, 32, 44], up: 10, draw(g, P) {
+      const cx = 1, cy = 15, r = 23.6;
+      // fanus çerçevesi (opak halka) + boyun bileziği
+      g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.arc(cx, cy, r - 2.6, 0, TAU, true); g.fillStyle = '#dfe6f0'; g.fill('evenodd');
+      g.save(); g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.arc(cx, cy, r - 2.6, 0, TAU, true); g.clip('evenodd');
+      g.fillStyle = 'rgba(255,255,255,0.8)'; g.beginPath(); g.arc(cx - 8, cy - 9, 12, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(120,135,160,0.7)'; g.beginPath(); g.arc(cx + 9, cy + 11, 13, 0, TAU); g.fill();
+      g.restore();
+      g.beginPath(); g.arc(cx, cy, r - 2.6, 0, TAU); g.lineWidth = 0.9; g.strokeStyle = 'rgba(90,100,120,0.8)'; g.stroke();
+      cel(g, B([cx - 16, cy + 19, cx, cy + 16.6, cx + 16, cy + 19, cx + 16, cy + 25, cx, cy + 27.6, cx - 16, cy + 25]), '#9aa3b2', { lt: '#dde3ec', dk: '#5a6270', ld: [0.6, 1], dd: [0.5, 1.4],
+        fn: g2 => { g2.fillStyle = '#e63946'; g2.beginPath(); g2.arc(cx + 9, cy + 22.4, 1.4, 0, TAU); g2.fill(); g2.fillStyle = '#3ddc84'; g2.beginPath(); g2.arc(cx + 4.6, cy + 22.6, 1.4, 0, TAU); g2.fill(); } });
+    }, post(g, P) {
+      const cx = 1, cy = 15, r = 21.2;
+      const gr = g.createRadialGradient(cx - 7, cy - 8, 2, cx, cy, r);
+      gr.addColorStop(0, 'rgba(210,240,255,0.08)'); gr.addColorStop(0.75, 'rgba(140,200,255,0.16)'); gr.addColorStop(1, 'rgba(120,180,255,0.4)');
+      g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fillStyle = gr; g.fill();
+      g.save(); g.clip();
+      g.fillStyle = 'rgba(255,255,255,0.38)'; g.beginPath(); ell(g, cx - 9, cy - 10, 7, 3.2, -0.75); g.fill();
+      g.beginPath(); ell(g, cx - 13, cy - 1, 1.6, 4, -0.2); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.beginPath(); g.arc(cx, cy, r, 0.15, 1.35); g.arc(cx, cy, r - 3.2, 1.35, 0.15, true); g.closePath(); g.fill();
+      g.restore();
+    } }
+  };
+  for (const k in HAT_DEF) if (!HAT_DEF[k].slot) HAT_DEF[k].slot = 'head';
+  const HC = new Map();
+  /** Şapka sprite'ı (önbellekli): id × dış hat modu × çözünürlük */
+  function hatSprite(id, m, ol) {
+    const D = HAT_DEF[id]; if (!D) return null;
+    const k = FM.gfx.rs(), key = id + '|' + ol + '|' + m + '@' + k;
+    let s = HC.get(key); if (s) return s;
+    let P = HAT_COL, th = ol ? 2.4 : 0;
+    if (typeof ol === 'string' && ol.indexOf('rim:') === 0) { P = { line: ol.slice(4) }; th += RIM_W; }
+    const rim = typeof ol === 'string';
+    s = outlined('fmhat|' + key, D.box, m, th, P, D.draw, rim ? null : D.post);
+    HC.set(key, s);
+    return s;
+  }
+  function clearHats() { for (const s of HC.values()) freeCanvas(s.c); HC.clear(); }
+  function hatOk(id) { return !!(id && HAT_DEF[id]); }
+  /** Kafa uzayında (kafa parçası basıldıktan sonra) şapka/yüz aksesuarı; t: animasyon zamanı */
+  function drawHatHead(ctx, id, hat, m, ol, t) {
+    const D = HAT_DEF[hat]; if (!D || D.slot === 'neck') return;
+    const s = hatSprite(hat, m, ol); if (!s) return;
+    ctx.save();
+    if (D.slot === 'face') {
+      const A = faceAnchor(id), sc = A.span / 22;
+      ctx.translate(A.x, A.y); if (A.rot) ctx.rotate(A.rot); ctx.scale(sc, sc);
+    } else {
+      const A = HEAD_ANCHOR[id] || HEAD_ANCHOR.TAFTAF, sc = A.s || 1;
+      ctx.translate(A.x, A.y + (D.anim === 'float' ? sin(t * 2.6) * 1.4 : 0)); if (A.rot) ctx.rotate(A.rot); if (D.anim === 'float') ctx.rotate(sin(t * 1.7) * 0.06); if (sc !== 1) ctx.scale(sc, sc);
+    }
+    blit(ctx, s, m);
+    ctx.restore();
+  }
+  /** Gövde uzayında (gövde basıldıktan, kafa çizildikten sonra) boyun aksesuarı */
+  function drawHatNeck(ctx, id, hat, m, ol, p) {
+    const D = HAT_DEF[hat]; if (!D || D.slot !== 'neck') return;
+    const s = hatSprite(hat, m, ol); if (!s) return;
+    const rg = DEF[id].rig;
+    ctx.save(); ctx.translate(rg.neck[0] + p.hx + 1, rg.neck[1] + p.hy + 3.2 + (p.shY || 0) * 0.5);
+    if (hat === 'atki') ctx.rotate(-0.08 - clamp(p.flow, 0, 1.2) * 0.1);
+    blit(ctx, s, m);
+    ctx.restore();
+  }
+
+  /* =====================================================================
      POZLAR
      p alanları: bx,bob (kalça ofseti), lean (gövde eğimi), sx,sy (ayak merkezli esneme), rot/pv (pv yüksekliğinde dönüş),
      hrot (kalça merkezli dönüş — kayma), legF/legB + legFs/legBs (açı, boy ölçeği), armF/armB (+s),
@@ -1549,6 +1805,35 @@
         p.expr = 's'; p.flow = 0.04; p.tw = t * 1.4;
         break;
       }
+      // ---- zafer kutlaması pozları (FM.COSMETICS.wins pose alanı) ----
+      case 'dance': {   // kalça sallama + dönüşümlü kollar + adım
+        const w = sin(t * 7), w2 = sin(t * 3.5);
+        p.bx = w2 * 2.2; p.lean = w2 * 0.16; p.bob = -abs(w) * 2.4;
+        p.sx = 1 + abs(w) * 0.04; p.sy = 1 - abs(w) * 0.05;
+        p.armF = w > 0 ? PI - 0.35 - w * 0.25 : 0.5 + w * 0.3; p.armB = w > 0 ? 0.5 - w * 0.3 : PI - 0.35 + w * 0.25;
+        p.legF = 0.35 + w * 0.3; p.legB = -0.35 - w * 0.3; p.legFs = 1 - max(0, w) * 0.2; p.legBs = 1 - max(0, -w) * 0.2;
+        p.head = -w2 * 0.2; p.expr = 'h'; p.flow = 0.35 + abs(w) * 0.3; p.tw = t * 5;
+        break;
+      }
+      case 'flex': {    // güçlü duruş: iki kol havada, göğüs dışarıda, nabız gibi esneme
+        const b = abs(sin(t * 4)), k = sin(t * 8) * 0.06;
+        p.lean = -0.1; p.bob = -b * 3; p.sy = 1 + b * 0.05; p.sx = 1 - b * 0.03;
+        p.armF = PI - 0.75 + k; p.armB = PI - 0.55 - k; p.armFs = 1.04; p.armBs = 1.04;
+        p.legF = 0.2; p.legB = -0.25; p.head = -0.14 + sin(t * 4) * 0.04; p.expr = b > 0.6 ? 'h' : 'f'; p.flow = 0.4; p.tw = t * 5;
+        break;
+      }
+      case 'flip': {    // sürekli ters takla (zıpla, dön, in)
+        const c = (t * 1.15) % 1, j = sin(c * PI);
+        p.bob = -j * 22;
+        const f = clamp((c - 0.08) / 0.78, 0, 1), e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+        p.rot = -TAU * e; p.pv = rg.hipY + 12;
+        const tuck = sin(f * PI);
+        p.legF = lerp(0.5, 1.2, tuck); p.legB = lerp(0.2, 0.9, tuck); p.legFs = lerp(0.9, 0.62, tuck); p.legBs = lerp(0.9, 0.62, tuck);
+        p.armF = lerp(2.4, 1.1, tuck); p.armB = lerp(2.7, 1.4, tuck); p.lean = lerp(0.05, 0.3, tuck); p.head = lerp(-0.05, 0.2, tuck);
+        p.expr = 'h'; p.flow = 0.6 + j * 0.5; p.tw = t * 7;
+        if (c > 0.9) { const l = (c - 0.9) / 0.1; p.sy = 1 - l * 0.1; p.sx = 1 + l * 0.08; }
+        break;
+      }
       default: break;
     }
     if (o.expr) p.expr = o.expr;
@@ -1568,11 +1853,12 @@
     ctx.globalAlpha /= 0.75;
     ctx.globalCompositeOperation = 'source-over';
   }
-  /** Bir karakteri (yerel ayak koordinatında, sağa bakan) çizer. */
-  function drawFig(ctx, id, skin, m, p, t, ol) {
+  /** Bir karakteri (yerel ayak koordinatında, sağa bakan) çizer. hat: FM.COSMETICS.hats id (yoksa/none → şapkasız). */
+  function drawFig(ctx, id, skin, m, p, t, ol, hat) {
     const D = DEF[id], rg = D.rig, P = pal(id, skin, false);
     const rim = typeof ol === 'string';          // kenar ışığı geçişi: yalnızca dış hatlı parçalar (pelerin/göz parlaması yok)
     ol = ol === false ? 0 : rim ? ol : 1;
+    if (!hatOk(hat)) hat = null;
     ctx.save();
     const s = rg.scale || 1;
     ctx.scale(s * p.sx, s * p.sy);
@@ -1599,7 +1885,9 @@
     if (D.headBack && !rim) D.headBack(ctx, P, p, t);
     blit(ctx, part(id, skin, 'head', p.expr, m, ol), m);
     if (P.glowEye && !rim) eyeGlow(ctx, D, P, p.expr);
+    if (hat) { try { drawHatHead(ctx, id, hat, m, ol, t); } catch (e) { /* şapka çizilemedi */ } }
     ctx.restore();
+    if (hat) { try { drawHatNeck(ctx, id, hat, m, ol, p); } catch (e) { /* aksesuar çizilemedi */ } }
     if (!armUp) limb(ctx, part(id, skin, wing ? 'wingF' : 'armF', '', m, ol), rg.shF[0], rg.shF[1] + p.shY, fa, p.armFs, m);
     ctx.restore();
     ctx.restore();
@@ -1676,7 +1964,7 @@
     else if (r.climb) st = 'climb';
     else if (!r.onGround) { st = 'air'; o.flip = a.flip; }
     else if (r.pull > 0 && (r.vx || 0) < -20) st = 'pulled';
-    else if (r.finished && abs(r.vx || 0) < 40) st = 'cheer';
+    else if (r.finished && abs(r.vx || 0) < 40) st = winPose(r);
     else if (abs(r.vx || 0) > 22) st = 'run';
     else st = 'idle';
     const p = makePose(id, st, r.ph || 0, a.t, r.vy || 0, o);
@@ -2103,9 +2391,12 @@
     ctx.setLineDash([]);
     ctx.restore();
   }
+  // skin arka ışıması: [renk, alfa] (drawRacer ve drawCharacter; önbellekli glowSprite, 1 drawImage)
+  const SKIN_GLOW = { neon: ['rgba(255,60,220,0.6)', 0.2], gece: ['rgba(110,90,255,0.45)', 0.3], lav: ['rgba(255,110,30,0.55)', 0.26], galaksi: ['rgba(140,100,255,0.5)', 0.28] };
+  const SKIN_TWINKLE = { altin: '#ffe680', buz: '#bfefff', gumus: '#ffffff', galaksi: '#d8ccff', gokkusagi: '#ffffff' };
   function drawSkinFx(ctx, skin, a, fx, fy, sc) {
-    if (skin === 'altin' || skin === 'buz') {
-      const col = skin === 'altin' ? '#ffe680' : '#bfefff';
+    const col = SKIN_TWINKLE[skin];
+    if (col) {
       const s = twinkleSprite(col);
       for (let i = 0; i < 2; i++) {
         const cyc = a.t * 0.9 + i * 0.5, n = Math.floor(cyc), ph = cyc - n;
@@ -2141,12 +2432,14 @@
     if (r.boost > 0 || r.padT > 0) drawSpeedFx(ctx, r, a, fx, fy, p.st === 'slide' || p.st === 'sled');
     if (r.dash > 0) { try { drawGhosts(ctx, r, a, fx, fy, id, skin, p, SC, face); } catch (e) { /* hayalet çizilemedi */ } }
     if (r.balloon) drawBalloon(ctx, r, a, fx, fy, hx, hy);
-    if (skin === 'neon' || skin === 'gece') {
-      const gs = FM.gfx.glowSprite(skin === 'neon' ? 'rgba(255,60,220,0.6)' : 'rgba(110,90,255,0.45)', 32);
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = blinkHide ? 0.08 : (skin === 'neon' ? 0.2 : 0.3) + sin(a.t * 3) * 0.06;
+    const sg = SKIN_GLOW[skin];
+    if (sg) {
+      const gs = FM.gfx.glowSprite(sg[0], 32);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = blinkHide ? 0.08 : sg[1] + sin(a.t * 3) * 0.06;
       ctx.drawImage(gs.c, fx - 34, fy - 62, 68, 64);
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
+    const hat = racerHat(r);
     if (racerDarkBg) {
       // koyu temada koyu karakterin arkasına sıcak, yumuşak arka ışık: siluet fondan ayrılsın (önbellekli, 1 drawImage)
       const dk = darkness(id, skin);

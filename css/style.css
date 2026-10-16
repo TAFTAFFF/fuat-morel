@@ -2742,7 +2742,7 @@ a.btn { text-decoration: none; }
 .lg.sm .ico { width: 1.8rem; height: 1.8rem; }
 
 /* oyuncu satırı (klan + çevrimiçi): portre · ad + durum · lig · süre · kupa · KATIL */
-.cl-hd.cl-hd2, .cm { grid-template-columns: 4.8rem minmax(0, 1fr) 7.4rem 9.4rem 7.2rem 6.4rem; gap: .6rem; }
+.cl-hd.cl-hd2, .cm { grid-template-columns: 4.8rem minmax(0, 1fr) 7.4rem 7.6rem 8.2rem 6.4rem; gap: .6rem; }
 .cl-hd.cl-hd2 { padding: .2rem .8rem .5rem .5rem; font: max(11px, 1.05rem)/1 var(--fh); color: var(--txt3); letter-spacing: .08em; display: grid; align-items: center; }
 .cl-hd.cl-hd2 span:nth-child(1) { grid-column: 1 / 3; text-align: left; padding-left: .3rem; }
 .cl-hd.cl-hd2 span:nth-child(2) { grid-column: 3; text-align: left; }
@@ -2760,7 +2760,7 @@ a.btn { text-decoration: none; }
 .cm-play { display: flex; align-items: center; gap: .3rem; min-width: 0; font: 500 max(11px, 1.1rem)/1 var(--fb); color: var(--txt2); }
 .cm-play b { font: 600 max(11.5px, 1.15rem)/1 var(--fb); color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: none; }
 .cm-ci { width: 1.7rem; height: 1.7rem; flex: none; color: #8fd8ff; --io: #0a2a66; }
-.cm-tr { gap: .25rem; }
+.cm-tr { gap: .25rem; min-width: 0; }
 .cm-tri { width: 2.2rem; height: 2.2rem; }
 .cm-tr b { font-size: 1.45rem; }
 .cm-join { margin: 0; justify-self: end; pointer-events: auto; padding-left: .6em; padding-right: .6em; font-size: 1.35rem; }
@@ -2904,7 +2904,7 @@ a.btn { text-decoration: none; }
 .fa-pt .pt { width: 100%; height: 100%; }
 @media (max-height: 460px) {
   .tb-onl { font-size: 1.25rem; padding: .3rem .75rem .4rem .6rem; }
-  .cl-hd.cl-hd2, .cm { grid-template-columns: 4.4rem minmax(0, 1fr) 7rem 9rem 6.8rem 6rem; gap: .5rem; }
+  .cl-hd.cl-hd2, .cm { grid-template-columns: 4.4rem minmax(0, 1fr) 7rem 7.4rem 8rem 6rem; gap: .5rem; }
   .cm-pt { width: 4.2rem; height: 4.2rem; }
   .cm { padding: .3rem .7rem .3rem .45rem; }
   .pf-body { gap: .9rem; padding-top: 2.4rem; }
@@ -2917,7 +2917,7 @@ a.btn { text-decoration: none; }
 }
 @media (max-height: 370px) {
   .cm-lgc .lg b { display: none; }
-  .cl-hd.cl-hd2, .cm { grid-template-columns: 4.2rem minmax(0, 1fr) 3.4rem 8.6rem 6.6rem 5.8rem; }
+  .cl-hd.cl-hd2, .cm { grid-template-columns: 4.2rem minmax(0, 1fr) 3.4rem 7rem 7.8rem 5.8rem; }
 }
 
 .fin.has-aw .fin-pt { width: clamp(8rem, 25vh, 17rem); }
@@ -2930,4 +2930,22 @@ a.btn { text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .tb-item.has .tb-in, .tb-power.full .tb-in, .tb-power.full::before, .tb-power.full b, .tb-power.full .tb-ring, .tc-hint.on, .tb-onl.has .on-dot, .rj-wrap .btn-friends, .cd-n { animation: none !important; }
+}
+
+/* dar telefon ekranları (≤ 780 px genişlik, ör. 667×375): sol klan paneli daralır, lig yalnızca kalkan, ad sütunu geniş kalır */
+@media (max-width: 780px) {
+  .pnl-clan .cl-wrap { grid-template-columns: minmax(0, .42fr) minmax(0, 2fr); gap: .9rem; }
+  .pnl-clan .cl-flag { height: clamp(7rem, 20vh, 12rem); }
+  .pnl-clan .cl-name { font-size: 1.9rem; }
+  .pnl-clan .cl-tag, .pnl-clan .cl-desc, .pnl-clan .cl-stats .cs:not(.cs-lg) { display: none; }
+  .cl-hd.cl-hd2, .cm { grid-template-columns: 4rem minmax(0, 1fr) 3.2rem 6rem 7.8rem 6.4rem; gap: .4rem; }
+  .cm-join { font-size: 1.2rem; padding-left: .5em; padding-right: .5em; }
+  .cm-tr b { font-size: 1.3rem; }
+  .cm-tri { width: 1.9rem; height: 1.9rem; }
+  .cm-lgc .lg b { display: none; }
+  .cm-lgc .lg { padding: .15rem .3rem; }
+  .cm-id b { font-size: 1.4rem; }
+  .cm-play b { font-size: max(11px, 1.1rem); }
+  .cl-hd.cl-hd2 span:nth-child(2) { text-align: center; }
+  .cs-lg .lg b { display: inline; }
 }

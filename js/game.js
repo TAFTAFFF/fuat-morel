@@ -258,9 +258,12 @@
     }
     const N = rk.length;
     const pr = rk.indexOf(S.player);
-    const td = pr >= 0 ? FM.trophyFor(N)[pr] || 0 : 0;
+    // kupa: tablo değeri uygulanır ama 0'ın altına inilmez → bildirilen değişim GERÇEKTE uygulanan fark (0 kupada kayıp "-5" görünmesin)
+    let td = 0;
     if (pr >= 0) {
-      FM.save.trophies[S.player.id] = Math.max(0, (FM.save.trophies[S.player.id] || 0) + td);
+      const old = Math.max(0, FM.save.trophies[S.player.id] | 0), nw = Math.max(0, old + (FM.trophyFor(N)[pr] || 0));
+      FM.save.trophies[S.player.id] = nw;
+      td = nw - old;
       S.player.td = td;
       FM.persist();
     }

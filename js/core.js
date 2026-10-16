@@ -122,10 +122,11 @@ window.FM = window.FM || {};
   };
 
   /* ---------------- kozmetik (görsel, güç vermez) ---------------- */
+  // price: fiyat; cur: para birimi ('coins' varsayılan | 'gems'). Satın alma/gösterim FM.meta.currency()/cosmetics() ile.
   FM.COSMETICS = {
     skins: [ // her karakter için aynı id seti; render-chars renk dönüşümünü uygular
       { id: 'klasik', n: 'Klasik', price: 0 },
-      { id: 'altin',  n: 'Altın',  price: 1500 },
+      { id: 'altin',  n: 'Altın',  price: 25, cur: 'gems' },   // elmasla alınır (cur yoksa 'coins')
       { id: 'gece',   n: 'Gece',   price: 800 },
       { id: 'neon',   n: 'Neon',   price: 1200 },
       { id: 'buz',    n: 'Buz',    price: 1000 }
@@ -136,7 +137,7 @@ window.FM = window.FM || {};
       { id: 'fire',     n: 'Ateş',         price: 600,  colors: ['#ff4d1a', '#ffb020', '#ffe14d'] },
       { id: 'rainbow',  n: 'Gökkuşağı',    price: 900,  colors: ['#ff3b3b', '#ffb020', '#ffe14d', '#3ddc84', '#3b82f6', '#a855f7'] },
       { id: 'stars',    n: 'Yıldızlar',    price: 700,  colors: ['#fff6b0', '#ffd23f'] },
-      { id: 'spades',   n: 'Maça (Klan)',  price: 1000, colors: ['#111111', '#c0182e', '#ffffff'] },
+      { id: 'spades',   n: 'Maça (Klan)',  price: 20, cur: 'gems', colors: ['#111111', '#c0182e', '#ffffff'] },
       { id: 'hearts',   n: 'Kalpler',      price: 500,  colors: ['#ff5a7a', '#ff9eb5'] }
     ],
     plates: [
@@ -213,7 +214,7 @@ window.FM = window.FM || {};
   FM.defaultSave = function () {
     const trophies = {}; for (const k of FM.ORDER) trophies[k] = FM.CH[k].tr;
     return {
-      v: 2, coins: 300, gems: 10, xp: 0, level: 1,
+      v: 2, coins: 500, gems: 10, xp: 0, level: 1,
       selChar: 'TAFTAF', rounds: 3,
       mode: 'classic',          // tek oyunculu son seçilen mod (FM.MODES id)
       map: 'random',            // tek oyunculu son seçilen harita: 'random' | FM.THEMES id
@@ -228,49 +229,66 @@ window.FM = window.FM || {};
       seen: {}
     };
   };
-  FM.loadSave = function () {
-    let s = null;
-    try { s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { s = null; }
+  /* Kayıt doğrulama/göç: dışarıdan gelen (localStorage ya da içe aktarılan) nesneyi geçerli kayda çevirir.
+     Eksik alanlar varsayılanla eklenir, bozuk tipler düzeltilir. Nesne kullanılamazsa null. */
+  FM.normSave = function (s) {
     const d = FM.defaultSave();
-    if (!s || typeof s !== 'object' || Array.isArray(s)) return d;
-    // Bozuk/eski kayıt oyunu ASLA açılmaz hâle getirmesin: alan tiplerini doğrula, olmazsa varsayılan kayıt
+    if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+    const obj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+    const num = (v, def) => (typeof v === 'number' && isFinite(v)) ? v : def;
+    // eksik alanları varsayılanla doldur (derin olmayan birleştirme + bilinen iç nesneler)
+    for (const k in d) if (s[k] === undefined) s[k] = d[k];
+    s.coins = Math.max(0, num(s.coins, d.coins)); s.gems = Math.max(0, num(s.gems, d.gems));
+    s.xp = Math.max(0, num(s.xp, d.xp)); s.level = Math.max(1, Math.floor(num(s.level, d.level)));
+    s.rounds = num(s.rounds, d.rounds);
+    if (!obj(s.trophies)) s.trophies = d.trophies;
+    for (const k of FM.ORDER) if (typeof s.trophies[k] !== 'number' || !isFinite(s.trophies[k])) s.trophies[k] = FM.CH[k].tr;
+    if (!obj(s.upgrades)) s.upgrades = {};
+    if (!obj(s.stats)) s.stats = {};
+    if (!obj(s.seen)) s.seen = {};
+    if (s.missions !== null && !obj(s.missions) && !Array.isArray(s.missions)) s.missions = null;
+    s.owned = Object.assign({}, d.owned, obj(s.owned) ? s.owned : {});
+    if (!obj(s.owned.skins)) s.owned.skins = {};
+    if (!Array.isArray(s.owned.trails)) s.owned.trails = d.owned.trails.slice();
+    if (!Array.isArray(s.owned.plates)) s.owned.plates = d.owned.plates.slice();
+    s.equipped = Object.assign({}, d.equipped, obj(s.equipped) ? s.equipped : {});
+    if (!obj(s.equipped.skin)) s.equipped.skin = {};
+    if (typeof s.equipped.trail !== 'string') s.equipped.trail = d.equipped.trail;
+    if (typeof s.equipped.plate !== 'string') s.equipped.plate = d.equipped.plate;
+    s.settings = Object.assign({}, d.settings, obj(s.settings) ? s.settings : {});
+    if (typeof s.selChar !== 'string' || !FM.CH[s.selChar]) s.selChar = 'TAFTAF';
+    if (!FM.modeById(s.mode)) s.mode = 'classic';
+    if (s.map !== 'random' && FM.themeIndex(s.map) < 0) s.map = 'random';
+    s.rivals = Math.max(1, Math.min(FM.MAXR - 1, Math.round(num(s.rivals, d.rivals))));
+    if (typeof s.created !== 'number' || !isFinite(s.created)) s.created = Date.now();   // kaydın ilk oluşturulma anı (bilgi)
+    return s;
+  };
+  // Bozuk kayıt ASLA sessizce silinmez: üzerine varsayılan yazılmadan önce ham metin ayrı anahtara kopyalanır.
+  function keepCorrupt(raw) {
+    try { if (raw && raw !== 'null') localStorage.setItem(SAVE_KEY + '_bozuk_' + Date.now(), raw); } catch (e) { }
+  }
+  FM.loadSave = function () {
+    let raw = null, s = null;
+    try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { raw = null; }
+    try { s = JSON.parse(raw || 'null'); } catch (e) { s = null; keepCorrupt(raw); }
+    if (!s || typeof s !== 'object' || Array.isArray(s)) { if (s !== null) keepCorrupt(raw); return FM.defaultSave(); }
+    // Bozuk/eski kayıt oyunu ASLA açılmaz hâle getirmesin: alan tiplerini doğrula, olmazsa varsayılan kayıt (ham kayıt yedeklenir)
     try {
-      const obj = v => !!v && typeof v === 'object' && !Array.isArray(v);
-      const num = (v, def) => (typeof v === 'number' && isFinite(v)) ? v : def;
-      // eksik alanları varsayılanla doldur (derin olmayan birleştirme + bilinen iç nesneler)
-      for (const k in d) if (s[k] === undefined) s[k] = d[k];
-      s.coins = Math.max(0, num(s.coins, d.coins)); s.gems = Math.max(0, num(s.gems, d.gems));
-      s.xp = Math.max(0, num(s.xp, d.xp)); s.level = Math.max(1, Math.floor(num(s.level, d.level)));
-      s.rounds = num(s.rounds, d.rounds);
-      if (!obj(s.trophies)) s.trophies = d.trophies;
-      for (const k of FM.ORDER) if (typeof s.trophies[k] !== 'number' || !isFinite(s.trophies[k])) s.trophies[k] = FM.CH[k].tr;
-      if (!obj(s.upgrades)) s.upgrades = {};
-      if (!obj(s.stats)) s.stats = {};
-      if (!obj(s.seen)) s.seen = {};
-      if (s.missions !== null && !obj(s.missions) && !Array.isArray(s.missions)) s.missions = null;
-      s.owned = Object.assign({}, d.owned, obj(s.owned) ? s.owned : {});
-      if (!obj(s.owned.skins)) s.owned.skins = {};
-      if (!Array.isArray(s.owned.trails)) s.owned.trails = d.owned.trails.slice();
-      if (!Array.isArray(s.owned.plates)) s.owned.plates = d.owned.plates.slice();
-      s.equipped = Object.assign({}, d.equipped, obj(s.equipped) ? s.equipped : {});
-      if (!obj(s.equipped.skin)) s.equipped.skin = {};
-      if (typeof s.equipped.trail !== 'string') s.equipped.trail = d.equipped.trail;
-      if (typeof s.equipped.plate !== 'string') s.equipped.plate = d.equipped.plate;
-      s.settings = Object.assign({}, d.settings, obj(s.settings) ? s.settings : {});
-      if (typeof s.selChar !== 'string' || !FM.CH[s.selChar]) s.selChar = 'TAFTAF';
-      if (!FM.modeById(s.mode)) s.mode = 'classic';
-      if (s.map !== 'random' && FM.themeIndex(s.map) < 0) s.map = 'random';
-      s.rivals = Math.max(1, Math.min(FM.MAXR - 1, Math.round(num(s.rivals, d.rivals))));
-      return s;
+      const n = FM.normSave(s);
+      if (n) return n;
+      keepCorrupt(raw);
+      return FM.defaultSave();
     } catch (e) {
-      try { console.warn('[kayıt] bozuk kayıt yok sayıldı', e); } catch (e2) { }
-      return d;
+      try { console.warn('[kayıt] bozuk kayıt yok sayıldı (yedeklendi)', e); } catch (e2) { }
+      keepCorrupt(raw);
+      return FM.defaultSave();
     }
   };
+  FM.SAVE_KEY = SAVE_KEY;
   FM.save = FM.loadSave();
   let saveTimer = null;
   FM.persist = function (now) {
-    const write = () => { saveTimer = null; try { localStorage.setItem(SAVE_KEY, JSON.stringify(FM.save)); } catch (e) { } };
+    const write = () => { saveTimer = null; try { FM.save.savedAt = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(FM.save)); } catch (e) { } };
     if (now) { if (saveTimer) clearTimeout(saveTimer); write(); }
     else if (!saveTimer) saveTimer = setTimeout(write, 300);
   };
@@ -282,4 +300,90 @@ window.FM = window.FM || {};
   // Dokunmatik cihaz (telefon/tablet). Asıl hedef platform TELEFON (yatay). ?mobile=1 ile masaüstünde zorlanabilir.
   FM.isTouch = FM.params.mobile === '1' || (window.matchMedia && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
+
+  /* ---------------- kalıcılık, PWA, uygulama-içi tarayıcı ---------------- */
+  // Kayıt otomatik: sayfa gizlenince / kapanırken / dondurulurken bekleyen yazım hemen yapılır.
+  try {
+    if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => { if (document.hidden) FM.persist(true); });
+      document.addEventListener('freeze', () => FM.persist(true));
+    }
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('pagehide', () => FM.persist(true));
+  } catch (e) { }
+
+  /** Uygulama ana ekrandan (PWA) mı açıldı */
+  FM.isStandalone = function () {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.standalone === true) return true;
+      if (typeof matchMedia === 'function') {
+        for (const m of ['fullscreen', 'standalone', 'minimal-ui']) { const q = matchMedia('(display-mode: ' + m + ')'); if (q && q.matches) return true; }
+      }
+    } catch (e) { }
+    return false;
+  };
+
+  /** Uygulama-içi tarayıcı (ayrı depolama! ilerleme orada kalır): 'whatsapp' | 'instagram' | 'facebook' | 'messenger' |
+      'tiktok' | 'snapchat' | 'twitter' | 'telegram' | 'linkedin' | 'line' | 'wechat' | 'discord' | 'pinterest' | 'webview' | null.
+      ua verilmezse navigator.userAgent. Ana ekrandan açılmış PWA'da her zaman null. Görünen ad: FM.IN_APP_NAMES[k]. */
+  FM.inAppBrowser = function (ua) {
+    try {
+      if (ua == null) { if (FM.isStandalone()) return null; ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''; }
+      ua = String(ua);
+      const T = [
+        ['whatsapp', /WhatsApp/i], ['instagram', /Instagram/i],
+        ['messenger', /Orca-Android|MessengerForiOS|MessengerLite|FBAN\/Messenger/i],
+        ['facebook', /FBAN|FBAV|FB_IAB|FB4A|FBIOS/], ['tiktok', /musical_ly|BytedanceWebview|TikTok|trill_|ByteLocale/i],
+        ['snapchat', /Snapchat/i], ['twitter', /\bTwitter/], ['telegram', /Telegram/i], ['linkedin', /LinkedInApp/i],
+        ['line', /\bLine\//], ['wechat', /MicroMessenger/i], ['discord', /Discord/i], ['pinterest', /Pinterest/i]
+      ];
+      for (const [k, re] of T) if (re.test(ua)) return k;
+      if (/Android/.test(ua) && /; wv\)/.test(ua)) return 'webview';                                        // Android WebView
+      if (/iPhone|iPad|iPod/.test(ua) && /AppleWebKit/.test(ua) && !/Safari\//.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua)) return 'webview'; // iOS WKWebView
+    } catch (e) { }
+    return null;
+  };
+  FM.IN_APP_NAMES = { whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', messenger: 'Messenger', tiktok: 'TikTok', snapchat: 'Snapchat',
+    twitter: 'X (Twitter)', telegram: 'Telegram', linkedin: 'LinkedIn', line: 'LINE', wechat: 'WeChat', discord: 'Discord', pinterest: 'Pinterest', webview: 'uygulama içi tarayıcı' };
+
+  // Kalıcı depolama izni: tarayıcı veriyi kendiliğinden silmesin. İlk dokunuşta (Firefox izin sorabilir) ve kurulunca istenir.
+  FM.storage = { persisted: null };
+  FM.askPersist = function () {
+    try {
+      const st = typeof navigator !== 'undefined' && navigator.storage;
+      if (!st || typeof st.persist !== 'function') return Promise.resolve(false);
+      const chk = typeof st.persisted === 'function' ? st.persisted() : Promise.resolve(false);
+      return chk.then(p => p ? true : st.persist()).then(ok => { FM.storage.persisted = !!ok; return !!ok; }).catch(() => false);
+    } catch (e) { return Promise.resolve(false); }
+  };
+
+  /* PWA: service worker (yalnızca http/https, geliştirici modunda değil) + "Ana ekrana ekle" istemi.
+     FM.pwa.canInstall() → Android Chrome kurulum istemi hazır mı; FM.pwa.install() → Promise<bool>.
+     Olaylar: 'pwa:installable', 'pwa:installed'. */
+  let installEvt = null;
+  FM.pwa = {
+    sw: null, err: null,
+    canInstall: () => !!installEvt,
+    install() {
+      const e = installEvt; if (!e || typeof e.prompt !== 'function') return Promise.resolve(false);
+      installEvt = null;
+      try { e.prompt(); return (e.userChoice || Promise.resolve({})).then(c => !!c && c.outcome === 'accepted').catch(() => false); }
+      catch (er) { return Promise.resolve(false); }
+    }
+  };
+  try {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && typeof location !== 'undefined') {
+      let asked = false;
+      const firstTouch = () => { if (asked) return; asked = true; FM.askPersist(); };
+      window.addEventListener('pointerdown', firstTouch, { once: true, passive: true });
+      window.addEventListener('keydown', firstTouch, { once: true });
+      if (FM.isStandalone()) FM.askPersist();
+      window.addEventListener('beforeinstallprompt', e => { installEvt = e; FM.emit('pwa:installable', {}); });   // tarayıcının kendi önerisi engellenmez
+      window.addEventListener('appinstalled', () => { installEvt = null; FM.askPersist(); FM.emit('pwa:installed', {}); });
+      const okProto = /^https?:$/.test(location.protocol || '');
+      if (okProto && !FM.DEV && typeof navigator !== 'undefined' && navigator.serviceWorker && typeof navigator.serviceWorker.register === 'function') {
+        const reg = () => navigator.serviceWorker.register('sw.js').then(r => { FM.pwa.sw = r; }).catch(e => { FM.pwa.err = String(e && e.message || e); });
+        if (typeof document !== 'undefined' && document.readyState === 'complete') reg(); else window.addEventListener('load', reg, { once: true });
+      }
+    }
+  } catch (e) { }
 })(window.FM);

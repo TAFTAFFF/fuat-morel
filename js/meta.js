@@ -12,6 +12,8 @@
      missions   { v, day:'YYYY-MM-DD', list:[{t,slot,goal,prog,c,n,ch,r}], bonus, bonusN, rr, ach:{key:claimedTier}, achN:{key:notifiedTier} }
      stats      { races, wins, ... toplam sayaçlar; charRaces:{}, charWins:{}, killsBy:{}, itemsBy:{}, best:{} }
      daily      { last:'YYYY-MM-DD', streak }
+     stats.mp*  çok oyunculu sayaçlar (mpRaces, mpWins, mpTop3, mpMatches, mpChamps); modeRaces{mod}, themeRaces{tema}
+     Kayıt aktarma: exportCode / importCode / cloudSave / cloudLoad (en altta). pid ve cihaz ayarları içe aktarmada korunur.
 
    Eşitlik notu: game.js botlara oyuncunun mods() değerlerini kopyalar; bu yüzden geliştirmeler yarışı adil tutar.
    mods() her zaman abLv ∈ [1,5], chargeMul ∈ [1, 1.24] ve geçerli bir başlangıç eşyası döndürür.
@@ -37,6 +39,15 @@
   const STREAK_COINS = 15, STREAK_CAP = 75;   // üst üste galibiyet bonusu
   const FINISH_XP = 10, KILL_XP = 5, KILL_XP_CAP = 30, CLEAN_XP = 10;
   const DNF_MUL = 0.5;                // yarışı bitiremeyen oyuncu sıra ödülünün yarısını alır
+  const HUNT_VALUE = 0.6, HUNT_CAP = 150;   // Altın Avı: toplanan altının ödül değeri ve tavanı
+  const MP_BONUS = 15, MP_BONUS_PER = 3, MP_BONUS_CAP = 40, MP_XP = 10;   // arkadaşlarla yarış bonusu (2 kişi 15 … 10 kişi 39)
+  /* Sıra ödülü n kişiye ölçekli: 4 kişilik tablo [1., 2., 3., 4.] n sıraya doğrusal örneklenir
+     (4 kişide eski değerler aynen; 10 kişide 1. 120, 2. ~103 … son 20; 2 kişide 120 / 20). */
+  function placeVal(tab, rank, n) {
+    if (n <= 1) return tab[0];
+    const p = Math.max(0, Math.min(1, rank / (n - 1))) * (tab.length - 1), i = Math.floor(p), f = p - i;
+    return i >= tab.length - 1 ? tab[tab.length - 1] : tab[i] + (tab[i + 1] - tab[i]) * f;
+  }
 
   const xpNeed = lv => 100 + 60 * (Math.max(1, lv) - 1);
   // elmas seyrek kalsın (ikinci bir altın birimine dönüşmesin): yalnızca her 5 seviyede bir
@@ -124,6 +135,9 @@
     { id: 'top2x3', d: 1, cat: 'race', ev: 'top2', goal: 1, icon: '🥈', t: "{g} yarışta ilk 2'ye gir", t1: "Bir yarışta ilk 2'ye gir", ds: 'Yarışı birinci ya da ikinci bitir.' },
     { id: 'char1', d: 1, cat: 'race', ev: 'fchar', goal: 1, icon: '🎭', t: '{c} ile bir yarış bitir', ds: 'Karakter seçiminde {c} karakterini seç ve bir yarışı bitir.' },
     { id: 'coin80', d: 1, cat: 'coin', ev: 'coin', goal: 120, icon: '💰', t: '{g} altın para topla', ds: 'Yol boyunca dizili altın paraları kaçırma.' },
+    { id: 'mp2', d: 1, cat: 'mp', ev: 'mp', goal: 2, icon: '🤝', t: 'Arkadaşlarla {g} yarış yap', t1: 'Arkadaşlarla bir yarış yap', ds: 'ARKADAŞLARLA düğmesiyle oda kur ya da arkadaşının linkiyle odaya katıl.' },
+    { id: 'elim3', d: 1, cat: 'mode', ev: 'elimtop3', goal: 1, icon: '🚪', t: "Eleme modunda {g} kez ilk 3'e gir", t1: "Eleme modunda ilk 3'e gir", ds: 'Eleme kapılarından en son geçen sen olma!' },
+    { id: 'hunt80', d: 1, cat: 'mode', ev: 'huntcoin', goal: 80, icon: '🪙', t: "Altın Avı'nda {g} altın topla", ds: "Altın Avı modunda altınları kap (birden çok yarışta da toplanabilir)." },
     // ZOR
     { id: 'shield2', d: 2, cat: 'def', ev: 'bshield', goal: 1, icon: '🛡️', t: 'Kalkanla {g} saldırı engelle', t1: 'Kalkanla bir saldırı engelle', ds: 'Kalkan açıkken gelen saldırıları boşa çıkar.' },
     { id: 'clean1', d: 2, cat: 'race', ev: 'clean', goal: 1, icon: '😇', t: 'Hiç ölmeden {g} yarış bitir', t1: 'Hiç ölmeden bir yarış bitir', ds: 'Tek bir kez bile ölmeden bitiş çizgisine ulaş.' },
@@ -134,7 +148,8 @@
     { id: 'kill6', d: 2, cat: 'kill', ev: 'kill', goal: 5, icon: '☠️', t: '{g} rakibi patlat', ds: 'Bugün kimse güvende değil.' },
     { id: 'champ1', d: 2, cat: 'race', ev: 'mtop2', goal: 1, icon: '🏅', t: "{g} maçı ilk 2'de bitir", t1: "Bir maçı ilk 2'de bitir", ds: 'Maç sonunda puan tablosunda birinci ya da ikinci ol.' },
     { id: 'block2', d: 2, cat: 'def', ev: 'block', goal: 3, icon: '🎈', t: '{g} saldırıyı savuştur', ds: 'Kalkan ya da balonla gelen saldırıları engelle.' },
-    { id: 'abil6', d: 2, cat: 'abil', ev: 'ability', goal: 8, icon: '🌟', t: '{g} kez özel güç kullan', ds: 'Güç barını doldur, gücünü boşa harcama.' }
+    { id: 'abil6', d: 2, cat: 'abil', ev: 'ability', goal: 8, icon: '🌟', t: '{g} kez özel güç kullan', ds: 'Güç barını doldur, gücünü boşa harcama.' },
+    { id: 'meteor3', d: 2, cat: 'mode', ev: 'dodge', goal: 3, icon: '☄️', t: "Kaos'ta {g} meteordan kaç", ds: 'Kaos modunda kırmızı gölgeyi görünce kaç: meteor yanına düşsün ama sana değmesin.' }
   ];
   const DAILY_BY_ID = {}; for (const t of DAILY) DAILY_BY_ID[t.id] = t;
 
@@ -164,8 +179,23 @@
     { key: 'streak', icon: '🔥', t: 'Durdurulamaz', stat: 'bestStreak', tiers: [2, 3, 5], ds: g => `Üst üste ${g} yarış kazan` },
     { key: 'logins', icon: '📅', t: 'Sadık Üye', stat: 'dailyClaims', tiers: [3, 7, 30], ds: g => `${g} kez günlük ödül al` },
     { key: 'dailyDone', icon: '📋', t: 'Görev Adamı', stat: 'dailyDone', tiers: [5, 25, 100], ds: g => `${fmt(g)} günlük görev tamamla` },
-    { key: 'earned', icon: '💰', t: 'Zengin', stat: 'earned', tiers: [2000, 10000, 50000], ds: g => `Toplam ${fmt(g)} altın kazan` }
+    { key: 'earned', icon: '💰', t: 'Zengin', stat: 'earned', tiers: [2000, 10000, 50000], ds: g => `Toplam ${fmt(g)} altın kazan` },
+    // çok oyunculu ve modlar
+    { key: 'mpRaces', icon: '🤝', t: 'Kanka', stat: 'mpRaces', tiers: [1, 10, 50], ds: g => g === 1 ? 'Arkadaşlarınla ilk yarışını yap' : `Arkadaşlarınla ${fmt(g)} yarış yap` },
+    { key: 'mpWins', icon: '😎', t: 'Odanın Kralı', stat: 'mpWins', tiers: [1, 10, 30], ds: g => g === 1 ? 'Arkadaşlarına karşı bir yarış kazan' : `Arkadaşlarına karşı ${fmt(g)} yarış kazan` },
+    { key: 'mpChamps', icon: '🏆', t: 'Ekibin Şampiyonu', stat: 'mpChamps', tiers: [1, 5, 20], ds: g => g === 1 ? 'Arkadaşlarınla oynadığın bir maçı şampiyon bitir' : `Arkadaşlarınla ${fmt(g)} maçta şampiyon ol` },
+    { key: 'elimTop3', icon: '🚪', t: 'Hayatta Kalan', stat: 'elimTop3', tiers: [1, 10, 30], ds: g => g === 1 ? "Eleme modunda ilk 3'e gir" : `Eleme modunda ${fmt(g)} kez ilk 3'e gir` },
+    { key: 'coinsBest', icon: '🪙', t: 'Hazine Avcısı', stat: 'coinsBest', tiers: [80, 150, 250], ds: g => `Altın Avı'nda tek yarışta ${fmt(g)} altın topla` },
+    { key: 'meteorDodge', icon: '☄️', t: 'Meteor Savar', stat: 'meteorDodge', tiers: [3, 25, 100], ds: g => `Kaos'ta ${fmt(g)} meteordan kaç` },
+    { key: 'modes', icon: '🎲', t: 'Çok Yönlü', stat: s => countKeys(s.stats.modeRaces), tiers: [3, 5], ds: g => g >= 5 ? 'Beş oyun modunun hepsinde yarış' : `${g} farklı oyun modunda yarış` },
+    { key: 'maps', icon: '🗺️', t: 'Gezgin', stat: s => countKeys(s.stats.themeRaces), tiers: [4, 8], ds: g => g >= 8 ? 'Sekiz haritanın hepsinde yarış' : `${g} farklı haritada yarış` }
   ];
+  // her harita için "X haritasında yarış" başarımı (FM.THEMES sırasıyla; anahtar 'th_<tema id>')
+  const THEME_ICONS = { forest: '🌲', candy: '🍭', snow: '❄️', castle: '🏰', desert: '🏜️', space: '🚀', city: '🌃', tropic: '🌴' };
+  for (const th of (FM.THEMES || [])) {
+    ACH.push({ key: 'th_' + th.id, icon: THEME_ICONS[th.id] || '🗺️', t: th.n + ' Ustası', stat: s => num0(s.stats.themeRaces && s.stats.themeRaces[th.id]), tiers: [1, 10, 30],
+      ds: g => g === 1 ? `${th.n} haritasında bir yarış yap` : `${th.n} haritasında ${fmt(g)} yarış yap` });
+  }
   const ACH_BY_KEY = {}; for (const a of ACH) ACH_BY_KEY[a.key] = a;
   const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
 
@@ -173,8 +203,9 @@
   const STAT_KEYS = ['races', 'finishes', 'wins', 'top2', 'clean', 'matches', 'champs', 'coinsGot', 'kills', 'deaths', 'selfKills',
     'items', 'abilities', 'abHits', 'hitsDealt', 'hitsTaken', 'jumps', 'dbl', 'slides', 'slams', 'climbs', 'vaults', 'flaps', 'pads', 'mush', 'boxes',
     'blocks', 'blocksShield', 'blocksBalloon', 'earned', 'spent', 'gemsEarned', 'gemsSpent', 'dailyClaims', 'dailyDone', 'achDone',
-    'upBought', 'skinsBought', 'styleBought', 'winStreak', 'bestStreak', 'time', 'xpTotal', 'rerolls', 'exchanges'];
-  const STAT_MAPS = ['charRaces', 'charWins', 'killsBy', 'itemsBy', 'best'];
+    'upBought', 'skinsBought', 'styleBought', 'winStreak', 'bestStreak', 'time', 'xpTotal', 'rerolls', 'exchanges',
+    'mpRaces', 'mpWins', 'mpTop3', 'mpMatches', 'mpChamps', 'mpKills', 'elimTop3', 'elimWins', 'coinsBest', 'coinsWins', 'meteorDodge', 'gemCos', 'imports'];
+  const STAT_MAPS = ['charRaces', 'charWins', 'killsBy', 'itemsBy', 'best', 'modeRaces', 'themeRaces'];
 
   /* =====================================================================
      YARDIMCILAR
@@ -227,6 +258,8 @@
   function cosList(type) { const t = normType(type); return t && FM.COSMETICS && Array.isArray(FM.COSMETICS[t]) ? FM.COSMETICS[t] : []; }
   function cosItem(type, id) { const l = cosList(type); for (const x of l) if (x.id === id) return x; return null; }
   function freeIds(type) { return cosList(type).filter(x => !(num0(x.price) > 0)).map(x => x.id); }
+  /** Kozmetiğin para birimi: FM.COSMETICS öğesinde cur: 'gems' ise elmas, yoksa altın */
+  function cosCur(it) { return it && it.cur === 'gems' ? 'gems' : 'coins'; }
   function totalSkins() { return FM.ORDER.length * cosList('skins').filter(x => num0(x.price) > 0).length; }
   function totalStyle() { return cosList('trails').filter(x => num0(x.price) > 0).length + cosList('plates').filter(x => num0(x.price) > 0).length; }
   function ownedSkinCount(s) {
@@ -776,21 +809,24 @@
     return Array.isArray(s.owned[t]) && s.owned[t].indexOf(id) >= 0;
   };
   meta.price = function (type, id) { const it = cosItem(type, id); return it ? Math.floor(num0(it.price)) : null; };
+  /** currency(type, id) → 'coins' | 'gems' (geçersiz öğede null) */
+  meta.currency = function (type, id) { const it = cosItem(type, id); return it ? cosCur(it) : null; };
   /** buyCosmetic(type, id, charId) → true (alındı ya da zaten sahipli) / false (geçersiz ya da altın yetersiz).
       Satın alınan öğe otomatik kuşanılır. */
   meta.buyCosmetic = function (type, id, charId) {
     const t = normType(type), it = cosItem(t, id); if (!it) return false;
     if (t === 'skins' && charId != null && !charOk(charId)) return false;
     if (meta.owns(t, id, charId)) return true;
-    const price = Math.floor(num0(it.price));
-    if (!debit('coins', price)) return false;
+    const price = Math.floor(num0(it.price)), cur = cosCur(it);
+    if (!debit(cur, price)) return false;
     const s = S();
     if (t === 'skins') { const c = charOr(charId); (s.owned.skins[c] = s.owned.skins[c] || []).push(id); s.stats.skinsBought++; }
     else { s.owned[t].push(id); s.stats.styleBought++; }
+    if (cur === 'gems') s.stats.gemCos++;
     equipRaw(t, id, charId);
     checkMissions(false);
     persist(true);
-    FM.emit('meta:buy', { type: t, id, charId: t === 'skins' ? charOr(charId) : null, price });
+    FM.emit('meta:buy', { type: t, id, charId: t === 'skins' ? charOr(charId) : null, price, cur });
     FM.emit('meta:change', { reason: 'buy', type: t, id });
     return true;
   };
@@ -819,13 +855,13 @@
     if (t === 'plates') return cosItem('plates', s.equipped.plate) && meta.owns('plates', s.equipped.plate) ? s.equipped.plate : 'basic';
     return null;
   };
-  /** cosmetics(type, charId) → [{id, n, price, owned, equipped, can, ...}] (mağaza listesi için) */
+  /** cosmetics(type, charId) → [{id, n, price, cur: 'coins'|'gems', owned, equipped, can, ...}] (mağaza listesi için) */
   meta.cosmetics = function (type, charId) {
     const t = normType(type); if (!t) return [];
-    const eq = meta.equipped(t, charId), coins = S().coins;
+    const eq = meta.equipped(t, charId), sv = S();
     return cosList(t).map(x => {
-      const owned = meta.owns(t, x.id, charId), price = Math.floor(num0(x.price));
-      return Object.assign({}, x, { type: t, price, owned, equipped: x.id === eq, can: owned || coins >= price });
+      const owned = meta.owns(t, x.id, charId), price = Math.floor(num0(x.price)), cur = cosCur(x);
+      return Object.assign({}, x, { type: t, price, cur, owned, equipped: x.id === eq, can: owned || sv[cur] >= price });
     });
   };
 
@@ -959,6 +995,14 @@
     return any ? undefined : false;
   }));
 
+  // Kaos: oyuncunun yakınına (≤ 260 px) düşen ve onu öldürmeyen meteor = kaçış (patlama 'meteor' olayından ÖNCE işlenir)
+  FM.on('meteor', gameplay(d => {
+    const P = FM.S.player;
+    if (!live() || !P || P.ghost || P.out || P.finished || P.dead > 0 || FM.S.gameMode !== 'chaos' || !isNum(d.x)) return false;
+    if (Math.abs(P.x + (P.w || 28) / 2 - d.x) > 260) return false;
+    st('meteorDodge'); bump('dodge', 1);
+  }));
+
   /* ---------------- yarış / maç akışı ---------------- */
   let matchId = 0, matchTotals = { coins: 0, gems: 0, xp: 0, races: 0 }, rewardedRace = '', rewardedMatch = -1;
   const EMPTY_REWARDS = () => ({ kind: 'race', coins: 0, gems: 0, xp: 0, lines: [], levelUp: 0, levels: [], missionsDone: [], place: 0, finished: false, round: 0, rounds: 0 });
@@ -990,11 +1034,21 @@
       rewardedRace = key;
       ensureDay(true);
       const s = S(), stt = s.stats;
-      const rank = clampInt(res.playerRank, 0, 3, 3);
+      const n = clampInt(res.n, 1, 10, Array.isArray(res.ranking) && res.ranking.length ? res.ranking.length : 4);
+      const rank = clampInt(res.playerRank, 0, n - 1, n - 1);
+      const mode = typeof res.mode === 'string' ? res.mode : 'classic';
       const fin = !!P.finished;
+      // Altın Avı'nda sıra altına göre, Elemede elenme sırasına göre: bitirmemek orada "yarım ödül" sebebi değil
+      const ranked = fin || mode === 'coins' || (mode === 'elim' && (rank === 0 || !!P.out));
       const kills = clampInt(P.kills, 0, 999, 0), coinsGot = clampInt(P.coins, 0, 9999, 0), deaths = clampInt(P.deaths, 0, 999, 0);
-      const clean = fin && deaths === 0, win = fin && rank === 0, top2 = fin && rank <= 1;
+      const clean = fin && deaths === 0;
+      const win = rank === 0 && (fin || mode === 'coins' || (mode === 'elim' && !P.out));
+      const top2 = rank <= 1 && ranked && (fin || mode === 'coins' || mode === 'elim');
       const cid = charOr(P.id);
+      const mp = !!res.mp;
+      let humans = 1;
+      if (mp && Array.isArray(res.ranking)) humans = res.ranking.filter(r => r && (r.ctrl === 'local' || (r.ctrl === 'remote' && !r.nbot))).length || 1;
+      const themeId = res.theme && typeof res.theme.id === 'string' ? res.theme.id : '';
 
       // istatistikler + günlük sayaçlar
       st('races'); stMap('charRaces', cid);
@@ -1004,21 +1058,39 @@
       if (top2) { st('top2'); bump('top2', 1); }
       if (clean) { st('clean'); bump('clean', 1); }
       const rt = num0(FM.S.raceT); st('time', Math.round(rt));
-      if (fin && num0(P.ftime) > 0 && res.theme && res.theme.id) {
+      // mod / harita / çok oyunculu sayaçları
+      if (FM.modeById && FM.modeById(mode)) stMap('modeRaces', mode);
+      if (themeId && FM.themeIndex && FM.themeIndex(themeId) >= 0) stMap('themeRaces', themeId);
+      if (mp) {
+        st('mpRaces'); bump('mp', 1);
+        if (win) st('mpWins');
+        if (rank <= 2) st('mpTop3');
+        if (kills) st('mpKills', kills);
+      }
+      if (mode === 'elim') { if (rank <= 2) { st('elimTop3'); bump('elimtop3', 1); } if (win) st('elimWins'); }
+      if (mode === 'coins') { if (coinsGot > num0(stt.coinsBest)) stt.coinsBest = coinsGot; if (coinsGot) bump('huntcoin', coinsGot); if (win) st('coinsWins'); }
+      if (fin && mode === 'classic' && num0(P.ftime) > 0 && res.theme && res.theme.id) {
         const b = stt.best[res.theme.id];
         if (!isNum(b) || P.ftime < b) stt.best[res.theme.id] = Math.round(P.ftime * 100) / 100;
       }
 
       // ödül dökümü
       const lines = [];
-      const pc = Math.round(PLACE_COINS[rank] * (fin ? 1 : DNF_MUL));
-      lines.push(line(fin ? `${rank + 1}. oldun` : `Bitiremedin (${rank + 1}. sıra)`, pc, 'coins', ['🥇', '🥈', '🥉', '🏅'][rank]));
-      if (coinsGot > 0) lines.push(line(`Toplanan altın ×${coinsGot}`, coinsGot * COIN_VALUE, 'coins', '🪙'));
+      const pc = Math.round(placeVal(PLACE_COINS, rank, n) * (ranked ? 1 : DNF_MUL));
+      const placeTxt = ranked ? `${rank + 1}. oldun` + (n !== 4 ? ` (${n} kişi)` : '') : `Bitiremedin (${rank + 1}. sıra)`;
+      lines.push(line(placeTxt, pc, 'coins', ['🥇', '🥈', '🥉'][rank] || '🏅'));
+      if (coinsGot > 0) {
+        // Altın Avı'nda yarışta 100-250 altın toplanabiliyor → ekonomi dengesi için değer düşük ve tavanlı
+        const cv = mode === 'coins' ? Math.min(HUNT_CAP, Math.round(coinsGot * HUNT_VALUE)) : coinsGot * COIN_VALUE;
+        lines.push(line(`Toplanan altın ×${coinsGot}`, cv, 'coins', '🪙'));
+      }
+      if (mp && humans >= 2) lines.push(line(`Arkadaşlarla yarış (${humans} kişi)`, Math.min(MP_BONUS_CAP, MP_BONUS + MP_BONUS_PER * (humans - 2)), 'coins', '🤝'));
       if (kills > 0) lines.push(line(`Patlatılan rakip ×${kills}`, Math.min(kills, KILL_COINS_CAP) * KILL_COINS, 'coins', '💥'));
       if (fin) lines.push(line('Bitiş bonusu', FINISH_COINS, 'coins', '🏁'));
       if (clean) lines.push(line('Kusursuz yarış (hiç ölmedin)', CLEAN_COINS, 'coins', '😇'));
       if (win && stt.winStreak >= 2) lines.push(line(`Galibiyet serisi ×${stt.winStreak}`, Math.min(STREAK_CAP, STREAK_COINS * (stt.winStreak - 1)), 'coins', '🔥'));
-      let xp = Math.round(PLACE_XP[rank] * (fin ? 1 : DNF_MUL));
+      let xp = Math.round(placeVal(PLACE_XP, rank, n) * (ranked ? 1 : DNF_MUL));
+      if (mp && humans >= 2) xp += MP_XP;
       if (fin) xp += FINISH_XP;
       xp += Math.min(KILL_XP_CAP, kills * KILL_XP);
       if (clean) xp += CLEAN_XP;
@@ -1037,7 +1109,7 @@
       const out = {
         kind: 'race', coins: g.coins, gems: g.gems, xp: g.xp, lines, levelUp: g.levelUp, levels: g.levels,
         missionsDone: raceDone.slice(), place: rank + 1, finished: fin, round: res.round | 0, rounds: res.rounds | 0,
-        kills, coinsGot, deaths, char: cid, last: !!res.last, level: meta.levelInfo()
+        kills, coinsGot, deaths, char: cid, last: !!res.last, level: meta.levelInfo(), n, mode, mp, humans, win
       };
       raceDone = [];
       matchTotals.coins += out.coins; matchTotals.gems += out.gems; matchTotals.xp += out.xp; matchTotals.races++;
@@ -1063,6 +1135,7 @@
       const P = d.player || FM.S.player;
       const ix = st0.indexOf(P), pos = Math.max(0, ix);
       st('matches');
+      if (FM.S.netRole) { st('mpMatches'); if (champ) st('mpChamps'); }
       if (champ || (ix >= 0 && ix <= 1)) bump('mtop2', 1);      // günlük "maçı ilk 2'de bitir"
       const lines = [];
       let rw;
@@ -1112,6 +1185,284 @@
       window.addEventListener('pagehide', flush);
     }
   } catch (e) { }
+
+  /* =====================================================================
+     ÇOK OYUNCULU İSTATİSTİK
+     ===================================================================== */
+  /** mpStats() → {races, wins, top3, matches, champs, kills, winPct, byMode: {modId: yarış}, byTheme: {temaId: yarış}} */
+  meta.mpStats = function () {
+    const t = S().stats;
+    return {
+      races: num0(t.mpRaces), wins: num0(t.mpWins), top3: num0(t.mpTop3), matches: num0(t.mpMatches), champs: num0(t.mpChamps), kills: num0(t.mpKills),
+      winPct: num0(t.mpRaces) > 0 ? Math.round(100 * num0(t.mpWins) / t.mpRaces) : 0,
+      byMode: Object.assign({}, t.modeRaces), byTheme: Object.assign({}, t.themeRaces)
+    };
+  };
+
+  /* =====================================================================
+     KAYIT AKTARMA (telefon / tarayıcı değiştirme)
+     Uzun kod: tamamen çevrimdışı. Bulut kodu: herkese açık MQTT aracısında retain'li konu (en iyi çaba).
+     İçe aktarmada mevcut kayıt localStorage'a yedeklenir; pid (çok oyunculu kimlik) ve cihaz ayarları korunur.
+     ===================================================================== */
+  const XKEY_BACKUP = 'fuatmorel_save_v2_yedek', XKEY_BACKUP2 = 'fuatmorel_save_v2_yedek_onceki';
+  const CODE_ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const CLOUD_ROOT = 'fuatmorel/v1/save/';
+  const CLOUD_BROKERS = ['wss://test.mosquitto.org:8081/mqtt', 'wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+  const CLOUD_WARN = 'Bulut kodu herkese açık ücretsiz bir sunucuda durur: genelde günlerce çalışır ama sunucu sıfırlanırsa silinebilir. Garanti için uzun kodu da bir yere kaydet.';
+  const bad = err => ({ ok: false, err });
+
+  const enc = s => new TextEncoder().encode(s);
+  const dec = u => new TextDecoder().decode(u);
+  function b64u(u8) {
+    let bin = '';
+    for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function unb64u(str) {
+    let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+    const bin = atob(b), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  }
+  function fnv(str) { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+  const canZip = () => typeof CompressionStream === 'function' && typeof DecompressionStream === 'function' && typeof Response === 'function' && typeof Blob === 'function';
+  function zpipe(u8, T) { return new Response(new Blob([u8]).stream().pipeThrough(new T('gzip'))).arrayBuffer().then(b => new Uint8Array(b)); }
+  function rndCode(n) {
+    let out = '';
+    try {
+      const a = new Uint8Array(n); crypto.getRandomValues(a);
+      for (let i = 0; i < n; i++) out += CODE_ALPHA[a[i] & 31];
+      return out;
+    } catch (e) { }
+    for (let i = 0; i < n; i++) out += CODE_ALPHA[(Math.random() * 32) | 0];
+    return out;
+  }
+
+  function exportObj() {
+    const c = JSON.parse(JSON.stringify(S()));
+    delete c.pid;          // çok oyunculu kimlik cihaza özel (iki cihaz aynı pid → odada 'dup')
+    delete c.settings;     // ses / kalite ayarları cihaza özel
+    return { fm: 'fuatmorel', v: 1, t: Date.now(), s: c };
+  }
+  /** exportCode() → Promise<string|null>: 'FM1.<gzip+base64url>.<sağlama>' (CompressionStream yoksa 'FM0.' sıkıştırmasız). Asla reddetmez. */
+  meta.exportCode = function () {
+    let raw;
+    try { flush(); raw = enc(JSON.stringify(exportObj())); } catch (e) { return Promise.resolve(null); }
+    const plain = () => { const b = 'FM0.' + b64u(raw); return b + '.' + fnv(b); };
+    if (!canZip()) { try { return Promise.resolve(plain()); } catch (e) { return Promise.resolve(null); } }
+    return zpipe(raw, CompressionStream).then(z => { const b = 'FM1.' + b64u(z); return b + '.' + fnv(b); }).catch(() => { try { return plain(); } catch (e) { return null; } });
+  };
+  function checkObj(o) {
+    if (!isObj(o) || o.fm !== 'fuatmorel' || !isObj(o.s)) return bad('Bu bir Fuat Morel kayıt kodu değil.');
+    let ns = null;
+    try { ns = FM.normSave(JSON.parse(JSON.stringify(o.s))); } catch (e) { ns = null; }
+    if (!ns) return bad('Kayıt okunamadı (bozuk).');
+    return { ok: true, save: ns, t: isNum(o.t) ? o.t : 0 };
+  }
+  /** Uzun kodu çözer → Promise<{ok, save, t} | {ok:false, err}> */
+  function decodeCode(str) {
+    const t = String(str == null ? '' : str).replace(/\s+/g, '');
+    const m = /^(FM[01])\.([A-Za-z0-9_-]+)\.([0-9a-z]+)$/.exec(t);
+    if (!m) return Promise.resolve(bad('Kod tanınmadı. Kodun TAMAMINI kopyalayıp yapıştır.'));
+    if (fnv(m[1] + '.' + m[2]) !== m[3]) return Promise.resolve(bad('Kod eksik ya da bozuk kopyalanmış. Tamamını yeniden kopyala.'));
+    let u;
+    try { u = unb64u(m[2]); } catch (e) { return Promise.resolve(bad('Kod bozuk.')); }
+    let p;
+    if (m[1] === 'FM1') { if (!canZip()) return Promise.resolve(bad('Bu tarayıcı sıkıştırılmış kodu açamıyor. Tarayıcını güncelle ya da Chrome kullan.')); p = zpipe(u, DecompressionStream); }
+    else p = Promise.resolve(u);
+    return p.then(raw => checkObj(JSON.parse(dec(raw)))).catch(() => bad('Kod açılamadı (bozuk).'));
+  }
+  function summary(sv, t) {
+    sv = isObj(sv) ? sv : {};
+    const st = isObj(sv.stats) ? sv.stats : {};
+    let tr = 0; if (isObj(sv.trophies)) for (const k of FM.ORDER) tr += num0(sv.trophies[k]);
+    let skins = 0; try { skins = ownedSkinCount(sv); } catch (e) { skins = 0; }
+    return {
+      nick: typeof sv.nick === 'string' ? sv.nick.slice(0, 14) : '', level: clampInt(sv.level, 1, MAX_LEVEL, 1),
+      coins: clampInt(sv.coins, 0, MAX_BAL, 0), gems: clampInt(sv.gems, 0, MAX_BAL, 0), trophies: Math.round(tr),
+      races: Math.floor(num0(st.races)), wins: Math.floor(num0(st.wins)), skins, savedAt: num0(t) || num0(sv.savedAt) || 0
+    };
+  }
+  let pending = null;
+  function preview(r, src) {
+    const tok = { save: r.save, t: r.t, src };
+    pending = tok;
+    return { ok: true, src, preview: summary(r.save, r.t), current: summary(S(), S().savedAt), apply: () => meta.applyImport(tok) };
+  }
+  /** Bulut kodu biçimi: 8 karakter (tire/boşluk/küçük harf kabul) → 'ABCD2345' ya da null */
+  function cloudCode(str) {
+    const t = String(str == null ? '' : str).toUpperCase().replace(/[\s-]/g, '');
+    if (t.length !== 8) return null;
+    for (const ch of t) if (CODE_ALPHA.indexOf(ch) < 0) return null;
+    return t;
+  }
+  meta.cloudCodeValid = s => !!cloudCode(s);
+
+  /** importCode(metin) → Promise<{ok:true, src:'code'|'cloud', preview, current, apply()} | {ok:false, err}>.
+      Uzun kodu da 8 karakterli bulut kodunu da kabul eder. HİÇBİR ŞEYİ DEĞİŞTİRMEZ: kullanıcıya preview/current
+      (nick, level, coins, gems, trophies, races, wins, skins, savedAt) gösterilip onaylanınca apply() çağrılır. */
+  meta.importCode = function (str) {
+    try {
+      const t = String(str == null ? '' : str).trim();
+      if (!/^FM[01]\./.test(t.replace(/\s+/g, ''))) { const cc = cloudCode(t); if (cc) return meta.cloudLoad(cc); }
+      return decodeCode(t).then(r => r.ok ? preview(r, 'code') : r).catch(() => bad('Kod açılamadı.'));
+    } catch (e) { return Promise.resolve(bad('Kod açılamadı.')); }
+  };
+  function writeBackup(cur) {
+    try {
+      const prev = localStorage.getItem(XKEY_BACKUP);
+      if (prev) localStorage.setItem(XKEY_BACKUP2, prev);
+      localStorage.setItem(XKEY_BACKUP, JSON.stringify({ t: Date.now(), s: cur }));
+      return true;
+    } catch (e) { return false; }
+  }
+  function installSave(ns, src) {
+    const cur = S();
+    ns = JSON.parse(JSON.stringify(ns));
+    if (typeof cur.pid === 'string') ns.pid = cur.pid; else delete ns.pid;      // kimlik bu cihazınki kalır
+    ns.settings = cur.settings;                                                 // cihaz ayarları korunur
+    if (typeof ns.nick !== 'string' || !ns.nick) { ns.nick = cur.nick; ns.nickSet = cur.nickSet; }
+    FM.save = ns;
+    normalize(); ensureDay(true); checkMissions(true);
+    S().stats.imports = num0(S().stats.imports) + 1;
+    pending = null;
+    persist(true);
+    FM.emit('save:import', { src });
+    FM.emit('save:reset', { import: true, src });    // arayüz/ağ yenilensin (meta da yeniden doğrular)
+  }
+  function busyRace() { const m = FM.S && FM.S.mode; return m === 'race' || m === 'count' || m === 'end'; }
+  /** applyImport(tok?) → bool. tok verilmezse son önizleme. Önce mevcut kayıt yedeklenir (yedek yazılamazsa false). Yarışta false. */
+  meta.applyImport = function (tok) {
+    try {
+      tok = tok || pending;
+      if (!tok || !isObj(tok.save) || busyRace()) return false;
+      if (!writeBackup(S())) return false;
+      installSave(tok.save, tok.src || 'code');
+      return true;
+    } catch (e) { console.error('[meta import]', e); return false; }
+  };
+  /** backupInfo() → içe aktarmadan önceki kaydın özeti {nick, level, coins, gems, trophies, races, wins, skins, savedAt} ya da null */
+  meta.backupInfo = function () {
+    try { const o = JSON.parse(localStorage.getItem(XKEY_BACKUP) || 'null'); return isObj(o) && isObj(o.s) ? summary(o.s, o.t) : null; } catch (e) { return null; }
+  };
+  /** restoreBackup() → bool: yedeği geri yükler (şimdiki kayıt da yedeğe geçer — geri alınabilir). */
+  meta.restoreBackup = function () {
+    try {
+      if (busyRace()) return false;
+      const o = JSON.parse(localStorage.getItem(XKEY_BACKUP) || 'null');
+      if (!isObj(o) || !isObj(o.s)) return false;
+      const ns = FM.normSave(JSON.parse(JSON.stringify(o.s)));
+      if (!ns) return false;
+      if (!writeBackup(S())) return false;
+      installSave(ns, 'backup');
+      return true;
+    } catch (e) { return false; }
+  };
+
+  /* ---------- bulut: tek seferlik minimal MQTT 3.1.1 oturumu (net.js'ten bağımsız, oda bağlantısını etkilemez) ---------- */
+  function mqLen(n) { const o = []; do { let d = n % 128; n = Math.floor(n / 128); if (n > 0) d |= 128; o.push(d); } while (n > 0); return o; }
+  function mqStr(u) { const o = new Uint8Array(2 + u.length); o[0] = u.length >> 8; o[1] = u.length & 255; o.set(u, 2); return o; }
+  function mqPkt(h, parts) {
+    let n = 0; for (const p of parts) n += p.length;
+    const L = mqLen(n), out = new Uint8Array(1 + L.length + n);
+    out[0] = h; out.set(L, 1); let o = 1 + L.length;
+    for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  }
+  /** Bağlan → konuya abone ol → body varsa retain'li yayınla ve yankısını bekle (= aracı aldı); yoksa retain'li mesajı bekle.
+      → Promise<string|null> (asla reddetmez) */
+  function mqOnce(url, topic, body, ms) {
+    return new Promise(resolve => {
+      let ws = null, done = false, buf = new Uint8Array(0), quiet = null, tm = null;
+      const fin = v => {
+        if (done) return; done = true; clearTimeout(tm); clearTimeout(quiet);
+        try { if (ws && ws.readyState === 1) ws.send(new Uint8Array([0xE0, 0])); } catch (e) { }
+        try { if (ws) { ws.onopen = ws.onmessage = ws.onclose = null; ws.onerror = function () { }; ws.close(); } } catch (e) { }
+        resolve(v);
+      };
+      tm = setTimeout(() => fin(null), ms);
+      try { ws = new WebSocket(url, ['mqtt']); ws.binaryType = 'arraybuffer'; } catch (e) { fin(null); return; }
+      ws.onerror = () => fin(null);
+      ws.onclose = () => fin(null);
+      ws.onopen = () => {
+        try { ws.send(mqPkt(0x10, [mqStr(enc('MQTT')), new Uint8Array([4, 0x02, 0, 30]), mqStr(enc('fmk' + rndCode(10).toLowerCase()))])); } catch (e) { fin(null); }
+      };
+      ws.onmessage = ev => {
+        try {
+          if (done || typeof ev.data === 'string' || !ev.data) return;
+          const u = new Uint8Array(ev.data), c = new Uint8Array(buf.length + u.length);
+          c.set(buf, 0); c.set(u, buf.length); buf = c;
+          for (;;) {
+            if (buf.length < 2) break;
+            let len = 0, mul = 1, i = 1, ok = false;
+            for (let k = 0; k < 4 && i < buf.length; k++) { const b = buf[i++]; len += (b & 127) * mul; mul *= 128; if (!(b & 128)) { ok = true; break; } }
+            if (!ok) { if (i >= 5) { fin(null); return; } break; }
+            if (buf.length < i + len) break;
+            const h = buf[0], b = buf.subarray(i, i + len);
+            buf = buf.slice(i + len);
+            const type = h >> 4;
+            if (type === 2) {                                        // CONNACK → abone ol
+              if (b.length < 2 || b[1] !== 0) { fin(null); return; }
+              ws.send(mqPkt(0x82, [new Uint8Array([0, 1]), mqStr(enc(topic)), new Uint8Array([0])]));
+            } else if (type === 9) {                                 // SUBACK → yaz ya da retain'i bekle
+              if (body != null) ws.send(mqPkt(0x31, [mqStr(enc(topic)), enc(body)]));
+              else quiet = setTimeout(() => fin(null), 3500);
+            } else if (type === 3 && b.length >= 2) {                // PUBLISH
+              const qos = (h >> 1) & 3, tl = (b[0] << 8) | b[1];
+              if (dec(b.subarray(2, 2 + tl)) !== topic) continue;
+              const txt = dec(b.subarray(2 + tl + (qos > 0 ? 2 : 0)));
+              if (body == null) { fin(txt || null); return; }
+              if (txt === body) { fin(txt); return; }
+            }
+          }
+        } catch (e) { fin(null); }
+      };
+    });
+  }
+  /** cloudSave() → Promise<{ok:true, code:'ABCD2345', text:'ABCD-2345', warn, servers} | {ok:false, err}>. Asla reddetmez.
+      Kayıt 3 aracıya birden yazılır (en az biri onaylarsa başarılı). Son kod FM.save.cloud = {code, t}. */
+  meta.cloudSave = function () {
+    if (typeof WebSocket !== 'function') return Promise.resolve(bad('Bu tarayıcı bulut kodunu desteklemiyor. Uzun kodu kullan.'));
+    return meta.exportCode().then(body => {
+      if (!body) return bad('Kayıt hazırlanamadı.');
+      const code = rndCode(8), topic = CLOUD_ROOT + code;
+      return new Promise(resolve => {
+        let left = CLOUD_BROKERS.length, okN = 0, grace = null, sent = false;
+        const end = () => {
+          if (sent) return; sent = true; clearTimeout(grace);
+          if (!okN) { resolve(bad('Sunucuya ulaşılamadı. İnternetini kontrol et ya da uzun kodu kullan.')); return; }
+          try { S().cloud = { code, t: Date.now() }; persist(true); } catch (e) { }
+          resolve({ ok: true, code, text: code.slice(0, 4) + '-' + code.slice(4), warn: CLOUD_WARN, servers: okN });
+        };
+        for (const u of CLOUD_BROKERS) {
+          mqOnce(u, topic, body, 9000).then(v => {
+            left--; if (v === body) { okN++; if (!grace) grace = setTimeout(end, 2500); }
+            if (!left) end();
+          });
+        }
+      });
+    }).catch(() => bad('Bulut kaydı başarısız. Uzun kodu kullan.'));
+  };
+  /** cloudLoad(kod) → Promise<importCode ile aynı sonuç (önizleme + apply())>. Asla reddetmez. */
+  meta.cloudLoad = function (code) {
+    const c = cloudCode(code);
+    if (!c) return Promise.resolve(bad('Bulut kodu 8 karakter olmalı (ör. ABCD-2345).'));
+    if (typeof WebSocket !== 'function') return Promise.resolve(bad('Bu tarayıcı bulut kodunu desteklemiyor. Uzun kodu kullan.'));
+    return new Promise(resolve => {
+      let left = CLOUD_BROKERS.length, sent = false;
+      for (const u of CLOUD_BROKERS) {
+        mqOnce(u, CLOUD_ROOT + c, null, 8000).then(v => {
+          left--;
+          if (sent) return;
+          if (v) { sent = true; resolve(v); } else if (!left) { sent = true; resolve(null); }
+        });
+      }
+    }).then(body => {
+      if (!body) return bad('Bu kodla kayıt bulunamadı. Kodun süresi dolmuş olabilir; uzun kodu dene.');
+      return decodeCode(body).then(r => r.ok ? preview(r, 'cloud') : r);
+    }).catch(() => bad('Bulut kaydı okunamadı.'));
+  };
+  meta._decodeCode = decodeCode;
 
   /* =====================================================================
      AÇILIŞ

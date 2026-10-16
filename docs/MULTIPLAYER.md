@@ -330,6 +330,41 @@ Geliştirici kancaları: `index.html?dev=1&mp=host&want=2&wait=60&mode=elim&them
 
 **Bilinen eksikler**: Ev sahibinin telefonu arka plana atılırsa (sayfa donar ama ping sürer) botlar durur ve tur sonu kararı ev sahibi dönene ya da 6 sn susup göç olana kadar bekler. Olaylar QoS0'dır: nadir kayıpta ölüm/bitiş/eleme durum bayraklarından yine anlaşılır ama varlık eşitlemesi (tuzak kapanması) kaçabilir. Yere düşen bir altını iki oyuncu aynı anda alırsa ikisi de sayar. Çekişmeli bitişte iki oyuncu da kendini önde görebilir (uzak görüntü ~0.2 sn geride); nihai sıra telefonların kendi bitiş süreleriyle (±50 ms) belirlenir.
 
+### Kalıcı kayıt, kayıt aktarma, PWA, meta ödülleri (meta ajanı: meta.js, core.js kayıt kısmı, sw.js, manifest, icons/)
+
+**Kayıt (core.js)**
+- Yeni kayıt **500 altın** (`defaultSave`, meta `START_COINS` ile aynı). Eski kayıt ASLA silinmez: `FM.normSave(obj)` (göç + tip düzeltme; `loadSave` bunu kullanır). JSON bozuksa ham metin `fuatmorel_save_v2_bozuk_<ms>` anahtarına kopyalanır, sonra varsayılanla açılır. `FM.save.savedAt` (her yazımda ms) ve `FM.save.created` eklendi. `FM.SAVE_KEY`.
+- Otomatik kayıt: core `visibilitychange(hidden)`, `pagehide`, `freeze` → `FM.persist(true)`; meta önemli olaylarda zaten yazar.
+- `FM.askPersist()` → Promise<bool> (`navigator.storage.persist`); ilk dokunuşta ve PWA kurulunca kendiliğinden çağrılır. Sonuç `FM.storage.persisted`.
+
+**Elmaslı kozmetik**: `FM.COSMETICS` öğesinde `cur: 'gems'` (yoksa altın). Şu an: kostüm `altin` = **25 elmas**, iz `spades` = **20 elmas** (önceden altınla alanlar sahip kalır). `FM.meta.currency(type, id)` → 'coins'|'gems'; `meta.cosmetics()` her öğeye `cur` ekler ve `can`'ı doğru bakiyeyle hesaplar; `meta.buyCosmetic` doğru birimden düşer (`meta:buy {…, cur}`). **ARAYÜZ İÇİN ZORUNLU**: ui.js'te `cosState`/`priceBtn(... {cur: 'coins', n: price})` ve satın alma onayındaki `coins() < it.price` kontrolleri `x.cur`'a göre (elmas simgesi + `FM.save.gems`) olmalı; yoksa bu iki öğe "25 altın" görünür.
+
+**Meta ödülleri (race:end)**: sıra ödülü n kişiye ölçekli (`res.n`; 4 kişide eski tablo aynen: 120/70/40/20, 10 kişide 120…20). Altın Avı'nda sıra altına göre, "kazanma" = altın sırası 1.; toplanan altın ödülü ×0.6, en çok 150. Elemede elenmek yarım ödül sebebi değil. Çok oyunculuda (≥2 insan) "Arkadaşlarla yarış" bonusu 15 + 3×(insan−2) altın (≤40) + 10 XP. Sonuç `meta.lastRewards`'a `n, mode, mp, humans, win` eklendi. En iyi süre (`stats.best`) yalnız klasik modda.
+- Yeni sayaçlar (`FM.save.stats`): `mpRaces, mpWins, mpTop3, mpMatches, mpChamps, mpKills, elimTop3, elimWins, coinsBest, coinsWins, meteorDodge, gemCos, imports`; haritalar `modeRaces{mod}`, `themeRaces{temaId}`. `FM.meta.mpStats()` → `{races, wins, top3, matches, champs, kills, winPct, byMode, byTheme}` (profil ekranı için).
+- Meteor kaçışı: Kaos'ta oyuncunun ≤260 px yakınına düşüp onu öldürmeyen meteor.
+- Yeni başarımlar: `mpRaces` Kanka, `mpWins` Odanın Kralı, `mpChamps` Ekibin Şampiyonu, `elimTop3` Hayatta Kalan, `coinsBest` Hazine Avcısı (80/150/250), `meteorDodge` Meteor Savar, `modes` Çok Yönlü, `maps` Gezgin, her tema için `th_<id>` "<Harita adı> Ustası" (1/10/30 yarış). Yeni günlük görevler: `mp2` (arkadaşlarla 2 yarış), `elim3`, `hunt80` (Altın Avı'nda 80 altın), `meteor3`. Hepsi mevcut `meta.missions()`/`claim()` akışında, arayüz değişikliği gerekmez.
+
+**Kayıt aktarma API'si (`FM.meta`, arayüz Ayarlar → "Kayıt Kodu")** — hiçbiri reddetmez (Promise hep çözülür):
+| Çağrı | Dönüş |
+|---|---|
+| `exportCode()` | Promise<string\|null> uzun çevrimdışı kod `FM1.<gzip base64url>.<sağlama>` (~1.5 KB; CompressionStream yoksa `FM0.`). pid ve ses/kalite ayarları DAHİL DEĞİL |
+| `cloudSave()` | Promise<`{ok:true, code:'ABCD2345', text:'ABCD-2345', warn, servers}` \| `{ok:false, err}`>. 3 aracıya retain'li `fuatmorel/v1/save/<kod>` yazar (≈2 sn). `warn` (Türkçe) kullanıcıya gösterilmeli; son kod `FM.save.cloud = {code, t}` |
+| `importCode(metin)` | Promise<`{ok:true, src:'code'\|'cloud', preview, current, apply()}` \| `{ok:false, err}`>. Uzun kodu da 8 karakterli bulut kodunu da (tire/boşluk/küçük harf olur) kabul eder; boşluk/satır sonu temizlenir. **Hiçbir şeyi değiştirmez**: `preview`/`current` = `{nick, level, coins, gems, trophies, races, wins, skins, savedAt}` → "Bu kayıt yüklensin mi?" onayı → `apply()` (bool). `nick` kullanıcı metni: `FM.esc` ile göster |
+| `cloudLoad(kod)` | `importCode` ile aynı sonuç (≈0.7 sn; bulunamazsa ~4 sn sonra `err`) |
+| `applyImport(tok?)` | son önizlemeyi uygular. Önce mevcut kaydı `fuatmorel_save_v2_yedek`'e yedekler (önceki yedek `…_yedek_onceki`); yarışta (`race/count/end`) ya da yedek yazılamazsa `false`. pid, ses/kalite ayarları bu cihazınki kalır. Sonra `save:import {src}` + `save:reset {import: true}` yayınlanır (arayüz yenilensin) |
+| `backupInfo()` / `restoreBackup()` | yedeğin özeti ya da null / yedeği geri yükle (şimdiki kayıt yedeğe geçer → geri alınabilir) |
+| `cloudCodeValid(s)` | bool |
+`err` metinleri Türkçe ve doğrudan gösterilebilir.
+
+**Platform (core.js)**
+- `FM.inAppBrowser(ua?)` → `'whatsapp'|'instagram'|'facebook'|'messenger'|'tiktok'|'snapchat'|'twitter'|'telegram'|'linkedin'|'line'|'wechat'|'discord'|'pinterest'|'webview'|null`; görünen ad `FM.IN_APP_NAMES[k]`. Ana ekrandan açılınca null. Arayüz: null değilse "Bu tarayıcı ilerlemeni ayrı tutar. Sağ üstteki ⋮ / paylaş menüsünden **Chrome'da / Safari'de aç**, sonra **Ana ekrana ekle**" uyarısı göstersin (iOS WhatsApp SFSafariViewController tespit EDİLEMEZ).
+- `FM.isStandalone()` → ana ekrandan (PWA) mı açıldı. `FM.pwa.canInstall()` / `FM.pwa.install()` → Promise<bool> (Android Chrome kurulum istemi; olaylar `pwa:installable`, `pwa:installed`). iOS'ta kurulum yalnızca Safari → Paylaş → "Ana Ekrana Ekle" (arayüz metinle anlatmalı).
+- Service worker yalnız http(s)'te ve `?dev=1` DEĞİLKEN kaydolur (file:// ve geliştirici testleri etkilenmez). index.html'deki `<link rel="manifest">` head'deki küçük satır içi betikle YALNIZ http(s)'te eklenir (file:// altında CORS konsol hatası çıkmasın). Ön izleme/denetim: `node dev/pwa-check.js` (yerel http sunucusu + CDP: manifest hatası, kurulabilirlik, SW, sunucu kapalıyken çevrimdışı açılış, konsol hataları).
+
+**PWA dosyaları**: `manifest.webmanifest` (Fuat Morel, `display: fullscreen`, `orientation: landscape`, `start_url/scope: .`, ikonlar 192/512 + maskable 512), `icons/` (icon-192.png, icon-512.png, icon-maskable-512.png, apple-touch-icon.png 180, favicon-64.png), `sw.js`. **sw.js `VERSION` sabiti**: oyun dosyası eklenince/kaldırılınca `PRECACHE` listesini güncelleyin; sürümü artırmak eski önbelleği siler. HTML/JS/CSS/manifest AĞ-ÖNCELİKLİ (çevrimiçiyken güncelleme hemen gelir; çevrimdışıysa önbellek), görseller/ikonlar önbellek-öncelikli, Google Fonts önbelleğe alınır. Sorgu dizgili açılış (`?oda=KOD`) çevrimdışıyken index.html'e düşer.
+
+**Test**: `node dev/meta-test.js` (çevrimdışı: göç, 500 altın, elmaslı kozmetik, n kişilik ödül, Altın Avı/Eleme/çok oyunculu sayaçları, meteor, uzun kod + önizleme + yedek + geri alma, bozuk kayıt yedeği, uygulama-içi tarayıcı) · `node dev/meta-test.js bulut` (gerçek aracıya bulut kodu yaz/oku).
+
 ### Karakter işaretleri + efektler (karakter/efekt ajanı: render-chars.js, render-fx.js)
 **render-chars (`FM.R`)**
 - İsim plakası `r.nick || r.name` (en çok 18 karakter). **Oyuncu rengi**: `R.racerColor(r)` → `R.PLAYER_COLORS[r.idx % 10]` (`#ffd23f, #ff5a6e, #4fb3ff, #5ee07a, #c084fc, #ff9f43` (= render-hud `RCOL`, aynı sıra) + `#22d3e6, #ff6ec7, #a3e635, #f2f2f7`; ağda idx herkeste aynı → herkes aynı rengi görür). Renk etiketleri yalnızca ağ yarışında (`S.netRole`) ya da 4'ten fazla yarışçıda açılır (demo/4 kişilik tek oyunculu görünüm aynen): plakanın solunda renkli nokta + kenar rengi, ayak altında renkli halka, plakası sığmayan yarışçının işareti de bu renkte. **HUD'un 6 renkli `RCOL`'u 7.-10. yarışçıda renk tekrarlar → HUD/lobi `FM.R.racerColor(r)`'yi kullanırsa (typeof ile koruyun) plaka noktası/ayak halkasıyla 10 kişide birebir eşleşir.**

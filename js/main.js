@@ -167,6 +167,8 @@
     if (!S.L) { ctx.fillStyle = '#2a1a4a'; ctx.fillRect(0, 0, cv.width, cv.height); return; }
     // yönlü atış önizlemesi: çizilen her karede (duraklatılmış/geliştirici karesi dahil) yerel oyuncunun nişanı → FM.S.aim
     if (FM.game && typeof FM.game.updateAim === 'function') { try { FM.game.updateAim(); } catch (e) { S.aim = null; if (!call.errs) call.errs = 0; if (call.errs++ < 20) console.error(e); } }
+    // yaklaşan atış uyarıları (testere, dinamit, füze...) → FM.S.threats (HUD uyarı oku için)
+    if (FM.game && typeof FM.game.updateThreats === 'function') { try { FM.game.updateThreats(); } catch (e) { S.threats = []; if (!call.errs) call.errs = 0; if (call.errs++ < 20) console.error(e); } }
     // 1) arka plan (ekran koordinatı, ölçek S)
     ctx.setTransform(V.S, 0, 0, V.S, 0, 0);
     call(R.drawBackground, ctx);

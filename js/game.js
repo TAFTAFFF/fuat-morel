@@ -31,7 +31,7 @@
   /* ---- yönlü atış sabitleri (gerçek varlıklar ve aimPreview AYNI değerleri kullanır) ---- */
   const AIM_ITEMS = { saw: 1, dyn: 1, trap: 1, net: 1, mis: 1 };           // yönlü eşyalar
   const AIM_ABS = { TAFTAF: 1, Caner: 1, Kral: 1, baso: 1, Nuss: 1 };      // yönlü özel güçler
-  const SAW_V = 760, DYN_V = 720, DYN_LOB = 240, TRAP_V = 560, TRAP_LOB = 220, NET_V = 600, NET_LOB = 260;
+  const SAW_V = 560, DYN_V = 720, DYN_LOB = 240, TRAP_V = 560, TRAP_LOB = 220, NET_V = 600, NET_LOB = 260;
   // Kar Fırtınası: kısa hazırlık → atandan yayılan buz dalgası (ulaştığı herkes donar). Mürekkep: ileri fışkıran mürekkep cephesi
   const FROST_WIND = .22, FROST_SP = 1700, FROST_R = 1600, INK_SP = 1900, INK_R = 2600;
   const THROW_INH = .5;            // yönlü atışta atanın ileri hızının bu kadarı varlığa geçer
@@ -187,7 +187,7 @@
     S.elimN = 0; S.spec = null; S.dropN = 0;
     S.limitT = null;
     S.meteorT = null; S.meteorQ = []; S.timeUpSent = false;
-    S.aim = null;
+    S.aim = null; S.threats = [];
     const pure = S.gameMode === 'pure';
     S.racers.forEach((r, i) => {
       const keep = { id: r.id, idx: r.idx, bot: r.bot, total: r.total, abLv: r.abLv, chargeMul: r.chargeMul, startItem: r.startItem, skin: r.skin, trail: r.trail, plate: r.plate,
@@ -293,16 +293,27 @@
   /* Eğimli zemin (level.js sözleşmesi): katının üst kenarı (x, y) → (x + w, y2); y2 yoksa düz. topAt(s, x) yüzey yüksekliği. */
   const topAt = FM.level.topAt, slopeOf = FM.level.slopeOf;
   const inSolid = (s, px, py) => px >= s.x && px < s.x + s.w && py < s.y + s.h && py >= (s.y2 == null ? s.y : topAt(s, px));
-  // kutu katıyla kesişiyor mu (x aralığındaki en yüksek yüzey noktasına göre; doğrusal üst kenarda uçlardan biri)
+  // kutu katıyla kesişiyor mu. Eğimli yüzeyde ölçü kutunun ORTASININ (bloğa kırpılmış) yüzey yüksekliği: yokuşta duran yarışçının
+  // köşesi yüzeye birkaç px girer (destek merkezden), bu çakışma sayılmaz (kayarken kalkma, basamak, doğma testleri yokuşta da çalışır)
   function boxHits(s, x, y, w, h) {
     if (!(x < s.x + s.w && x + w > s.x && y < s.y + s.h)) return false;
-    const t = s.y2 == null ? s.y : Math.min(topAt(s, Math.max(x, s.x)), topAt(s, Math.min(x + w, s.x + s.w)));
-    return y + h > t;
+    return y + h > (s.y2 == null ? s.y : topAt(s, x + w / 2));
   }
   function solidAt(px, py) { for (const s of S.L.solids) if (inSolid(s, px, py)) return true; return false; }
   function boxFree(x, y, w, h) { for (const s of S.L.solids) if (boxHits(s, x, y, w, h)) return false; return true; }
-  function groundWithin(px, py, d) { for (const s of S.L.solids) { if (px < s.x || px > s.x + s.w) continue; const t = topAt(s, px); if (t >= py - 4 && t < py + d) return true; } return false; }
+  // px'te yüzey py − up .. py + d arasında mı (up: yokuşta önündeki yüzey ayaktan biraz yukarıda olabilir)
+  function groundWithin(px, py, d, up) { up = up == null ? 4 : up; for (const s of S.L.solids) { if (px < s.x || px > s.x + s.w) continue; const t = topAt(s, px); if (t >= py - up && t < py + d) return true; } return false; }
   // px'te, py − 8'in altındaki en üst yüzey (eğimli zeminde yüzeyin o noktadaki yüksekliği) | null
+  // ex kenarında s'ye aynı yükseklikte (2 px) bitişik başka bir zemin bloğu var mı: yokuş tepesi/dibi gibi kesintisiz birleşim
+  // duvar/basamak sayılmaz (tepede kaldırıp zıplatmaz)
+  function seam(s, ex, face) {
+    for (const q of S.L.solids) {
+      if (q === s || q.float) continue;
+      if (Math.abs(q.x + q.w - ex) < 1 && Math.abs(topAt(q, ex) - face) < 2) return true;
+      if (Math.abs(q.x - ex) < 1 && Math.abs(topAt(q, ex) - face) < 2) return true;
+    }
+    return false;
+  }
   function groundY(px, py) { let b = null; for (const s of S.L.solids) { if (px < s.x || px > s.x + s.w) continue; const t = topAt(s, px); if (t >= py - 8 && (b === null || t < b)) b = t; } return b; }
   game.solidAt = solidAt; game.groundY = groundY; game.topAt = topAt; game.boxFree = boxFree;
   const inLowG = x => { for (const z of S.L.lowg) if (x >= z.x && x <= z.x + z.w) return true; return false; };
@@ -357,9 +368,45 @@
   }
   const near = r => { const f = focus(); return !!f && Math.abs(cxOf(r) - cxOf(f)) < FM.view.VW; };
 
+  /* Yakın doğma noktası: ölünen yerin (x0) RESP_A..RESP_B px gerisinde, önce en yakını. Ölüm yüksekliğine en yakın sağlam yüzey
+     (yüzen platform yalnızca genişse), tehlikenin üstünde/hemen önünde (60 px) değil; mantar/trambolin/gayzer/bataklık/kaya
+     bölgesi dışında, gövde sığar. Doğan 2 sn dokunulmaz (önündeki tehlikeden tepki süresiyle geçer). Yoksa null (→ r.safe). */
+  const RESP_A = 150, RESP_B = 250;
+  function respPoint(x0, feet) {
+    const L = S.L;
+    const at = x => {
+      let best = null, bt = 0;
+      for (const s of L.solids) {
+        if (x < s.x + 14 || x > s.x + s.w - 14 || (s.float && s.w < 200)) continue;
+        const t = topAt(s, x);
+        if (t < feet - 170 || t > L.liq - 20) continue;
+        if (best === null || Math.abs(t - feet) < Math.abs(bt - feet)) { best = s; bt = t; }
+      }
+      if (best === null || !boxFree(x - RW / 2, bt - RH - 1, RW, RH)) return null;
+      const near = (a, b, pa, pb) => x > a - pa && x < b + pb;
+      for (const q of L.spikes) if (near(q.x, q.x + q.w, 60, 40) && Math.abs(q.y + q.h - bt) < 90) return null;
+      for (const k of L.crush) if (near(k.x, k.x + k.w, 70, 40)) return null;
+      for (const q of L.saws) if (near(q.cx - q.r, q.cx + q.r, 70, 40)) return null;
+      for (const b of L.boulders) if (near(b.x0, b.x1 + 2 * b.r, 80, 80)) return null;
+      for (const m of L.mush) if (near(m.x, m.x + m.w, 40, 30)) return null;
+      for (const m of L.tramp) if (near(m.x, m.x + m.w, 40, 30)) return null;
+      for (const v of L.vents) if (near(v.x, v.x + v.w, 40, 30)) return null;
+      for (const q of L.quicksand) if (near(q.x, q.x + q.w, 30, 20)) return null;
+      return bt;
+    };
+    const tryX = x => { if (x < L.start + 40) return null; const t = at(x); return t === null ? null : { x, y: t }; };
+    for (let b = RESP_A; b <= RESP_B; b += 10) { const p = tryX(x0 - b); if (p) return p; }
+    for (let b = RESP_A - 10; b >= 90; b -= 10) { const p = tryX(x0 - b); if (p) return p; }
+    for (let b = RESP_B + 10; b <= 450; b += 10) { const p = tryX(x0 - b); if (p) return p; }
+    return null;
+  }
+  game.respPoint = respPoint;
   function die(r, src, cause) {
     if (isRemote(r) || r.dead > 0 || r.finished || post()) return;
     setSlide(r, false);
+    // yakın doğma: ölünen yerin biraz gerisi (r.safe yalnızca yedek / kurtarma)
+    const rp = respPoint(cxOf(r), r.y + r.h);
+    r.respX = rp ? rp.x : null; r.respY = rp ? rp.y : null;
     r.dead = 1.1; r.deaths++; r.vx = r.vy = 0; r.climb = false; r.fly = 0; r.dash = 0; r.sled = 0; r.boost = 0; r.stun = 0; r.frozen = 0; r.netted = 0; r.pull = 0; r.ccImm = 0;
     const killer = src && src !== r ? src : null;
     if (killer) killer.kills++;
@@ -368,9 +415,10 @@
     const lp = r.loop || (r.loop = { sx: -1, n: 0 });
     // doğduktan sonraki 3 sn içinde ölmek (oyuncu tepki veremeden) iki kez sayılır → iki hızlı ölümde kurtarma
     const quick = S.raceT - (r.spawnAt == null ? -9 : r.spawnAt) < 3;
-    if (Math.abs(r.safe.x - lp.sx) < 40) lp.n += quick ? 2 : 1; else { lp.sx = r.safe.x; lp.n = 1; }
+    const sx0 = r.respX != null ? r.respX : r.safe.x;
+    if (Math.abs(sx0 - lp.sx) < 60) lp.n += quick ? 2 : 1; else { lp.sx = sx0; lp.n = 1; }
     if (lp.n >= (r.bot ? 4 : 3)) {
-      const dx = Math.max(r.x, r.safe.x) + 40;
+      const dx = Math.max(r.x, sx0) + 40;
       let best = null;
       for (const s of S.L.solids) if (!s.float && s.w >= 220 && s.x > dx && (!best || s.x < best.x)) best = s;
       if (best) { r.safe.x = best.x + 90; r.safe.y = topAt(best, best.x + 90); lp.sx = r.safe.x; lp.n = 0; r.respX = null; FM.emit('rescue', { r }); }
@@ -400,7 +448,11 @@
   }
   function respawn(r) {
     // doğunca yarım saniye yerinde hazırlan (oyuncu ne olduğunu görsün; zıplarsa hemen koşar), 2 sn dokunulmaz
-    r.x = r.safe.x - r.w / 2; r.y = r.safe.y - RH - 1; r.h = RH; r.slide = false; r.vx = 0; r.vy = 0; r.inv = 2; r.onGround = false;
+    const px = r.respX != null ? r.respX : r.safe.x;
+    let py = r.respX != null ? r.respY : r.safe.y;
+    r.respX = r.respY = null;
+    { const g = groundY(px, py - 60); if (g !== null && Math.abs(g - py) < 60) py = g; }   // yokuşta eski/yuvarlanmış y → yüzeye
+    r.x = px - r.w / 2; r.y = py - RH - 1; r.h = RH; r.slide = false; r.vx = 0; r.vy = 0; r.inv = 2; r.onGround = false;
     r.spawnT = SPAWN_T; r.spawnAt = S.raceT;
     r.tp = (r.tp | 0) + 1;
     if (near(r)) FM.fx.puff(cxOf(r), cyOf(r), 10, 'rgba(255,255,255,.9)', 14, 80);
@@ -690,17 +742,20 @@
     if (r.x < 0) { r.x = 0; r.vx = Math.max(0, r.vx); }
     // yatay çarpışma: yalnızca DİK yüzler (duvar/basamak) engeller. Yokuşun başı ayak hizasındaysa engel değil, yürünür
     // (dikey yüzey takibi koşucuyu yokuşa oturtur). ≤ 46 px basamağa kendiliğinden çıkılır.
+    // Yalnızca gövde merkezi bloğun DIŞINDAYKEN yandan çarpılır; merkez bloğun üstündeyse (yokuşta yürürken kutunun köşesi
+    // yüzeye değer) dikey yüzey takibi yönetir — yokuş başında/sonunda kaldırma/fırlatma olmaz.
     for (const s of L.solids) {
       if (!boxHits(s, r.x, r.y + 1, r.w, r.h - 2)) continue;
-      const feet = r.y + r.h;
-      if (r.vx >= 0 && r.x + r.w - s.x < 40) {
+      const feet = r.y + r.h, mx = r.x + r.w / 2;
+      if (r.vx >= 0 && mx <= s.x + 2) {
         const face = topAt(s, s.x);
-        if (feet <= face + 1.5) continue;
+        if (feet <= face + 1.5 || seam(s, s.x, face)) continue;
         const lip = feet - face;
         if (lip <= 46 && !r.climb && boxFree(r.x, face - r.h - .5, r.w, r.h)) { r.y = face - r.h - .5; continue; }
         r.x = s.x - r.w; r.blocked = true; if (r.vx > 0) r.vx = 0;
-      } else if (r.vx < 0 && s.x + s.w - r.x < 40) {
-        if (feet <= topAt(s, s.x + s.w) + 1.5) continue;
+      } else if (r.vx < 0 && mx >= s.x + s.w - 2) {
+        const face = topAt(s, s.x + s.w);
+        if (feet <= face + 1.5 || seam(s, s.x + s.w, face)) continue;
         r.x = s.x + s.w; r.vx = 0;
       }
     }
@@ -720,7 +775,8 @@
           if (!(r.x < s.x + s.w && r.x + r.w > s.x)) continue;
           if (rcx >= s.x && rcx < s.x + s.w) {
             const t = s.y2 == null ? s.y : topAt(s, rcx);
-            if (feet0 <= t + 14 && feet + snap >= t && (sup === null || t < supY)) { sup = s; supY = t; }
+            // zemin bloğunda basamak payı kadar (46 px) gömülme de yukarı itilir (ağ düzeltmesi, ışınlanma, eski güvenli nokta)
+            if (feet0 <= t + (s.float ? 14 : 46) && feet + snap >= t && (sup === null || t < supY)) { sup = s; supY = t; }
           } else {
             const t = topAt(s, rcx < s.x ? s.x : s.x + s.w);
             if (feet0 <= t + 1 && feet >= t && (edge === null || t < edgeY)) { edge = s; edgeY = t; }
@@ -830,7 +886,12 @@
       else if (r.fly > 0) { const gy = groundY(cx, feet); if (gy !== null && gy - feet <= 300) sy = gy; }
       if (sy !== null) {
         let ok = false;
-        for (const s of L.solids) if ((!s.float || s.w >= 200) && cx > s.x + 60 && cx < s.x + s.w - 160 && Math.abs(sy - s.y) < 2) { ok = true; break; }
+        // altında sağlam (yüzmeyen ya da geniş) katı; yokuşta kenar payı komşu bloklarla sürer (arkada 60, önde 160 px zemin)
+        for (const s of L.solids) if ((!s.float || s.w >= 200) && cx >= s.x && cx < s.x + s.w && Math.abs(sy - topAt(s, cx)) < 3) {
+          if (s.y2 == null && s.float) ok = cx > s.x + 60 && cx < s.x + s.w - 160;
+          else { const gb = groundY(cx - 60, sy - 50), ga = groundY(cx + 160, sy - 130); ok = gb !== null && ga !== null && Math.abs(gb - sy) < 60 && Math.abs(ga - sy) < 130; }
+          break;
+        }
         const A0 = cx - SAFE_BACK, A1 = cx + SAFE_AHEAD;
         if (ok) for (const s of L.spikes) if (s.x + s.w > A0 && s.x < A1) { ok = false; break; }
         if (ok) for (const k of L.crush) if (k.x + k.w > A0 && k.x < A1) { ok = false; break; }
@@ -968,10 +1029,11 @@
     const cx = cxOf(r), cy = cyOf(r), inh = Math.max(0, r.vx) * THROW_INH;
     switch (it) {
       case 'saw': {
-        if (!d) return { x: cx + 20, y: r.y + r.h - 16, vx: 720 + Math.max(0, r.vx) * .3, vy: 0 };
+        // yerde yuvarlanan testere: yavaş (okunur, zıplanarak kaçılır) ve zemine yakın (merkez ayağın 19 px üstü, yarıçap 18)
+        if (!d) return { x: cx + 20, y: r.y + r.h - 19, vx: SAW_V + Math.max(0, r.vx) * .3, vy: 0 };
         // yatay (ya da yerdeyken aşağı) nişan → yerde yuvarlanır (ileri/geri); yukarı/çapraz → kavisli atış
         const roll = Math.abs(d.y) < .3 || (d.y > 0 && r.onGround), sx = d.x < 0 ? -1 : 1;
-        if (roll) return { x: r1(cx + 20 * sx), y: r1(r.y + r.h - 16), vx: r1(sx * SAW_V + Math.max(0, r.vx) * .3), vy: 0 };
+        if (roll) return { x: r1(cx + 20 * sx), y: r1(r.y + r.h - 19), vx: r1(sx * SAW_V + Math.max(0, r.vx) * .3), vy: 0 };
         return { x: r1(cx + 18 * d.x), y: r1(cy - 6), vx: r1(d.x * SAW_V + Math.max(0, r.vx) * .3), vy: r1(d.y * SAW_V) };
       }
       // varsayılan uzun atış: patlama atanın ~250+ px önüne düşer. Yönlüde hafif yukarı kavis (DYN_LOB): yatay nişan da yay çizer
@@ -1012,7 +1074,7 @@
   // atılan eşyanın varlığı (castItem ve önizleme/yapay zekâ simülasyonu AYNI nesneyi kurar)
   function mkThrown(r, it, p) {
     switch (it) {
-      case 'saw': return { type: 'saw', x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, r: 15, o: r, age: 0, life: 2.4, b: 0 };
+      case 'saw': return { type: 'saw', x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, r: 18, o: r, age: 0, life: 2.6, b: 0 };
       case 'dyn': return { type: 'dyn', x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, o: r, age: 0, fuse: DYN_FUSE };
       // tuzak ve ağ HER ZAMAN fiziksel: yerçekimiyle düşer, bir yüzeye oturunca o yüzeye sabitlenir ve ancak o zaman kurulur
       // (age yere oturunca 0'dan sayar). Atan 1.6 sn kendi tuzağına basmaz (ileri atışta üstünden geçebilsin).
@@ -1177,14 +1239,22 @@
 
   /* =================== VARLIK HAREKETİ (gerçek varlık ve önizleme/yapay zekâ simülasyonu AYNI fonksiyonları kullanır) ===================
      sol(px, py) → nokta katının içinde mi (gerçekte solidAt; önizlemede yakın katılarla aynı test). */
+  /* Testere: yerde yuvarlanır (yokuş çıkar/iner; e.gr = yerde), duvardan seker. Yokuş aşağı yüzeye yapışır (|vx|·dt + 3 px):
+     sekip havalanmaz, zıplayarak kaçılacak yükseklikte kalır. İlk adımda zemine gömülü doğduysa (yokuşta atan) önce üstüne çıkar. */
   function moveSaw(e, dt, sol) {   // true = duvardan sekti
+    if (!e.mv) { e.mv = 1; let k = 0; while (sol(e.x, e.y + e.r) && k < 40) { e.y -= 1; k++; } if (k) e.gr = 1; }
     e.vy = Math.min(1500, e.vy + G * dt);
     e.x += e.vx * dt;
     let wall = false;
-    if (sol(e.x + Math.sign(e.vx) * e.r, e.y)) { e.vx = -e.vx * .9; e.x += e.vx * dt * 2; e.b++; wall = true; }
+    if (sol(e.x + Math.sign(e.vx) * e.r, e.y - 3)) { e.vx = -e.vx * .9; e.x += e.vx * dt * 2; e.b++; wall = true; }
     e.y += e.vy * dt;
     if (e.vy < 0 && sol(e.x, e.y - e.r)) { e.y -= e.vy * dt; e.vy = 0; }   // yukarı atış tavana çarptı
-    if (e.vy > 0 && sol(e.x, e.y + e.r)) { let k = 0; while (sol(e.x, e.y + e.r) && k < 60) { e.y -= 1; k++; } e.vy = 0; }
+    if (e.vy > 0 && sol(e.x, e.y + e.r)) { let k = 0; while (sol(e.x, e.y + e.r) && k < 60) { e.y -= 1; k++; } e.vy = 0; e.gr = 1; }
+    else if (e.gr && e.vy > 0) {
+      const d = Math.abs(e.vx) * dt + 3; let k = 1;
+      while (k <= d && !sol(e.x, e.y + e.r + k)) k++;
+      if (k <= d) { e.y += k - 1; e.vy = 0; } else e.gr = 0;   // yüzey snap mesafesinden derinde: kenardan düşer
+    }
     return wall;
   }
   function moveDyn(e, dt, sol) {
@@ -1198,13 +1268,16 @@
   /* Düşen eşya (tuzak / ağ; bırakılan ya da fırlatılan): yerçekimi, duvardan sekme, tavana çarpma. Alt-orta noktası bir katının
      ÜST yüzeyine değince o yüzeye oturur (e.y = üst − h), sabitlenir: true döner. İlk adımda zemine gömülü doğduysa (kayan/
      yerdeki atan) doğrudan o katının üstüne oturur. Havada asla durmaz. sol(px, py) → katı nesnesi | null. */
+  // yokuşa oturan tuzak/ağın eğim açısı (radyan, + = sağa doğru iniş; çizim bu açıyla döndürür). Düz zeminde 0.
+  const dropAng = s => s.y2 == null ? 0 : Math.round(Math.atan(slopeOf(s)) * 100) / 100;
   function moveDrop(e, dt, sol) {
     const first = !e.mv; e.mv = 1;
     if (first) {
       const s0 = sol(e.x + e.w / 2, e.y + e.h);
       if (s0) {
-        if (!e.vx && !e.vy) { e.y = s0.y - e.h; e.fly = false; return true; }   // bırakılan: zaten zeminde → hemen oturur
-        if (s0.y > e.y + e.h - 48) e.y = s0.y - e.h - 1;                          // fırlatılan: zemine gömülü doğduysa üstüne kaldır, uçmaya devam
+        const t0 = topAt(s0, e.x + e.w / 2);
+        if (!e.vx && !e.vy) { e.y = t0 - e.h; e.fly = false; e.ang = dropAng(s0); return true; }   // bırakılan: zaten zeminde → hemen oturur
+        if (t0 > e.y + e.h - 48) e.y = t0 - e.h - 1;                          // fırlatılan: zemine gömülü doğduysa üstüne kaldır, uçmaya devam
       }
     }
     e.vy = Math.min(1500, e.vy + G * dt);
@@ -1216,7 +1289,7 @@
     e.y += e.vy * dt;
     if (e.vy < 0) { if (sol(cx, e.y)) { e.y -= e.vy * dt; e.vy = 0; } return false; }
     const s = sol(cx, e.y + e.h);
-    if (s && s.y >= b0 - 6) { e.y = s.y - e.h; e.vx = e.vy = 0; e.fly = false; return true; }
+    if (s) { const t = topAt(s, cx); if (t >= b0 - 6) { e.y = t - e.h; e.vx = e.vy = 0; e.fly = false; e.ang = dropAng(s); return true; } }
     return false;
   }
   // sıvıya battı mı (eşya kaybolur)
@@ -1232,12 +1305,12 @@
     FM.emit('fizzle', { e, type: e.type, x, y });
   }
   // gerçek oyunda nokta → katı nesnesi (düşen eşyanın oturacağı yüzey)
-  function solidOf(px, py) { for (const s of S.L.solids) if (px >= s.x && px < s.x + s.w && py >= s.y && py < s.y + s.h) return s; return null; }
+  function solidOf(px, py) { for (const s of S.L.solids) if (inSolid(s, px, py)) return s; return null; }
   // yakın katılar (önizleme/simülasyon hızlı olsun) ve onlarla nokta testi (katı nesnesi | null döner)
   function solTest(x0, x1) {
     const list = [];
     for (const s of S.L.solids) if (s.x < x1 && s.x + s.w > x0) list.push(s);
-    return (px, py) => { for (let i = 0; i < list.length; i++) { const s = list[i]; if (px >= s.x && px < s.x + s.w && py >= s.y && py < s.y + s.h) return s; } return null; };
+    return (px, py) => { for (let i = 0; i < list.length; i++) { const s = list[i]; if (inSolid(s, px, py)) return s; } return null; };
   }
   // önizleme/simülasyon noktası: tuzak ve ağda TABAN (iniş halkası zemine düşsün), diğerlerinde merkez
   const entPt = e => e.type === 'trap' || e.type === 'net' ? [e.x + e.w / 2, e.y + e.h - 6] : [e.x, e.y];
@@ -1440,6 +1513,63 @@
     S.aim = A;
     return A;
   };
+  /* =================== TEHDİTLER (yaklaşan atış uyarısı; yalnızca okuma) ===================
+     FM.S.threats = [{x, y, kind, dir, eta, e}] — YEREL oyuncuya yaklaşan atış/etki (eta küçükten büyüğe, en fazla 8).
+       kind: 'saw' | 'dyn' | 'mis' | 'crow' | 'wave' | 'bolt' | 'ice' | 'ink' | 'meteor'
+       x, y: tehlikenin dünya konumu (bolt'ta oyuncunun tepesi);  dir: -1 arkadan, 1 önden, 0 yukarıdan / yerinde
+       eta : isabete kalan tahmini süre (sn, ≤ THR_T; 2 ondalık);  e: varlığın kendisi (çizim için; DEĞİŞTİRME)
+     Bir varlık ilk kez listeye girince bir kez FM.emit('threat', {kind, x, y, dir, eta, e}) (ses/titreşim). Oyunu etkilemez
+     (ağda determinizm bozulmaz); main.js her çizilen karede çağırır. Kendi atışın senin için tehdit değildir. */
+  const THR_T = 2.2, thrPool = [];
+  game.updateThreats = function () {
+    const out = S.threats || (S.threats = []); out.length = 0;
+    const P = S.player;
+    if (!P || !S.L || P.dead > 0 || P.finished || P.out || P.ghost || S.mode !== 'race') return out;
+    const px = cxOf(P), py = cyOf(P), pvx = P.vx || 0;
+    const put = (e, kind, x, y, eta, dir) => {
+      if (!(eta >= 0 && eta <= THR_T) || out.length >= 8) return;
+      const t = thrPool[out.length] || (thrPool[out.length] = {});
+      t.x = x; t.y = y; t.kind = kind; t.dir = dir; t.eta = Math.round(eta * 100) / 100; t.e = e;
+      out.push(t);
+      if (!e.thr) { e.thr = 1; FM.emit('threat', { kind, x, y, dir, eta: t.eta, e }); }
+    };
+    // yatay yaklaşan (testere, dalga): yaklaşma hızı ve mesafeden varış süresi
+    const horiz = (e, kind, vx, pad) => {
+      const dx = e.x - px, cl = dx < 0 ? vx - pvx : pvx - vx;
+      if (cl > 30) put(e, kind, e.x, e.y, Math.max(0, Math.abs(dx) - pad) / cl, dx < 0 ? -1 : 1);
+    };
+    for (const e of S.ents) {
+      if (e.dead) continue;
+      switch (e.type) {
+        case 'saw': if (e.o !== P && Math.abs(e.y - py) < 150) horiz(e, 'saw', e.vx, 30); break;
+        case 'wave': if (e.o !== P && !e.hit.includes(P) && Math.abs(e.y - py) < 110) horiz(e, 'wave', e.vx != null ? e.vx : WAVE_V, 24); break;
+        case 'dyn': {
+          if (e.o === P) break;
+          const rem = Math.max(0, e.fuse - e.age), qx = px + pvx * rem;   // patladığı anda neredesin
+          if (Math.hypot(e.x - qx, e.y - py) < 95 + 14 + 70) put(e, 'dyn', e.x, e.y, rem, Math.abs(e.x - px) < 30 ? 0 : e.x < px ? -1 : 1);
+          break;
+        }
+        case 'mis': {
+          if (e.tgt !== P) break;
+          const d = Math.hypot(e.x - px, e.y - py);
+          put(e, 'mis', e.x, e.y, (e.age < e.warn ? e.warn - e.age : 0) + d / Math.max(700, Math.hypot(e.vx, e.vy)), Math.abs(e.x - px) < 30 ? 0 : e.x < px ? -1 : 1);
+          break;
+        }
+        case 'crow': if (e.tgt === P && e.first) put(e, 'crow', e.x, e.y, Math.hypot(e.x - px, e.y - py) / 820, Math.abs(e.x - px) < 30 ? 0 : e.x < px ? -1 : 1); break;
+        case 'bolt': if (e.tgt === P) put(e, 'bolt', px, P.y - 160, e.t, 0); break;
+        case 'frost': {
+          if (e.o === P || e.hit.includes(P)) break;
+          const d = Math.hypot(px - e.x, py - e.y);
+          if (d < e.rmax) put(e, 'ice', e.x, e.y, e.age < FROST_WIND ? FROST_WIND - e.age + d / FROST_SP : Math.max(0, d - e.r) / FROST_SP, e.x < px ? -1 : 1);
+          break;
+        }
+        case 'inkw': if (e.o !== P && !e.hit.includes(P) && P.x > e.rx && px > e.x) put(e, 'ink', e.x, e.y, (px - e.x) / Math.max(1, INK_SP - pvx), -1); break;
+        case 'meteor': if (Math.abs(e.x - (px + pvx * e.t)) < e.r + 60 && Math.abs(e.y - (P.y + P.h)) < 140) put(e, 'meteor', e.x, e.y, e.t, 0); break;
+      }
+    }
+    if (out.length > 1) out.sort((a, b) => a.eta - b.eta);
+    return out;
+  };
   // bırakılan nişanın son yönü: ekranda görülen (yardımlı) yön aynen kullanılır; darbe tüketilince ham yön sıfırlanır
   function fireAim(r, kind) {
     const I = FM.input, A = S.aim;
@@ -1462,6 +1592,8 @@
       switch (e.type) {
         case 'saw': {
           if (moveSaw(e, dt, solidAt)) { if (e.b > 2) e.life = 0; FM.fx.sparks(e.x, e.y, 6, '#ffe9a0', 260); }
+          // yerde yuvarlanırken zeminden kıvılcım (uzaktan/telefonda da fark edilsin)
+          else if (e.gr && ((e.age * 22) | 0) !== (((e.age - dt) * 22) | 0) && near({ x: e.x - 14, w: 28 })) FM.fx.sparks(e.x - Math.sign(e.vx) * e.r * .5, e.y + e.r - 1, 2, '#ffd27a', 150);
           if (sunk(e)) { fizzle(e); break; }
           e.life -= dt;
           if (e.life <= 0 && near({ x: e.x - 14, w: 28 })) FM.fx.sparks(e.x, e.y, 10, '#ffe9a0', 300);   // ömrü bitti: kırılır
@@ -1623,12 +1755,22 @@
       // önde kayma engeli (ezici/testere makinesi) varken isteğe bağlı zıplama (altın, meteor, atılan nesne, kutu) yapılmaz:
       // havadan ezicinin altına inen ayakta ölür
       const slideAhead = L.crush.some(k => k.x + k.w > fx - 30 && k.x < fx + 230 && Math.abs(k.y + k.h + 26 - feet) < 30) || L.saws.some(s => s.cx + s.r > fx - 30 && s.cx - s.r < fx + 230 && Math.abs(s.cy + 80 - feet) < 30);
-      if (!groundWithin(fx + 8, feet, 240)) j = need = true;
+      if (!groundWithin(fx + 8, feet, 240, 20)) j = need = true;   // 20: yokuş yukarı yüzey (≤ .75 eğim) zıplatmaz
+      else {
+        // hendek/dar vadi: önde zemin birden derine iniyor ama karşı kenar aynı seviyede → atla (düşüp tırmanmak zaman kaybı)
+        const g1 = groundY(fx + 12, feet - 4);
+        if (g1 !== null && g1 - feet > 60) for (const D of [150, 190, 230]) { const g2 = groundY(fx + D, feet - 60); if (g2 !== null && Math.abs(g2 - feet) < 40) { j = need = true; break; } }
+      }
       // diken: geniş grupta daha erken zıpla (zıplama penceresi 36 px'te 0..140, 108 px'te 0..68 px — ortasını hedefle)
       for (const s of L.spikes) { const dx = s.x - fx, lead = 64 - Math.max(0, s.w - 36) * .4; if (dx > -6 && dx < lead && Math.abs(s.y + s.h - feet) < 40) { j = need = true; break; } }
       for (const e of S.ents) {
         if (e.type === 'trap' || e.type === 'net') { const dx = e.x - fx; if (dx > -e.w && dx < 90 && e.y < feet + 4 && e.y + e.h > r.y - 40) j = true; }
-        else if (e.type === 'saw') { const dx = e.x - fx; if ((dx > -20 && dx < 120 && e.vx < 0) || (dx > -20 && dx < 40)) if (Math.abs(e.y - feet) < 50) j = true; }
+        else if (e.type === 'saw' && e.o !== r && Math.abs(e.y - feet) < 50) {
+          const dx = e.x - fx;
+          if ((dx > -20 && dx < 120 && e.vx < 0) || (dx > -20 && dx < 40)) j = true;
+          // arkadan yetişen testere: varışına ~0.3 sn kala zıpla (havada kalış ~0.6 sn, üstünden geçer)
+          else if (e.x < r.x && e.vx > r.vx + 50 && (r.x - e.x - e.r) / (e.vx - r.vx) < .3) j = need = true;
+        }
       }
       for (const k of L.crush) { const dx = k.x - fx; const gap = feet - (k.y + k.h); if (dx > -k.w - r.w && dx < 60 && gap > 8 && gap < 45) sl = true; }
       // testere makinesi: altından kayan her zaman geçer (bıçağın en alt noktası kayan yarışçının üstünde kalır)
@@ -1800,11 +1942,12 @@
     if (r.onGround) { r.vy = 0; return; }
     if (r.y + r.h > S.L.liq + 18) { r.vy = 0; r.dead = 1e9; return; }
     r.vy = Math.min(1500, r.vy + G * dt);
+    const f0 = r.y + r.h;
     r.y += r.vy * dt;
-    for (const s of S.L.solids) if (ov(r, s)) {
-      if (r.vy >= 0) { r.y = s.y - r.h; r.onGround = true; r.jumps = 0; } else r.y = s.y + s.h;
-      r.vy = 0; break;
-    }
+    if (r.vy < 0) { for (const s of S.L.solids) if (s.y2 == null && ov(r, s)) { r.y = s.y + s.h; r.vy = 0; break; } return; }
+    // iniş: gövde merkezinin altındaki yüzey (eğimli zemin dahil)
+    const gy = groundY(cxOf(r), f0 - 2);
+    if (gy !== null && r.y + r.h >= gy) { r.y = gy - r.h; r.onGround = true; r.jumps = 0; r.vy = 0; }
   }
   function updateLevel(dt) {
     const L = S.L, t = S.lt;

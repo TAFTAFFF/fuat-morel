@@ -20,9 +20,13 @@
   const END_GRACE = 600;            // ms: ev sahibi tur sonu kararından sonra son durumların gelmesini bekler
   const SEND_MS = 33;               // yerel durumu paketleme aralığı (net.js ~10 Hz'e kısar, en günceli gider)
   const EMOTE_T = 3;                // emoji balonu süresi (sn)
-  const FINAL_AUTO = 30;            // sn: final sıralamasından sonra ev sahibi otomatik lobiye döner
+  const FINAL_AUTO = 10;            // sn: final sıralamasından sonra herkes otomatik lobiye döner (TUR5 §7)
+  const AUTO_MAX = 10;              // sn: turlar arası otomatik geçiş en fazla (kürsüden ~6 sn sonra sonraki tur)
+  const CD_SEC = 5;                 // herkes hazır → bu kadar sn geri sayım, sonra yarış kendiliğinden başlar (TUR5 §6)
+  const CD_COOL = 1500;             // iptalden sonra yeniden başlamadan önce kısa bekleme (sayı titremesin)
+  const SNAP_KEY = 'fm-mpsnap';     // yarış ortasında sayfa yenilenirse aynı yarışçıya dönmek için son konum (localStorage)
   const MAXR = FM.MAXR || 10;
-  const DEF = { mode: 'classic', map: 'random', rounds: 3, bots: true, fill: 4, autoNext: 20 };
+  const DEF = { mode: 'classic', map: 'random', rounds: 3, bots: true, fill: 4, autoNext: 8 };
   // uzak yarışçı durum bayrakları (kompakt bit maskesi, anahtar 'f')
   const F = { g: 1, sl: 2, cl: 4, sm: 8, bl: 16, fi: 32, el: 64, lf: 128, sp: 256, ice: 512, sand: 1024, lift: 2048 };
   // süreler (0.01 hassasiyet, yalnızca > 0 gider) ve tam sayılar (yalnızca ≠ 0 gider)
@@ -31,6 +35,9 @@
   const INT = [['jumps', 'ju'], ['charge', 'ch'], ['coins', 'co'], ['kills', 'k'], ['deaths', 'de'], ['tp', 'j']];
   // gelen olaylardan bu türler, gönderenin ara değerleme gecikmesi kadar bekletilip uygulanır (ekranda gördüğün an ile hizalı)
   const DELAYED = { it: 1, ab: 1, ht: 1, bl: 1, dt: 1, fn: 1, cd: 1 };
+  // eşya/güç parametreleri (p): mesajda doğrudan giden alanlar; MOTOR'un eklediği diğer sonlu sayısal alanlar 'q' içinde (2 ondalık)
+  const P_DIRECT = { x: 1, y: 1, vx: 1, vy: 1, rx: 1, fy: 1, ax: 1, ay: 1, tgt: 1, tg: 1 };
+  const P_KEY = /^[a-z][A-Za-z0-9]{0,11}$/;
 
   /* =================== yardımcılar =================== */
   const now = () => (FM.net && FM.net.now ? FM.net.now() : Date.now());
@@ -90,6 +97,32 @@
   function nidAssign(ents, from, n) {
     if (!Array.isArray(ents) || !tok(from) || !num(n)) return;
     ents.forEach((e, i) => { if (e) e.nid = from + '.' + n + (i ? '.' + i : ''); });
+  }
+  // nişan yönü (TUR5 §2.3): birim vektör, 2 ondalık; (0,0) ya da yoksa GÖNDERİLMEZ (alıcıda varsayılan yön) + ek sayısal p alanları
+  function packAim(p, o) {
+    if (num(p.ax) && num(p.ay) && (p.ax || p.ay)) { o.ax = r2(clamp(p.ax, -1, 1)); o.ay = r2(clamp(p.ay, -1, 1)); }
+    let q = null, n = 0;
+    for (const k in p) {
+      if (P_DIRECT[k] || !P_KEY.test(k) || !num(p[k])) continue;
+      if (++n > 12) break;
+      (q || (q = {}))[k] = Math.round(p[k] * 100) / 100;
+    }
+    if (q) o.q = q;
+    return o;
+  }
+  // alıcı: eski mesajlarda ax/ay yok → p.ax/p.ay tanımsız kalır (varsayılan davranış). Ek alanlar yalnız sonlu sayı, bilinen adları ezmez.
+  function unpackAim(d, p) {
+    if (num(d.ax) && num(d.ay) && (d.ax || d.ay)) { p.ax = clamp(d.ax, -1, 1); p.ay = clamp(d.ay, -1, 1); }
+    if (isObj(d.q)) {
+      let n = 0;
+      for (const k in d.q) {
+        if (++n > 12) break;
+        const v = d.q[k];
+        if (P_DIRECT[k] || !P_KEY.test(k) || (k in Object.prototype) || p[k] !== undefined || !num(v) || Math.abs(v) > 1e7) continue;
+        p[k] = v;
+      }
+    }
+    return p;
   }
   function entByNid(nid) { if (typeof nid !== 'string' || !nid) return null; for (const e of S.ents) if (e.nid === nid) return e; return null; }
 
@@ -276,14 +309,14 @@
     if (!isAuth(d.r)) return;
     const n = ++M.seq, p = d.p || {};
     nidAssign(d.ents, myPid(), n);
-    out('it', { r: d.r.pid, k: d.item, x: r1(p.x), y: r1(p.y), vx: r1(p.vx), vy: r1(p.vy), rx: r1(p.rx),
-      t: p.tgt && p.tgt.pid || undefined, ts: Array.isArray(p.tg) ? p.tg.map(q => q.pid).filter(tok) : undefined, n });
+    out('it', packAim(p, { r: d.r.pid, k: d.item, x: r1(p.x), y: r1(p.y), vx: r1(p.vx), vy: r1(p.vy), rx: r1(p.rx),
+      t: p.tgt && p.tgt.pid || undefined, ts: Array.isArray(p.tg) ? p.tg.map(q => q && q.pid).filter(tok) : undefined, n }));
   });
   onLocal('ability', d => {
     if (!isAuth(d.r)) return;
     const n = ++M.seq, p = d.p || {};
     nidAssign(d.ents, myPid(), n);
-    out('ab', { r: d.r.pid, x: r1(p.x), y: r1(p.y), fy: r1(p.fy), t: p.tgt && p.tgt.pid || undefined, n });
+    out('ab', packAim(p, { r: d.r.pid, x: r1(p.x), y: r1(p.y), fy: r1(p.fy), t: p.tgt && p.tgt.pid || undefined, n }));
   });
   onLocal('hit', d => { if (isAuth(d.victim)) out('ht', { v: d.victim.pid, s: d.src && d.src.pid || undefined, k: d.kind, c: d.cause || undefined, n: d.ent && d.ent.nid || undefined }); });
   onLocal('blocked', d => { if (isAuth(d.r)) out('bl', { r: d.r.pid, b: d.by, n: d.ent && d.ent.nid || undefined }); });
@@ -334,7 +367,7 @@
     // eşya: aynı varlık herkesin dünyasında (sahibi = o yarışçı, hedefler kimlikle)
     it(from, d) {
       const r = own(from, d.r); if (!r || !FM.ITEMS[d.k] || !num(d.x) || !num(d.y)) return;
-      const p = { x: d.x, y: d.y, vx: num(d.vx) ? d.vx : 0, vy: num(d.vy) ? d.vy : 0, rx: num(d.rx) ? d.rx : r.x };
+      const p = unpackAim(d, { x: d.x, y: d.y, vx: num(d.vx) ? d.vx : 0, vy: num(d.vy) ? d.vy : 0, rx: num(d.rx) ? d.rx : r.x });
       if (d.k === 'mis') p.tgt = byRid.get(d.t) || null;
       if (d.k === 'bolt') p.tg = (Array.isArray(d.ts) ? d.ts.slice(0, 6) : []).map(id => byRid.get(id)).filter(Boolean);
       r.item = null;
@@ -344,8 +377,8 @@
     },
     ab(from, d) {
       const r = own(from, d.r); if (!r || !num(d.x) || !num(d.y)) return;
-      const p = { x: d.x, y: d.y, fy: num(d.fy) ? d.fy : d.y + C.RH / 2 };
-      if (r.id === 'Caner') p.tgt = byRid.get(d.t) || null;
+      const p = unpackAim(d, { x: d.x, y: d.y, fy: num(d.fy) ? d.fy : d.y + C.RH / 2 });
+      if (r.id === 'Caner' || (typeof d.t === 'string' && byRid.has(d.t))) p.tgt = byRid.get(d.t) || null;
       r.charge = 0;
       const ents = game.castAbility(r, p);
       nidAssign(ents, from, d.n);
@@ -529,7 +562,7 @@
     const t = now(); if (t - M.endTry < 900) return;
     M.endTry = t;
     const rk = mpRanking(), rp = game.roundPoints(rk);
-    const payload = { v: NGV, mid: M.mid, round: M.round, rounds: M.rounds, mode: S.gameMode, last: M.round >= M.rounds,
+    const payload = { v: NGV, mid: M.mid, round: M.round, rounds: M.rounds, mode: S.gameMode, last: M.round >= M.rounds, an: M.an,
       rk: rk.map((r, i) => ({ r: r.pid, rp: rp[i] | 0, t: (r.total | 0) + (rp[i] | 0), f: r.finished ? 1 : 0, p: r.place | 0, ft: r2(r.ftime) || 0,
         c: r.coins | 0, k: r.kills | 0, d: r.deaths | 0, o: r.off ? 1 : 0, e: r.out && r.elim ? 1 : 0, n: r.outN | 0 })) };
     if (FM.net.end(payload)) { M.endAt = 0; ST.endsSent++; }
@@ -559,7 +592,8 @@
     };
     if (S.netRole && (S.mode === 'count' || S.mode === 'race' || S.mode === 'end')) game.endRound({ ranking: order, rp, total });
     FM.emit('mp:end', M.lastEnd);
-    if (isHost()) armAuto(M.an);
+    // sonraki tura kalan süre HERKESTE (üyeler de geri sayımı gösterir); yalnız ev sahibi uygular (tick)
+    armAuto(num(d.an) ? clamp(d.an, 0, 120) : M.an);
   }
   function standingsPayload() {
     const ids = Object.keys(M.tot);
@@ -581,7 +615,7 @@
     // tur yarıştıysam normal maç sonu (meta ödülü + final ekranı); yalnızca izlediysem yalnızca mp:final
     if (M.raced && S.player && !S.player.ghost && S.racers.indexOf(S.player) >= 0 && S.netRole) game.endMatch();
     FM.emit('mp:final', M.final);
-    if (isHost()) armAuto(FINAL_AUTO);
+    armAuto(FINAL_AUTO);                                // herkes ~10 sn sonra lobiye döner (ev sahibi uygular, üyeler geri sayımı görür)
   }
   FM.on('net:end', d => { try { if (isObj(d) && d.final) onFinal(d); else if (isObj(d)) onRoundEnd(d); } catch (e) { errLog('end', e); } });
   FM.on('net:toLobby', () => {
@@ -604,7 +638,7 @@
       rounds: num(+c.rounds) && +c.rounds >= 1 ? clamp(Math.round(+c.rounds), 1, 9) : DEF.rounds,
       bots: !(c.bots === false || c.bots === 0 || c.bots === '0'),
       fill: num(+c.fill) && +c.fill >= 2 ? clamp(Math.round(+c.fill), 2, MAXR) : DEF.fill,
-      autoNext: c.autoNext === 0 || c.autoNext === '0' ? 0 : (num(+c.autoNext) && +c.autoNext > 0 ? clamp(Math.round(+c.autoNext), 3, 120) : DEF.autoNext)
+      autoNext: c.autoNext === 0 || c.autoNext === '0' ? 0 : (num(+c.autoNext) && +c.autoNext > 0 ? clamp(Math.round(+c.autoNext), 3, AUTO_MAX) : DEF.autoNext)
     };
   }
   function humans() { return FM.net.players().filter(p => !p.off && (p.alive || p.me)); }
@@ -654,6 +688,141 @@
   }
   function hostToLobby() { if (!isHost()) return false; M.autoAt = 0; return FM.net.toLobby({ mid: M.mid }); }
 
+  /* =================== herkes hazır → 5 sn geri sayım → otomatik başlama (TUR5 §6) ===================
+     Ev sahibi DAHİL odadaki tüm bağlı insanlar HAZIR ise ev sahibi 5 sn sayar ve her saniye üyelere 'cd' olayı yollar.
+     Biri hazırı geri alır / yeni biri girer / biri çıkarsa iptal. Sayaç biterse hostStart(). Tek insan varken HAZIRIM da sayar.
+     Her istemcide 'mp:countdown {left: 5..1 | null, reason?: 'unready'|'join'|'leave'|'start'}'; FM.netgame.countdown(). */
+  const CD = { left: null, at: 0, ids: '', k: 0, cool: 0, timer: null, last: 0, src: null };
+  function cdEmit(left, reason) { const d = { left }; if (reason) d.reason = reason; FM.emit('mp:countdown', d); }
+  function cdSend(left, reason) { if (FM.net && FM.net.inRoom()) FM.net.sendEvent('cd', { l: left, k: CD.k, r: reason || undefined }); }
+  function cdStop(reason, send) {
+    clearTimeout(CD.timer); CD.timer = null;
+    if (CD.left == null) return;
+    CD.left = null; CD.at = 0; CD.cool = now() + CD_COOL;
+    if (send) cdSend(null, reason);
+    cdEmit(null, reason || undefined);
+  }
+  function cdStart(ids) {
+    CD.k++; CD.ids = ids; CD.at = now() + CD_SEC * 1000; CD.left = CD_SEC; CD.src = myPid();
+    cdSend(CD_SEC); cdEmit(CD_SEC);
+    cdSched();
+  }
+  // saniye sınırlarında tam zamanında (4 Hz tikten bağımsız) bir sonraki sayı / başlatma
+  function cdSched() {
+    clearTimeout(CD.timer);
+    if (CD.left == null) return;
+    const rem = CD.at - now(), next = rem - Math.floor((rem - 1) / 1000) * 1000;
+    CD.timer = setTimeout(cdStep, Math.max(20, Math.min(1000, next) + 5));
+  }
+  const cdStep = function () {
+    try {
+      CD.timer = null;
+      if (CD.left == null || !isHost()) return;
+      if (!lobbyCheck()) return;                         // iptal edildi
+      const rem = CD.at - now();
+      if (rem <= 30) { cdStop('start', true); hostStart(); return; }
+      const left = Math.ceil(rem / 1000);
+      if (left !== CD.left) { CD.left = left; cdSend(left); cdEmit(left); }
+      cdSched();
+    } catch (e) { errLog('cd', e); }
+  };
+  // ev sahibi: lobi durumunu değerlendir (geri sayımı başlat / iptal et). Geri sayım sürüyorsa true.
+  function lobbyCheck() {
+    const lob = inRoom() ? FM.net.lobby() : null;
+    if (!isHost() || M.on || !lob || lob.st !== 'lobby') { if (CD.left != null && isHost()) cdStop(null, true); return false; }
+    const hs = humans(), ids = hs.map(p => p.pid).sort().join(',');
+    const all = hs.length > 0 && hs.every(p => p.ready);
+    if (CD.left == null) { if (all && now() >= CD.cool) cdStart(ids); return CD.left != null; }
+    if (ids !== CD.ids) {
+      const prev = CD.ids.split(',');
+      cdStop(hs.some(p => prev.indexOf(p.pid) < 0) ? 'join' : 'leave', true);
+      return false;
+    }
+    if (!all) { cdStop('unready', true); return false; }
+    return true;
+  }
+  // üye: ev sahibinin sayımı (kaybolan mesajda yerel tahminle sürer; ev sahibi susarsa söner)
+  function onCd(m) {
+    if (!isObj(m.data) || M.on || isHost() || !FM.net || m.from !== FM.net.host()) return;
+    const d = m.data, l = d.l == null ? null : int(d.l);
+    if (l != null && !(l >= 1 && l <= 9)) return;
+    const reason = d.r === 'unready' || d.r === 'join' || d.r === 'leave' || d.r === 'start' ? d.r : undefined;
+    CD.last = now(); CD.src = m.from;
+    if (l == null) { if (CD.left != null) { CD.left = null; CD.at = 0; cdEmit(null, reason); } return; }
+    CD.at = now() + l * 1000 - clamp(num(m.lat) ? m.lat : 0, 0, 600);
+    if (l !== CD.left) { CD.left = l; cdEmit(l); }
+  }
+  function memberCdTick() {
+    if (CD.left == null || isHost()) return;
+    const t = now(), est = Math.ceil((CD.at - t) / 1000);
+    if (t > CD.at + 2500 || (FM.net && CD.src !== FM.net.host())) { CD.left = null; CD.at = 0; cdEmit(null); return; }   // ev sahibi sustu / değişti
+    if (est >= 1 && est < CD.left) { CD.left = est; cdEmit(est); }
+  }
+
+  /* =================== odaya geri dönüş (TUR5 §7) =================== */
+  // {code, mins, nick (ev sahibinin takma adı | null)} | null — son 15 dk içinde girilen oda (şu an o odada değilsen)
+  function rejoinInfo() {
+    const rec = FM.net && typeof FM.net.lastRoom === 'function' ? FM.net.lastRoom() : null;
+    if (!rec) return null;
+    if (FM.net.busy() && FM.net.code() === rec.code) return null;
+    return { code: rec.code, mins: Math.max(0, Math.round((Date.now() - rec.t) / 60000)), nick: rec.hn || null };
+  }
+  let rejoining = null;
+  /** Son odaya geri dön. true = deneme başladı ('mp:rejoining {code}'; başarısızsa 'mp:left {reason: 'rejoin-failed'}'). */
+  function rejoin() {
+    const info = rejoinInfo(); if (!info || !FM.net.available()) return false;
+    const rec = FM.net.lastRoom();
+    rejoining = info.code;
+    const ok = !!FM.net.joinRoom(info.code, { rejoin: true, broker: rec ? rec.broker : undefined });
+    if (!ok) { rejoining = null; FM.emit('mp:left', { reason: 'rejoin-failed', code: info.code }); }
+    return ok;
+  }
+  FM.on('net:rejoining', d => { try { rejoining = d && d.code || rejoining; FM.emit('mp:rejoining', { code: d && d.code }); } catch (e) { errLog('rejoining', e); } });
+  FM.on('net:error', d => {
+    try {
+      if (!isObj(d) || !d.rejoin) return;
+      rejoining = null;
+      FM.emit('mp:left', { reason: 'rejoin-failed', code: typeof d.room === 'string' ? d.room : null, err: d.code });
+    } catch (e) { errLog('rejoin-err', e); }
+  });
+  // açılışta: ?oda= linki yoksa ve başka sekme o odada değilse son odaya otomatik dön
+  function autoRejoin() {
+    const q = FM.params || {};
+    if (q.oda || q.mp || q.rejoin === '0' || !FM.net || !FM.net.available() || FM.net.busy()) return;
+    const rec = FM.net.lastRoom(); if (!rec) return;
+    if (!rec.closed && Date.now() - rec.live < 12000) return;      // başka bir sekme şu an odada (kaydı tazeliyor)
+    rejoin();
+  }
+
+  /* ---- yarış ortasında yenileme: aynı yarışçıya kaldığı yerden dönüş ---- */
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+  let snapT = 0;
+  function snapSave() {
+    const r = S.player;
+    if (!M.on || M.phase !== 'race' || !r || r.ctrl !== 'local' || !S.L || !(S.mode === 'race' || S.mode === 'end')) return;
+    snapT = now();
+    lsSet(SNAP_KEY, JSON.stringify({ mid: M.mid, rd: M.round, q: K.q, t: Date.now(), x: r1(r.x), y: r1(r.y),
+      sx: r.safe ? r1(r.safe.x) : null, sy: r.safe ? r1(r.safe.y) : null, co: r.coins | 0, k: r.kills | 0, de: r.deaths | 0,
+      g: r.gates | 0, ch: r.charge | 0, fin: r.finished ? 1 : 0, ft: r2(r.ftime) || 0, out: r.out && r.elim ? 1 : 0 }));
+  }
+  function snapRestore(r, d) {
+    let o = null; try { o = JSON.parse(lsGet(SNAP_KEY) || 'null'); } catch (e) { o = null; }
+    if (!isObj(o) || o.mid !== d.mid || o.rd !== d.round || o.q !== K.q || !num(o.t) || Math.abs(Date.now() - o.t) > 15 * 60000) return false;
+    const L = S.L, okx = v => num(v) && v > 0 && v < L.end + 2000, oky = v => num(v) && v > -3000 && v < L.liq;
+    if (okx(o.sx) && oky(o.sy)) { r.safe = { x: o.sx, y: o.sy }; r.x = o.sx - r.w / 2; r.y = o.sy - C.RH - 1; }
+    else if (okx(o.x) && oky(o.y)) { r.x = o.x; r.y = o.y; }
+    else return false;
+    r.vx = 0; r.vy = 0; r.tp = (r.tp | 0) + 1; r.inv = 1.5;
+    r.coins = clamp(int(o.co), 0, 9999); r.kills = clamp(int(o.k), 0, 999); r.deaths = clamp(int(o.de), 0, 999);
+    r.gates = int(o.g) & 0x3ff; r.charge = clamp(int(o.ch), 0, 100);
+    // geçtiğin altınları tekrar toplama (aynı altını iki kez sayma)
+    const bit = 1 << r.idx; for (const co of L.coins) if (!co.drop && co.x < r.x - 40) co.got = (co.got | 0) | bit;
+    if (o.fin) game.finishRacer(r, num(o.ft) ? o.ft : S.raceT, true);
+    else if (o.out && S.gameMode === 'elim') { r.out = r.elim = true; r.dead = 1e9; r.item = null; }
+    return true;
+  }
+
   /* =================== ev sahibi göçü, kopanlar, odadan çıkış =================== */
   function adoptBot(r) {
     r.ctrl = 'bot'; r.bot = true; r._ns = null; r.stale = false;
@@ -681,12 +850,14 @@
           S.netRole = 'host';
           for (const r of S.racers) if (r.nbot && r.ctrl === 'remote') adoptBot(r);
         }
-        if (M.on && M.phase === 'results') armAuto(M.an);
-        else if (M.on && M.phase === 'final') armAuto(FINAL_AUTO);
+        // üyeyken saydığımız süre sürer (yoksa baştan kur)
+        if (M.on && M.phase === 'results' && !M.autoAt) armAuto(M.an);
+        else if (M.on && M.phase === 'final' && !M.autoAt) armAuto(FINAL_AUTO);
+        if (CD.left != null) cdStop(null);               // eski ev sahibinin geri sayımı: yeniden değerlendir
       } else {
         if (S.netRole === 'host') S.netRole = 'member';
         for (const r of S.racers) if (r.nbot && r.ctrl === 'bot') { r.ctrl = 'remote'; r.bot = false; r._ns = null; r._src = d.pid; }
-        M.autoAt = 0; M.endAt = 0;
+        M.endAt = 0;                                     // otomatik geçiş süresi (gösterim) kalır; uygulamak yeni ev sahibinin işi
       }
       FM.emit('mp:host', { me: !!d.me, pid: d.pid, prev: d.prev || null });
     } catch (e) { errLog('host', e); }

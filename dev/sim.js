@@ -24,6 +24,13 @@ const themeFor = run => TH == null || TH === 'random' ? 'random' : TH === 'all' 
 let allFin = 0, errors = 0, warns = 0; const deaths = {}; const times = []; let nDeath = 0, nUse = 0, sumT = 0;
 const ev = { portal: 0, vent: 0, tramp: 0, gate: 0, eliminated: 0, meteor: 0, drop: 0, pick: 0, bonus: 0 };
 FM.on('item:use', () => nUse++);
+// yönlü atış istatistiği (docs/TUR5.md §2): eşya/güç kullanımı ve öldürmeler yöne göre (varsayılan | fwd | back | up | down)
+const dirOf = p => !p || !(p.ax || p.ay) ? 'varsayılan' : p.ax < -.3 ? 'back' : p.ay < -.35 ? 'up' : p.ay > .35 ? 'down' : 'fwd';
+const aimUse = {}, aimKill = {}, abUse = {}, feel = { perfect: 0, nearmiss: 0, draftMax: 0, chargeFull: 0 };
+FM.on('item:use', d => { const k = d.item + ':' + dirOf(d.p); aimUse[k] = (aimUse[k] || 0) + 1; });
+FM.on('ability', d => { const k = d.id + ':' + dirOf(d.p); abUse[k] = (abUse[k] || 0) + 1; });
+FM.on('death', d => { if (d.killer && d.ent && d.ent.o === d.killer) { const k = d.cause + ':' + (d.ent.aim || 'varsayılan'); aimKill[k] = (aimKill[k] || 0) + 1; } });
+FM.on('perfect', () => feel.perfect++); FM.on('nearmiss', () => feel.nearmiss++); FM.on('charge:full', () => feel.chargeFull++);
 FM.on('death', d => { const k = d.cause; deaths[k] = (deaths[k] || 0) + 1; nDeath++; });
 FM.on('portal', () => ev.portal++); FM.on('vent', () => ev.vent++); FM.on('mush', d => { if (d.kind === 'tramp') ev.tramp++; });
 FM.on('gate', () => ev.gate++); FM.on('eliminated', () => ev.eliminated++); FM.on('meteor', () => ev.meteor++);
@@ -39,6 +46,7 @@ for (let run = 0; run < N; run++) {
     while (t < 200 && S.mode !== 'end' && S.mode !== 'podium') {
       FM.game.step(FM.C.STEP); t += FM.C.STEP;
       for (const p of S.parts) p.life -= FM.C.STEP; S.parts = S.parts.filter(p => p.life > 0);
+      for (const r of R) if (r.draft > feel.draftMax) feel.draftMax = r.draft;
       // tutarlılık: sayısal bozulma / ilerlemeyen yarışçı
       for (let i = 0; i < R.length; i++) {
         const r = R[i];
@@ -61,3 +69,8 @@ for (let run = 0; run < N; run++) {
 }
 console.log(`\nToplam: ${allFin}/${N} koşu beklendiği gibi bitti (mod ${MODE}, ${NR} yarışçı), hata ${errors}, uyarı ${warns}. Ortalama süre ${(sumT / Math.max(1, N)).toFixed(1)} sn, yarış başına ölüm ${(nDeath / Math.max(1, N)).toFixed(1)}, yarışçı başına eşya kullanımı ${(nUse / Math.max(1, N) / NR).toFixed(1)}.`);
 console.log('Olaylar:', JSON.stringify(ev), ' Ölüm nedenleri:', JSON.stringify(deaths));
+const sortObj = o => JSON.stringify(Object.fromEntries(Object.entries(o).sort()));
+console.log('Eşya kullanımı (yön):', sortObj(aimUse));
+console.log('Varlıkla öldürme (yön):', sortObj(aimKill));
+console.log('Güç kullanımı (yön):', sortObj(abUse));
+console.log('His:', JSON.stringify(feel));

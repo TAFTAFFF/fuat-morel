@@ -2401,6 +2401,9 @@
     if (md.length) ms = '<div class="rm"><span class="rm-h">' + svg('check') + 'Tamamlanan görevler</span>' + md.slice(0, 4).map(m => '<span class="rm-i">' + (m && m.icon ? anyIcon(m.icon, 20, 'rm-ic') : '') + esc((m && (m.title || m.n)) || String(m)) + '</span>').join('') + '</div>';
     const li = levelInfo();
     const lvUp = rw.levelUp && rw.kind !== 'match' ? '<div class="lvup"><span class="lvup-burst"></span>' + svg('star', 'gold lvup-star') + '<b class="lvup-n">' + (typeof rw.levelUp === 'number' ? rw.levelUp : li.level) + '</b><span class="lvup-t"><b>SEVİYE ATLADIN!</b><span>Yeni ödüller seni bekliyor</span></span></div>' : '';
+    // lige yükseldin (FM.meta.lastRewards.league {id, n, col, up})
+    const lgR = rw.league && rw.league.up ? rw.league : null;
+    const lgUp = lgR ? '<div class="lvup lg-up" style="--lg:' + esc(lgR.col || '#ffd23f') + '"><span class="lvup-burst"></span><i class="lg-big">' + svg('shieldL') + '</i><span class="lvup-t"><b>LİGE YÜKSELDİN!</b><span>' + esc(lgR.n || '') + ' Ligi</span></span></div>' : '';
     const last = !!res.last || (res.round >= res.rounds);
     st.resLast = last;
     const elimd = !!(P && (P.out || P.elim) && !P.finished);
@@ -2425,12 +2428,12 @@
                 '<div class="rwc c-xp"><i class="xp-big">XP</i><b data-cu="' + (+rw.xp || 0) + '" data-pre="+">0</b><span>Deneyim</span></div>' +
                 '<div class="rwc c-gem">' + gemI(48, 'rwc-i') + '<b data-cu="' + (+rw.gems || 0) + '" data-pre="+">0</b><span>Elmas</span></div>' +
                 '<div class="rwc c-tr ' + (td < 0 ? 'neg' : '') + '">' + trophyI(48, 'rwc-i') + '<b data-cu="' + td + '" data-sign>0</b><span>Kupa</span></div>' +
-              '</div>' + lvUp + lines + ms +
+              '</div>' + lvUp + lgUp + lines + ms +
             '</div>')) +
             '<div class="res-foot">' + resFoot(mp, last) + '</div>' +
           '</div>' +
         '</div>' +
-        (rw.levelUp ? confetti(touchMode ? 14 : 26) : '') +
+        (rw.levelUp || lgR ? confetti(touchMode ? 14 : 26) : '') +
       '</div>';
     showLayer('res', true);
     runCountUps(Ls.res, 900);
@@ -2506,14 +2509,15 @@
         '<span class="fr-tot"><b>' + (r.total || 0) + '</b><em>puan</em></span>' +
       '</div>';
     });
+    const awH = awardsHtml(standings, isMe);
     Ls.fin.innerHTML =
-      '<div class="fin ' + (champ ? 'win' : 'lose') + '">' +
+      '<div class="fin ' + (champ ? 'win' : 'lose') + (awH ? ' has-aw' : '') + '">' +
         '<div class="fin-hero">' +
           '<div class="fin-rays"></div>' +
           '<div class="fin-pt">' + svg('crown', 'gold fin-crown') + pt(win.id, 220, { skin: win.skin, expr: 'h' }, 'fin-img') + '</div>' +
           '<div class="fin-title">' + (champ ? 'ŞAMPİYON!' : 'MAÇ BİTTİ') + '</div>' +
           '<div class="fin-sub">' + (champ ? 'Klanın en hızlısı sensin, <b>' + esc(win.name || win.id) + '</b>!' : 'Şampiyon <b>' + esc(win.name || win.id) + '</b> · Sen <b>' + myPlace + '.</b> oldun') + '</div>' +
-          awardsHtml(standings, isMe) +
+          awH +
         '</div>' +
         '<div class="pnl fin-pnl">' + ribbon('TOPLAM PUAN', champ ? 'rb-gold' : 'rb-red') +
           '<div class="fin-in"><div class="fin-rows' + (standings.length > 4 ? ' scroll' : '') + '" data-sk="fin-rows">' + rows + '</div>' + (d.mp && !st.mpRaced ? '' : finRewards()) +

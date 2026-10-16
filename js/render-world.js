@@ -11,6 +11,9 @@
    8 tema: forest, candy, snow, castle, desert (Çöl Tapınağı), space (Uzay İstasyonu), city (Gece Şehri), tropic (Tropik Ada).
    Yeni öğeler: buz, bataklık kum, yuvarlanan kaya + tapınak kapısı, rüzgâr bacası, gayzer, ışınlanma kapıları,
    düşük yerçekimi bölgesi, trambolin, sallanan köprü, eleme kapısı, düşen altın, meteor yer uyarısı (yedek).
+   5. tur (belirginlik): arka planın üstüne atmosferik pus perdesi (VEIL: oyun katmanı öne çıkar), kalın zemin kenarı (CAP_LW),
+   daha parlak/kalın hatlı kutu-altın-tehlike çizimleri, tehlike ipuçları (ezici altında "kay" okları, testere inişinde ray/zemin
+   kırmızısı, kaya yolunda sola akan oklar, gayzer fışkırmadan önce halka + ok). Dost nesneler yeşil/turkuaz (mantar, ped, trambolin).
    Animasyon saati ve ortam parçacıkları FM.R.updaters ile güncellenir.
    Performans: pahalı her şey bir kez sprite/desen/Path2D olarak üretilip önbelleğe alınır; sıcak döngüde
    shadowBlur / filter yok; gradyanlar önbellekte tutulur ve "translate hilesi" ile yeniden kullanılır. */
@@ -2347,14 +2350,14 @@
       if (warn > .02) {
         const pulse = .7 + .3 * Math.sin(tk * 9);
         ctx.save();
-        ctx.globalAlpha = warn * .9;
-        ctx.translate(s.cx - 14, s.cy - s.r); ctx.scale(28, bot - 6 - (s.cy - s.r));
-        ctx.fillStyle = cg(ctx, 'saw:warn', g => LG(g, 0, 0, 0, 1, [[0, 'rgba(255,40,40,0)'], [.55, 'rgba(255,40,40,0.28)'], [1, 'rgba(255,60,40,0.5)']]));
+        ctx.globalAlpha = warn;
+        ctx.translate(s.cx - 22, s.cy - s.amp - s.r); ctx.scale(44, bot - 4 - (s.cy - s.amp - s.r));
+        ctx.fillStyle = cg(ctx, 'saw:warn2', g => LG(g, 0, 0, 0, 1, [[0, 'rgba(255,40,40,0)'], [.45, 'rgba(255,40,40,0.3)'], [1, 'rgba(255,70,40,0.7)']]));
         ctx.fillRect(0, 0, 1, 1);
         ctx.restore();
         ctx.save(); ctx.globalAlpha = warn * pulse;
-        E(ctx, s.cx, bot - 2, s.r + 16, 5.5, 'rgba(255,40,40,0.28)');
-        ctx.lineWidth = 2.6; ctx.strokeStyle = 'rgba(255,70,60,0.85)'; ctx.beginPath(); ctx.ellipse(s.cx, bot - 2, s.r + 16, 5.5, 0, 0, TAU); ctx.stroke();
+        E(ctx, s.cx, bot - 2, s.r + 20, 6.5, 'rgba(255,40,40,0.4)');
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,80,60,0.95)'; ctx.beginPath(); ctx.ellipse(s.cx, bot - 2, s.r + 20, 6.5, 0, 0, TAU); ctx.stroke();
         ctx.restore();
       }
       ctx.save(); ctx.translate(s.cx, 0);
@@ -5584,26 +5587,28 @@
             const q = (tk * 2.4 + k * .2) % 1, x = cx + (hash(k * 7 + (v.x | 0)) - .5) * 20, y = v.y - 16 - q * 30 * v.k;
             E(ctx, x, y, (5 + q * 10) * v.k, (4 + q * 8) * v.k, rgba('#ffffff', .55 * (1 - q) * v.k));
           }
-          // İPUCU: ağızdan genişleyen turkuaz halkalar + yukarı ok ("fışkıracak, fırlatır")
-          ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-          for (let k = 0; k < 2; k++) {
-            const q = (tk * 1.8 + k * .5) % 1;
-            ctx.globalAlpha = (1 - q) * .85 * v.k; ctx.lineWidth = 2.6 - q; ctx.strokeStyle = '#8af4ff';
-            ctx.beginPath(); ctx.ellipse(cx, v.y - 14, 10 + q * 34, 3 + q * 9, 0, 0, TAU); ctx.stroke();
-          }
-          const ay = v.y - 44 - Math.sin(tk * 7) * 3;
-          ctx.beginPath(); ctx.moveTo(cx - 9, ay + 7); ctx.lineTo(cx, ay); ctx.lineTo(cx + 9, ay + 7);
-          ctx.globalAlpha = v.k * .6; ctx.strokeStyle = '#0a2a3a'; ctx.lineWidth = 6.4; ctx.stroke();
-          ctx.globalAlpha = v.k * (.6 + .4 * Math.sin(tk * 7)); ctx.strokeStyle = '#d8fbff'; ctx.lineWidth = 3.2; ctx.stroke();
-          ctx.restore();
         } else {
           const q = (tk * .8 + hash(v.x | 0)) % 1;
           E(ctx, cx + Math.sin(tk) * 4, v.y - 18 - q * 22, 5 + q * 8, 4 + q * 6, rgba('#ffffff', .3 * (1 - q)));
         }
         drawS(ctx, geyserSpr(), cx + shake, v.y + 2);
-        if (!v.act && v.k > 0) for (let k = 0; k < 3; k++) {
-          const q = (tk * 6 + k * .33) % 1;
-          ctx.fillStyle = rgba('#d8f6ff', .9 * (1 - q)); ctx.beginPath(); ctx.arc(cx - 6 + k * 6, v.y - 16 - q * 8, 2.4, 0, TAU); ctx.fill();
+        if (!v.act && v.k > 0) {
+          for (let k = 0; k < 3; k++) {
+            const q = (tk * 6 + k * .33) % 1;
+            ctx.fillStyle = rgba('#d8f6ff', .9 * (1 - q)); ctx.beginPath(); ctx.arc(cx - 6 + k * 6, v.y - 16 - q * 8, 2.4, 0, TAU); ctx.fill();
+          }
+          // İPUCU (ağzın ÜSTÜNE): genişleyen turkuaz halkalar + nabız atan yukarı ok ("fışkıracak, fırlatır")
+          ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          for (let k = 0; k < 2; k++) {
+            const q = (tk * 1.8 + k * .5) % 1;
+            ctx.globalAlpha = (1 - q) * .9 * v.k; ctx.lineWidth = 3 - q * 1.2; ctx.strokeStyle = '#8af4ff';
+            ctx.beginPath(); ctx.ellipse(cx, v.y - 13, 12 + q * 40, 4 + q * 10, 0, 0, TAU); ctx.stroke();
+          }
+          const ay = v.y - 46 - Math.sin(tk * 7) * 3;
+          ctx.beginPath(); ctx.moveTo(cx - 10, ay + 8); ctx.lineTo(cx, ay); ctx.lineTo(cx + 10, ay + 8);
+          ctx.globalAlpha = v.k * .7; ctx.strokeStyle = '#0a2a3a'; ctx.lineWidth = 7; ctx.stroke();
+          ctx.globalAlpha = v.k * (.65 + .35 * Math.sin(tk * 7)); ctx.strokeStyle = '#e0fcff'; ctx.lineWidth = 3.6; ctx.stroke();
+          ctx.restore();
         }
       }
     }

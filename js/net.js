@@ -641,14 +641,14 @@
     if (R.phase === 'joining') {
       if (!mine || mine.sn !== SN) {                  // henüz kabul edilmedik
         // lobide ev sahibi BİZİZ (sayfa yenilendi / uygulama kapanıp açıldı): canlı eski oturum yoksa birazdan geri alırız (joinTick)
-        if (L.h === me && !R.reclaim) { R.reclaim = L; R.reclaimT = now(); }
+        if (L.h === me && !R.reclaim) { R.reclaim = true; R.reclaimT = now(); }
         else if (L.h !== me) R.reclaim = null;
         return;
       }
       R.phase = 'in'; R.role = 'member'; R.everIn = true; C.persistent = true; C.per = 6;
       for (const p of L.p) seen(p.id);
       log('odaya katıldı', R.code, 'ev sahibi', L.h);
-      R.reclaim = null;
+      R.reclaim = null; R.rejoin = false;
       statusChanged();
       emitLobby(); rjWrite();
       // yarış sürerken katıldık: haritayı kurabilmek için son başlatma bilgisini "geç" olarak ver
@@ -971,8 +971,9 @@
     emitLobby();
   }
   function reclaimHost() {
-    const L = R.reclaim; R.reclaim = null;
-    if (!L || R.phase !== 'joining' || L.v !== VER) return;
+    R.reclaim = null;
+    const L = R.lob ? clone(R.lob) : null;
+    if (!L || R.phase !== 'joining' || L.v !== VER || L.h !== myPid()) return;
     const me = myPid(), alone = !R.pingSeen, pr = myProfile();
     if (alone) {                                         // kimse yok: oda lobiye döner (yarım kalan yarış yok sayılır)
       L.p = L.p.filter(p => p.id === me);
@@ -983,7 +984,7 @@
     Object.assign(mine, { n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN });
     L.h = me; L.e = (L.e | 0) + 1;
     log('ev sahipliği geri alındı', R.code, alone ? '(yalnız)' : '(lobide ' + L.p.length + ' kişi)');
-    R.lob = L; R.phase = 'in'; R.role = 'host'; R.everIn = true; R.hostPid = me; R.provT = 0; R.kSeq = 0; R.settleUntil = 0;
+    R.lob = L; R.phase = 'in'; R.role = 'host'; R.everIn = true; R.hostPid = me; R.provT = 0; R.kSeq = 0; R.settleUntil = 0; R.rejoin = false;
     C.persistent = true; C.per = 6;
     for (const p of L.p) if (p.id !== me) seen(p.id);
     if (L.ck) markCtl(L.ck);
@@ -1049,12 +1050,12 @@
     mq: null, bi: -1, ord: 0, att: 0, timer: null, cn: '', openAt: 0, conn: 'off', homeT: 0,
     subMq: null,                            // varlık konularına abone olunan bağlantı (kendi ya da paylaşılan oda bağlantısı)
     shareWait: 0, iv: null, lastTick: 0,
-    lastHb: 0, hbSig: '', lastCard: 0, cardSig: '', cardDirty: true, hiddenAt: 0, warmUntil: 0,
+    lastHb: -1e9, hbSig: '', lastCard: -1e9, cardSig: '', cardDirty: true, hiddenAt: 0, warmUntil: 0,
     peers: {},                              // pid → canlı kayıt {pid, nick, char, st, code, n, max, open, t, sns: {oturum: bitiş}}
     cards: {},                              // pid → profil kartı (retain)
     ls: {},                                 // pid → yerelde son görülme (canlı nabız anı, ms)
     gone: {}, cameAt: {}, lobAt: {},        // kısa kesinti tespiti / net:came ve net:lobby-open sınırları
-    emitT: null, onSig: '', prSig: '', prT: 0, prDirty: false, myCardC: null, myCardT: 0
+    emitT: null, onSig: '', prSig: '', prT: -1e9, prDirty: false, myCardC: null, myCardT: -1e9
   };
   const pUrlOf = bi => (bi >= 0 && bi < BROKERS.length ? BROKERS[bi].url : '');
   const pTarget = () => PREF[P.ord % PREF.length];
@@ -1197,7 +1198,7 @@
     if (!P.on || P.halt) return false;
     const t = now();
     if (mode === 1 && t - P.lastCard < 1500) return false;
-    P.myCardT = 0;
+    P.myCardT = -1e9;
     const c = myCard(); if (!c) return false;
     const sig = [c.nick, c.char, c.skin, c.lvl, c.tr, Math.floor(c.play / 60), c.races, c.wins, c.kills, c.best, c.since, c.lg].join('|');
     if (!mode) { if (sig === P.cardSig && t - P.lastCard < CARD_MS) { P.cardDirty = false; return false; } if (t - P.lastCard < CARD_MIN_MS) return false; }
@@ -1438,10 +1439,13 @@
     ensureId();
     resetRoom();
     if (isObj(opts.profile)) R.prof = Object.assign({}, opts.profile);
-    R.phase = 'joining'; R.code = pc.code; R.base = ROOT + pc.code + '/'; R.codeBi = pc.broker; R.joinRetry = 0;
+    R.phase = 'joining'; R.code = pc.code; R.base = ROOT + pc.code + '/'; R.codeBi = pc.broker; R.joinRetry = 0; R.rejoin = !!opts.rejoin;
+    // opts.broker: odanın en son bulunduğu aracı ("odaya geri dön" kaydı; oda yedeğe geçmiş olabilir). Bulunamazsa kodun aracısı denenir.
+    const bi = fin(opts.broker) && opts.broker >= 0 && opts.broker < BROKERS.length ? opts.broker | 0 : pc.broker;
     startTick();
     statusChanged();
-    startConnect(pc.broker, 3, false);
+    startConnect(bi, 3, false);
+    if (R.rejoin) emit('net:rejoining', { code: pc.code });
     return true;
   }
   function createRoom(opts) {
@@ -1471,6 +1475,7 @@
       const c = cleanNick(n); if (!c) return false;
       ensureId(); FM.save.nick = c; FM.save.nickSet = true; if (typeof FM.persist === 'function') FM.persist();
       if (R.prof) delete R.prof.nick;
+      P.cardDirty = true; P.myCardT = -1e9;
       profileChanged();
       return true;
     }, 'setNick', false),
@@ -1509,10 +1514,23 @@
     }, 'clearUrlCode', false),
     createRoom: guard(createRoom, 'createRoom', false),
     joinRoom: guard(joinRoom, 'joinRoom', false),
-    leaveRoom: guard(function () { leave(false); return true; }, 'leaveRoom', false),
+    // bilerek çıkış: "odaya geri dön" kaydı da silinir
+    leaveRoom: guard(function () { leave(false); rjClear(); return true; }, 'leaveRoom', false),
+    /* ---- odaya geri dönüş (TUR5 §7) ---- */
+    // son odanın kaydı (15 dk içinde, bu kimlikle): {code, broker, t, pid, hn (ev sahibinin adı), live, closed, host} | null
+    lastRoom: guard(lastRoom, 'lastRoom', null),
+    forgetRoom: guard(function () { rjClear(); return true; }, 'forgetRoom', false),
+    /* ---- varlık: çevrimiçi listesi + profil kartları (TUR5 §8) ---- */
+    // [{pid, nick, char, skin, st: 'menu'|'lobby'|'race'|'solo'|'away', code, n, max, open, me, age}] — kendin dahil (ilk sırada); bağlı değilse []
+    online: guard(onlineList, 'online', []),
+    // [{pid, nick, char, skin, lvl, tr, play, races, wins, kills, best, since, lg, ls, online, st, away, code, me}] — bilinen herkes; çevrimiçiler önce
+    profiles: guard(profilesList, 'profiles', []),
+    // presence() → durum; presence(true/false) → aç/kapat. Durum: {on, conn: 'off'|'connecting'|'open'|'offline', shared, broker, brokerName, n}
+    presence: guard(function (on) { if (on !== undefined) pEnable(!!on); return pStatus(); }, 'presence', null),
     setProfile: guard(function (p) {
       if (!isObj(p)) return false;
       R.prof = Object.assign(R.prof || {}, p);
+      P.cardDirty = true; P.myCardT = -1e9;
       profileChanged(); return true;
     }, 'setProfile', false),
     setReady: guard(function (b) { R.ready = !!b; profileChanged(); return true; }, 'setReady', false),
@@ -1571,7 +1589,12 @@
     _dbg: {
       // ani kopma benzetimi: soket DISCONNECT'siz kapanır (aracı Last Will yayınlar), istemci kopmayı fark etmiş gibi davranır
       kill: guard(function () { const m = C.mq; if (m) m.end('test: ani kopma'); return !!m; }, 'kill', false),
-      freeze: null, R, C, bufs, offs, SN: () => SN, Mq, packet, mqStr, utf8, fromUtf8
+      // varlığın KENDİ bağlantısını ani kopar (paylaşılan oda bağlantısına dokunmaz)
+      pkill: guard(function () { const m = P.mq; if (m) m.end('test: ani kopma'); return !!m; }, 'pkill', false),
+      // sayfa kapanma / gizlenme benzetimi (node testleri; tarayıcıda gerçek olaylar)
+      pagehide: guard(function () { pPageHide(); if (R.phase === 'in') rjWrite({ closed: Date.now() }); if (R.phase) leave(false, true); return true; }, 'pagehide', false),
+      hidden: guard(function (h) { pHidden(!!h); return true; }, 'hidden', false),
+      freeze: null, R, C, P, bufs, offs, SN: () => SN, Mq, packet, mqStr, utf8, fromUtf8, override: OVR
     }
   };
   function profileChanged() {
@@ -1647,6 +1670,19 @@
 
   /* ---- başlangıç: kimliği hazırla, kayıt sıfırlanınca pid'i koru ---- */
   try { ensureId(); } catch (e) { }
-  try { if (typeof FM.on === 'function') FM.on('save:reset', function () { ensureId(); }); } catch (e) { }
+  try {
+    if (typeof FM.on === 'function') {
+      FM.on('save:reset', function () { ensureId(); P.cardDirty = true; });
+      FM.on('meta:card', function () { P.cardDirty = true; P.myCardT = -1e9; });
+      // Varlık oyun açılınca başlar (main.js 'boot'; node testleri/hayaletler 'boot' yayınlamaz → presence(true) ile açılır).
+      // ?pres=0 kapatır. Geliştirici modunda (dev=1) herkese açık aracılara gereksiz bağlanmamak için yalnız ?brokerUrl= ya da ?pres=1 ile.
+      FM.on('boot', guard(function () {
+        const q = FM.params || {};
+        if (q.pres === '0') return;
+        if (FM.DEV && !OVR && q.pres !== '1') return;
+        pEnable(true);
+      }, 'boot'));
+    }
+  } catch (e) { }
 
 })(window.FM);

@@ -1118,7 +1118,8 @@
     const me = (isGhost(P) || P.out) && S.spec ? S.spec : P;
     if (!me || !isFinite(+me.x)) return;
     const camX = S.cam.x, camY = S.cam.y, VW = V.VW || 960, VH = V.VH || 540;
-    const top = Lo.padT + 102, bot = Lo.H - Lo.padB - (Lo.touch ? Lo.H * .32 : 16) - 36;   // köşe düğmelerinin (ZIPLA/KAY, EŞYA/GÜÇ) üstünde
+    // bant: sıkı düzende sol sütunun (altın, etkiler, haplar, akış) altında; masaüstünde yuvaların/akışın altında; dokunmatikte köşe düğmelerinin üstünde
+    const top = Lo.compact ? Lo.padT + 150 : Lo.H * .4, bot = Lo.H - Lo.padB - (Lo.touch ? Lo.H * .32 : 16) - 36;
     if (bot - top < 40) return;
     const mx = me.x + (me.w || 28) / 2;
     const left = [], right = [];

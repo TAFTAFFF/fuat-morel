@@ -1523,33 +1523,94 @@
       // çift zıplamayı yalnızca altında hiç zemin yoksa (sıvı çukuru) harca; derin iniş/mantar düşüşü çukur sanılmasın
       if (!groundWithin(cx + r.vx * .08, feet, 700) && !groundWithin(cx + r.vx * .3, feet, 700) && groundWithin(cx + 190, feet - 80, 440)) c.jp = true;
     }
-    // eşya
+    // eşya — yönlü kullanım: aynı seviyedekine yuvarlanan testere (ileri/geri), farklı yükseklikteki ya da arkadaki hedefe
+    // gerçek yolu simüle edilerek seçilen kavisli atış (testere/dinamit), öndekinin önüne tuzak/ağ, yakın kovalayana geri füze
+    a.aimT = Math.max(0, (a.aimT || 0) - dt);
     if (r.item && a.itemT <= 0) {
-      const ah = aheadOf(r, 700), it = r.item;
-      let go = false;
-      if (it === 'saw') go = !!aheadOf(r, 600) && r.onGround;
-      else if (it === 'dyn') go = !!ah && ah.x - r.x > DYN_MIN && ah.x - r.x < DYN_MAX;
-      else if (it === 'trap' || it === 'net') go = S.racers.some(q => q !== r && q.x < r.x && r.x - q.x < 450);
-      else if (it === 'mis' || it === 'ink' || it === 'mag') go = !!ah || ranking()[0] !== r;
+      const ah = aheadOf(r, 700), bh = behindOf(r, 460), it = r.item;
+      const level = q => Math.abs(q.y + q.h - feet) < 30;
+      let go = false, ax = 0, ay = 0;
+      if (it === 'saw') {
+        const fw = aheadOf(r, 600);
+        if (fw && r.onGround && level(fw)) go = true;                                          // ileri yuvarla (varsayılan)
+        else if (bh && r.onGround && level(bh) && r.x - bh.x < 400) { go = true; ax = -1; }    // arkadakine geri yuvarla
+        else if ((fw || bh) && a.aimT <= 0) { a.aimT = .3; const v = botAim(r, 'saw', fw || bh); if (v) { go = true; ax = v.x; ay = v.y; } }
+      } else if (it === 'dyn') {
+        if (ah && ah.x - r.x > DYN_MIN && ah.x - r.x < DYN_MAX) go = true;                     // varsayılan uzun atış
+        else if (a.aimT <= 0) {
+          a.aimT = .3;
+          const tg = ah && ah.x - r.x < 650 ? ah : bh;
+          if (tg) { const v = botAim(r, 'dyn', tg); if (v) { go = true; ax = v.x; ay = v.y; } }
+        }
+      } else if (it === 'trap' || it === 'net') {
+        if (S.racers.some(q => q !== r && !q.out && q.x < r.x && r.x - q.x < 450)) go = true;  // varsayılan: arkaya
+        else if (ah && ah.x - r.x > 50 && ah.x - r.x < 340 && r.onGround && a.aimT <= 0) {
+          // öndekinin önüne fırlat: düştüğü/durduğu yer, hedef oraya varmadan kurulacak kadar önde mi?
+          a.aimT = .4;
+          for (const d of it === 'trap' ? [{ x: .8, y: -.6 }, { x: .6, y: -.8 }] : [{ x: .99, y: -.15 }, { x: .86, y: -.5 }]) {
+            const p = throwParams(r, it, d), sm = simThrow(r, it, p, false);
+            const tp = cxOf(ah) + Math.max(0, ah.vx) * sm.t, lead = sm.x - tp, arm = Math.max(0, ah.vx) * (it === 'trap' ? .55 : .2);
+            if (sm.ok && lead > arm && lead < arm + 130 && Math.abs(sm.y - (it === 'trap' ? ah.y + ah.h - 6 : cyOf(ah))) < 45) { go = true; ax = d.x; ay = d.y; break; }
+          }
+        }
+      } else if (it === 'mis') {
+        go = !!ah || ranking()[0] !== r;
+        if (go && bh && r.x - bh.x < 300 && (!ah || ah.x - r.x > 600)) ax = -1;                // uzak lider yerine yakın kovalayan
+      } else if (it === 'ink' || it === 'mag') go = !!ah || ranking()[0] !== r;
       else go = true;
       a.wait += dt;
-      if (go || a.wait > 7) { c.use = true; a.wait = 0; a.itemT = .5; }
+      if (go || a.wait > 7) { c.use = true; c.ax = go ? ax : 0; c.ay = go ? ay : 0; a.wait = 0; a.itemT = .5; }
     }
-    // özel güç
+    // özel güç (yönlü: arkadakine karga/kükreme/dalga, duvar önünde yukarı atılım, çukurda hızlı süzülüş)
     if (r.charge >= 100) {
-      a.abT += dt; let go = false;
+      a.abT += dt; let go = false, bx = 0, by = 0;
       let safe = true;
       switch (r.id) {
-        case 'TAFTAF': safe = dashSafe(r); go = r.onGround && safe; break;   // atılım çukur/diken üstünde bitmesin
-        case 'Caner': go = !!aheadOf(r, 1100) || a.abT > 3; break;
+        case 'TAFTAF':
+          if (r.onGround && wallAhead(r) && upDashSafe(r)) { go = true; bx = .55; by = -.83; }
+          else { safe = dashSafe(r); go = r.onGround && safe; }   // atılım çukur/diken üstünde bitmesin
+          break;
+        case 'Caner': { const b = behindOf(r, 600); if (aheadOf(r, 1100)) go = true; else if (b) { go = true; bx = -1; } else go = a.abT > 3; break; }
         case 'LUL': go = S.racers.some(q => q !== r && q.x > r.x - 40 && q.x - r.x < 320 && q.onGround && q.dead <= 0) || a.abT > 4; break;
         case 'ertan': go = r.onGround && groundWithin(fx + 200, feet, 30); break;
-        case 'Kral': go = !!aheadOf(r, 300) || a.abT > 5 || S.ents.some(e => e.o !== r && e.type === 'mis' && e.tgt === r && Math.hypot(e.x - cx, e.y - cyOf(r)) < 260); break;
-        case 'Nuss': go = !groundWithin(fx + 120, feet, 200) && r.onGround; break;
-        case 'baso': go = !!aheadOf(r, 800); break;
+        case 'Kral': {
+          const threat = S.ents.some(e => e.o !== r && e.type === 'mis' && e.tgt === r && Math.hypot(e.x - cx, e.y - cyOf(r)) < 260);
+          const b = behindOf(r, 260);
+          if (aheadOf(r, 300) || threat) go = true;
+          else if (b) { go = true; bx = -1; by = b.y + b.h < feet - 60 ? -.5 : 0; }
+          else go = a.abT > 5;
+          break;
+        }
+        case 'Nuss':
+          if (r.onGround && !groundWithin(fx + 120, feet, 200)) { go = true; bx = .95; by = -.3; }   // çukur: alçak ve hızlı süzülüş
+          else if (r.onGround && wallAhead(r)) { go = a.abT > 1; bx = .4; by = -.92; }              // duvar: yukarı süzülüş
+          break;
+        case 'baso': { const b = behindOf(r, 520); if (aheadOf(r, 800)) go = true; else if (b) { go = true; bx = -1; } break; }
       }
-      if (go || (a.abT > 6 && safe)) { c.ab = true; a.abT = 0; }
+      if (go || (a.abT > 6 && safe)) { c.ab = true; c.bx = go ? bx : 0; c.by = go ? by : 0; a.abT = 0; }
     }
+  }
+  // yapay zekâ: hedefe isabet eden atış yönü (gerçek yol simülasyonuyla; önce yatay, sonra giderek dikleşen açılar)
+  const BOT_ANGS = [-.12, 0, -.35, -.55, -.75, -.95, -1.15, .25];
+  function botAim(r, it, tgt) {
+    const sx = cxOf(tgt) >= cxOf(r) ? 1 : -1;
+    for (const a of BOT_ANGS) {
+      const d = aimDir(sx * Math.cos(a), Math.sin(a));
+      if (throwHits(r, it, d, [tgt])) return d;
+    }
+    return null;
+  }
+  // önünde zıplanarak çıkılamayacak duvar var mı?
+  const wallAhead = r => r.blocked || (solidAt(r.x + r.w + 50, r.y + r.h - 56) && solidAt(r.x + r.w + 50, r.y + r.h - 2));
+  // yukarı çapraz atılım sonrası iniş bölgesi (duvarın üstü) güvenli mi?
+  function upDashSafe(r) {
+    const L = S.L, x0 = cxOf(r) + 200, top = r.y + r.h - 270;
+    for (let x = x0; x <= x0 + 120; x += 40) if (groundY(x, top) === null) return false;
+    for (const s of L.spikes) if (s.x < x0 + 160 && s.x + s.w > x0 - 60) return false;
+    for (const q of L.crush) if (q.x < x0 + 160 && q.x + q.w > x0 - 60) return false;
+    for (const s of L.saws) if (Math.abs(s.cx - x0) < 140) return false;
+    for (const b of L.boulders) if (x0 + 160 > b.x0 && x0 - 60 < b.x1 + 60) return false;
+    return true;
   }
   // TAFTAF atılımının bittiği yerde (ve sonrasındaki yavaşlama boyunca) zemin var, diken/ezici/testere yok mu?
   function dashSafe(r) {
@@ -1724,6 +1785,7 @@
     // ağ yarışı: netgame.js her adım başında uzak durumları/olayları işler, kendi durumunu yayınlar, saati eşitler
     if (S.netRole && typeof game.onNetStep === 'function') { try { game.onNetStep(dt); } catch (e) { console.error(e); } }
     S.T += dt; S.lt = (S.lt || 0) + dt; updateLevel(dt);
+    trackAim();   // aim:start / aim:end (bırakma darbesi tüketilmeden önce)
     if (S.mode === 'count') {
       S.countT -= dt;
       const n = Math.ceil(S.countT - .6);
@@ -1744,15 +1806,16 @@
       for (const r of S.racers) {
         if (r.out) { if (r === S.player) clearInput(); continue; }   // elenmiş: izleyici
         // uzak (ağ) yarışçı: fizik yok; ağ katmanı game.onRemote(r, dt) ile konumu doldurur, kapı geçişi buradan izlenir
-        if (r.ctrl === 'remote') { if (typeof game.onRemote === 'function') { try { game.onRemote(r, dt); } catch (e) { console.error(e); } } if (S.mode === 'race') markGates(r); continue; }
+        if (r.ctrl === 'remote') { if (typeof game.onRemote === 'function') { try { game.onRemote(r, dt); } catch (e) { console.error(e); } } if (S.mode === 'race') { markGates(r); updateDraft(r, dt); } continue; }
         if (!r.bot) {
           const c = r.ctl, I = FM.input;
           c.jh = I.jh; c.dh = I.dh;
           if (I.jp) { c.jp = true; I.jp = false; }
           if (I.dp) { c.dp = true; I.dp = false; }
-          if (I.use) { c.use = true; I.use = false; }
-          if (I.ab) { c.ab = true; I.ab = false; }
+          if (I.use) { const a = fireAim(r, 'item'); c.use = true; c.ax = a.ax; c.ay = a.ay; I.use = false; }
+          if (I.ab) { const a = fireAim(r, 'ab'); c.ab = true; c.bx = a.ax; c.by = a.ay; I.ab = false; }
         } else if (S.mode === 'race' || S.mode === 'demo') ai(r, dt);
+        updateDraft(r, dt);
         if (after && !r.finished) settle(r, dt);   // tur bitti: bitiremeyenler olduğu yerde durur (tehlike/mantar/olay yok)
         else physics(r, dt);
       }
@@ -1777,6 +1840,7 @@
   game.physics = physics; game.ai = ai; game.useItem = useItem; game.useAbility = useAbility; game.mkRacer = mkRacer; game.explode = explode;
   game.endRound = endRound; game.die = die; game.harm = harm; game.respawn = respawn;
   game.itemParams = itemParams; game.castItem = castItem; game.castAbility = castAbility; game.near = near;
+  game.throwParams = throwParams; game.simThrow = simThrow; game.behindOf = behindOf; game.aheadOf = aheadOf; game.botAim = botAim;
   game.deathIcon = cause => (cause && FM.ITEMS[cause] && FM.ITEMS[cause].ic) || DEATH_ICON[cause] || '💥';
   // turu hemen bitir (ör. elenen oyuncu "Sonuçlara geç" derse): o anki sıralamayla puanlanır. Ağ yarışında YOK (tur herkes için biter).
   game.finishNow = function () { if (S.mode === 'race' && auth() && !S.netRole) { endRound(); return true; } return false; };

@@ -1706,8 +1706,9 @@
         p.head = sin(t * 1.3) * 0.045; p.flow = 0.08; p.tw = t * 2.2;
         break;
       }
-      case 'frozen': {
-        p.armF = 0.9; p.armB = 1.15; p.legF = 0.15; p.legB = -0.2; p.head = -0.05; p.expr = 'o'; p.tw = 1; p.flow = 0.1;
+      case 'frozen': {   // donmuş: kaskatı + ince titreme (şiver)
+        const sh = sin(t * 46) * 0.45;
+        p.bx = sh; p.armF = 0.9; p.armB = 1.15; p.legF = 0.15; p.legB = -0.2; p.head = -0.05 + sh * 0.03; p.expr = 'o'; p.tw = 1; p.flow = 0.1;
         break;
       }
       case 'run': case 'pulled': {
@@ -1792,11 +1793,12 @@
         break;
       }
       case 'climb': {
-        const s = sin(ph * 1.2);
-        p.lean = 0.2; p.bx = 2;
-        p.armF = PI - 0.4 + s * 0.45; p.armB = PI - 0.4 - s * 0.45;
-        p.legF = 0.6 + s * 0.4; p.legB = 0.6 - s * 0.4; p.legFs = 0.8 + s * 0.12; p.legBs = 0.8 - s * 0.12;
-        p.bob = -abs(s) * 1.2; p.head = -0.3; p.expr = 'f'; p.flow = 0.3; p.tw = t * 4;
+        // tırmanma: dönüşümlü el ele tutuş (bir kol yukarı uzanırken öbürü çeker), bacaklar iter, bakış yukarı
+        const s = sin(ph * 0.5), c = cos(ph * 0.5);
+        p.lean = 0.26; p.bx = 3;
+        p.armF = PI - 0.2 + s * 0.7; p.armB = PI - 0.2 - s * 0.7; p.armFs = 1 + s * 0.08; p.armBs = 1 - s * 0.08;
+        p.legF = 0.75 + s * 0.45; p.legB = 0.75 - s * 0.45; p.legFs = 0.82 + s * 0.14; p.legBs = 0.82 - s * 0.14;
+        p.bob = -abs(c) * 2.2; p.sy = 1 + abs(c) * 0.03; p.head = -0.42; p.expr = 'f'; p.flow = 0.3; p.tw = t * 4;
         break;
       }
       case 'fly': {
@@ -1807,10 +1809,11 @@
         p.head = -0.3; p.bob = -f * 1.6; p.flow = 0.8; p.tw = t * 6;
         break;
       }
-      case 'stun': {
-        const w = sin(t * 6);
-        p.lean = w * 0.14; p.head = sin(t * 6 + 1) * 0.2; p.armF = 0.4 + w * 0.25; p.armB = 0.55 - w * 0.25;
-        p.legF = 0.18; p.legB = -0.18; p.sx = 1 + w * 0.03; p.expr = 'x'; p.flow = 0.15; p.tw = t * 3;
+      case 'stun': {   // sersem: sallanma (gövde + kalça), gevşek kollar, baş döner
+        const w = sin(t * 6), w2 = sin(t * 3);
+        p.lean = w * 0.2; p.bx = w2 * 1.6; p.bob = -abs(w) * 0.8; p.head = sin(t * 6 + 1) * 0.26; p.hy = 0.8;
+        p.armF = 0.35 + w * 0.3; p.armB = 0.5 - w * 0.3; p.armFs = 1.04; p.armBs = 1.04;
+        p.legF = 0.22 + w2 * 0.08; p.legB = -0.22 - w2 * 0.08; p.sx = 1 + w * 0.03; p.sy = 1 - abs(w) * 0.02; p.expr = 'x'; p.flow = 0.15; p.tw = t * 3;
         break;
       }
       case 'cheer': {
@@ -1862,6 +1865,24 @@
     }
     if (o.expr) p.expr = o.expr;
     return p;
+  }
+  /** Ezilme / esneme (yere iniş r.land 1→0: yassılaşır; zıplama r.jumpT 1→0: uzar). Hem yarışçı hem drawCharacter için. */
+  function applySquash(p, land, jumpT, flipping, onGround) {
+    if (land > 0 && onGround && p.st !== 'slide' && p.st !== 'sled') { const l = min(1, land); p.sy *= 1 - l * 0.26; p.sx *= 1 + l * 0.2; }
+    if (jumpT > 0 && !flipping && !onGround) { const j = min(1, jumpT); p.sy *= 1 + j * 0.2; p.sx *= 1 - j * 0.12; }
+  }
+  const THROW_T = 0.28;
+  /** Eşya/güç kullanımı: 0.28 sn'lik kurma + savurma kol hareketi (nişan yönüne doğru; A = kol açısı, 0 aşağı, π/2 ileri, π yukarı) */
+  function applyThrow(p, a) {
+    if (!(a.throwT > 0)) return;
+    const st = p.st;
+    if (st !== 'run' && st !== 'idle' && st !== 'air' && st !== 'cheer') return;
+    const q = 1 - a.throwT / THROW_T, A = a.throwA, rest = p.armF;
+    if (q < 0.3) { const u = q / 0.3; p.armF = lerp(rest, A - 2.5, u * u); p.lean -= 0.12 * u; p.head += 0.08 * u; }
+    else if (q < 0.55) { const u = (q - 0.3) / 0.25, e = 1 - (1 - u) * (1 - u); p.armF = lerp(A - 2.5, A + 0.4, e); p.lean += 0.16 * e - 0.12 * (1 - e); p.head += 0.08 - 0.14 * e; }
+    else { const u = (q - 0.55) / 0.45; p.armF = lerp(A + 0.4, rest, u * u); p.lean += 0.16 * (1 - u); p.head -= 0.06 * (1 - u); }
+    p.armFs = 1.06;
+    if (p.expr === 'n' || p.expr === 'b') p.expr = 'f';
   }
 
   /* =====================================================================
@@ -1936,7 +1957,9 @@
   function anim(r) {
     let a = AS.get(r);
     if (!a) {
-      a = { t: Math.random() * 10, blinkIn: 1 + Math.random() * 3, blinkT: 0, flip: 0, pj: 0, wph: Math.random() * 6, pvy: 0, flapT: 0, spray: 0, plY: null, plX: 0, hx: 0, hy: 0, prevDead: 0, spin: Math.random() * 6 };
+      a = { t: Math.random() * 10, blinkIn: 1 + Math.random() * 3, blinkT: 0, flip: 0, pj: 0, wph: Math.random() * 6, pvy: 0, flapT: 0, spray: 0, plY: null, plX: 0, hx: 0, hy: 0, prevDead: 0, spin: Math.random() * 6,
+        // ikincil hareket yayı (kafa/kulak/şapka gecikmesi): sl/sb = yaylı eğim/bob, tl/tb = hedef; tum = savrulma dönüşü; throwT/A = atış kolu; dust = kayma tozu sayacı
+        sl: 0, sv: 0, sb: 0, sbv: 0, tl: 0, tb: 0, tum: 0, throwT: 0, throwA: 2, dust: 0 };
       AS.set(r, a);
     }
     return a;
@@ -1951,10 +1974,30 @@
       a.blinkIn -= dt;
       if (a.blinkIn <= 0) { a.blinkT = 0.12; a.blinkIn = Math.random() < 0.22 ? 0.22 : 2 + Math.random() * 3.4; }
       a.blinkT = max(0, a.blinkT - dt);
-      // çift zıplama → ters takla
+      // çift zıplama → hızlı öne takla (~0.32 sn); 'jump {dbl}' olayı da tetikler (ağda jumps alanı gelmese bile)
       if (r.jumps === 2 && a.pj !== 2 && !r.onGround && r.dead <= 0 && !(r.fly > 0)) a.flip = 0.0001;
       a.pj = r.jumps;
-      if (a.flip > 0) { a.flip += dt / 0.44; if (a.flip >= 1 || r.onGround || r.climb || r.dead > 0 || r.fly > 0 || r.dash > 0 || r.stun > 0 || r.frozen > 0) a.flip = 0; }
+      if (a.flip > 0) { a.flip += dt / 0.32; if (a.flip >= 1 || r.onGround || r.climb || r.dead > 0 || r.fly > 0 || r.dash > 0 || r.stun > 0 || r.frozen > 0) a.flip = 0; }
+      // ikincil hareket yayı: gövde eğimi ve bob'u gecikmeli izler → kafa/kulak/şapka/saç yaylanır (hafif aşım, Fun Run canlılığı)
+      {
+        const dts = min(dt, 0.05), K = 340, Dm = 20;
+        a.sv += ((a.tl - a.sl) * K - a.sv * Dm) * dts; a.sl += a.sv * dts;
+        a.sbv += ((a.tb - a.sb) * K - a.sbv * Dm) * dts; a.sb += a.sbv * dts;
+      }
+      // savrulma taklası (yumruk/kükreme: havada sersem) — yere inince en yakın tam tura yumuşakça oturur
+      if (r.stun > 0 && !r.onGround && !(r.netted > 0) && r.dead <= 0) a.tum += dt * 10;
+      else if (a.tum) { const tg = Math.round(a.tum / TAU) * TAU; a.tum += (tg - a.tum) * min(1, dt * 16); if (abs(a.tum - tg) < 0.03) a.tum = 0; }
+      // atış/güç kol savurması
+      if (a.throwT > 0) a.throwT = max(0, a.throwT - dt);
+      // kayma tozu (kızak hariç; ertan'ın buz serpintisi aşağıda)
+      if (r.slide && r.onGround && !(r.sled > 0) && r.dead <= 0 && abs(r.vx || 0) > 90 && FM.fx && nearCam(r)) {
+        a.dust += dt * 16;
+        while (a.dust >= 1) {
+          a.dust -= 1;
+          const face = r.face === -1 ? -1 : 1;
+          FM.fx.p({ k: 'puff', x: r.x + r.w / 2 - face * 10 + (Math.random() - 0.5) * 8, y: r.y + r.h - 2, vx: -face * (30 + Math.random() * 50), vy: -(14 + Math.random() * 30), life: 0.3 + Math.random() * 0.2, c: Math.random() < 0.5 ? '#e8dfcc' : '#d2c6ae', s: 4 + Math.random() * 3.5, g: -30, drag: 3, rot: Math.random() * 6 });
+        }
+      } else a.dust = 0;
       // Nuss kanat çırpma
       if (r.fly > 0 && r.vy < -380 && a.pvy > -300) a.flapT = 0.3;
       a.flapT = max(0, a.flapT - dt);
@@ -1974,6 +2017,19 @@
     const S = FM.S, V = FM.view, cam = S.cam || { x: 0, y: 0 };
     return r.x > cam.x - 150 && r.x < cam.x + (V.VW || 1000) + 150 && r.y > cam.y - 200 && r.y < cam.y + (V.VH || 540) + 200;
   }
+  // olaylar: çift zıplama taklası (ağdan gelen yarışçıda da), eşya/güç kullanımında kol savurması (nişan yönü p.ax/p.ay)
+  function throwStart(d) {
+    if (!d || !d.r) return;
+    const a = anim(d.r), p = d.p || {}, face = d.r.face === -1 ? -1 : 1;
+    const ax = (+p.ax || 0) * face, ay = +p.ay || 0;
+    a.throwT = THROW_T;
+    a.throwA = (ax || ay) ? Math.atan2(ax, ay) : 2.0;   // 0 aşağı, π/2 ileri, π yukarı; varsayılan ileri-yukarı
+  }
+  try {
+    FM.on('jump', d => { if (d && d.dbl && d.r) { const a = anim(d.r); if (!(a.flip > 0)) a.flip = 0.0001; a.pj = 2; } });
+    FM.on('item:use', throwStart);
+    FM.on('ability', throwStart);
+  } catch (e) { /* olay sistemi yoksa */ }
 
   /** Yarışçının alanlarından poz. */
   function racerPose(r, a, id) {

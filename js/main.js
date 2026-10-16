@@ -101,7 +101,7 @@
   const cam = { t: null, gy: null };
   /* Kamera ayarları (5. tur, docs/TUR5.md §4): zemin telefonda ekranın üstten ~%71'inde, masaüstünde ~%68'inde
      ("harita üstte kalıyor" şikâyeti); telefonda görünen dünya yüksekliği 400 (karakterler biraz büyük). */
-  const CAM = { VH_TOUCH: 520, KF_TOUCH: .71, KF_DESK: .68 };   // VH_TOUCH 520: karakterler Fun Run 4 oranında (ekran yüksekliğinin ~%12'si)
+  const CAM = { VH_TOUCH: 460, KF_TOUCH: .71, KF_DESK: .68 };   // VH_TOUCH 460: 400 çok yakın, 520 çok uzak geldi (oyuncu geri bildirimi)
   FM.CAM = CAM;
   function camTarget() {
     if (S.mode === 'demo') { // demoda öndekini izle

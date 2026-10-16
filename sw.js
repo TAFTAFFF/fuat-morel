@@ -7,7 +7,7 @@
    - Çok oyunculu bağlantı (wss://) service worker'dan geçmez; etkilenmez.
    VERSION değişince eski önbellekler silinir. Oyun dosyası eklenirse PRECACHE'e de ekleyin (eklenmese de ilk açılışta önbelleğe girer). */
 'use strict';
-const VERSION = 'fm-2026-10-16-tur5d';
+const VERSION = 'fm-2026-10-16-tur5e';
 const CACHE = 'fuatmorel-' + VERSION;
 const FONT_CACHE = 'fuatmorel-fonts-v1';
 const PRECACHE = [

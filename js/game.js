@@ -1339,11 +1339,21 @@
   // her karede (main.js): yerel oyuncu nişan alıyorsa FM.S.aim = önizleme, almıyorsa null.
   // Nişan yardımı araması pahalı (birkaç simülasyon): nişan pek değişmediyse 0.1 sn boyunca önceki sonuç kullanılır.
   let asC = null;
+  /* Oyuncunun ham nişanı (parmak sürükleme / ok tuşları) → mantıklı atış yönü. Yukarı sürüklemek "ileri-yukarı kavis"
+     demektir (dimdik yukarı atış yok: başparmak sağ alttan yukarı-sola kaysa da ileri atar); yalnızca belirgin sola çekmek
+     geriye atar; aşağı sürüklemek alçaktan/yerden ileri. Yükseliş -15°..65° arasında kalır. */
+  function humanAim(ax, ay) {
+    const l = Math.hypot(ax, ay); if (!(l > .05)) return { ax: 0, ay: 0 };
+    const x = ax / l, y = ay / l, back = x < -.6;
+    const el = clamp(Math.asin(clamp(-y, -1, 1)), -.26, 1.13);
+    return { ax: r2((back ? -1 : 1) * Math.cos(el)), ay: r2(-Math.sin(el)) };
+  }
+  game.humanAim = humanAim;
   game.updateAim = function () {
     trackAim();
     const I = FM.input, P = S.player, kind = I && I.aim;
     if ((kind !== 'item' && kind !== 'ab') || !P || P.ghost || P.out || !S.L || !(S.mode === 'race' || S.mode === 'count')) { S.aim = null; asC = null; return null; }
-    const ck = kind + ':' + (kind === 'item' ? P.item : P.id), ax = +I.ax || 0, ay = +I.ay || 0;
+    const ck = kind + ':' + (kind === 'item' ? P.item : P.id), h = humanAim(+I.ax || 0, +I.ay || 0), ax = h.ax, ay = h.ay;
     let a;
     if (asC && asC.k === ck && Math.abs(asC.ax - ax) < .015 && Math.abs(asC.ay - ay) < .015 && S.T - asC.t < .1 && S.T >= asC.t) a = asC.a;
     else { a = assistAim(P, kind, ax, ay); asC = { k: ck, ax, ay, t: S.T, a }; }
@@ -1357,7 +1367,7 @@
     const I = FM.input, A = S.aim;
     let ax = +I.ax || 0, ay = +I.ay || 0;
     if (A && A.kind === kind && A.rax === ax && A.ray === ay) { ax = A.ax; ay = A.ay; }
-    else { const a = assistAim(r, kind, ax, ay); ax = a.ax; ay = a.ay; }
+    else { const h = humanAim(ax, ay), a = assistAim(r, kind, h.ax, h.ay); ax = a.ax; ay = a.ay; }
     if (!I.aim) I.ax = I.ay = 0;
     return { ax, ay };
   }

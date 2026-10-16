@@ -135,7 +135,8 @@
     if (ch && typeof FM.persist === 'function') FM.persist();
   }
   function myPid() { if (!FM.save || typeof FM.save.pid !== 'string') ensureId(); return (FM.save && FM.save.pid) || keptPid || 'p0'; }
-  function myNick() { const n = FM.save && cleanNick(FM.save.nick); return n || 'Oyuncu'; }
+  // takma ad seçilmediyse karakter adı (ör. "Kral") yerine nötr ad: listede arkadaşın adıyla karışmasın
+  function myNick() { const n = FM.save && FM.save.nickSet === true && cleanNick(FM.save.nick); return n || 'Yeni Oyuncu'; }
   const SN = rnd(5);   // oturum (sayfa yüklemesi) kimliği: aynı pid'li eski oturumların mesajlarını ayırt eder
 
   /* =================== oda kodu =================== */
@@ -1064,7 +1065,7 @@
      Paylaşılan: takma ad, karakter, durum, oda kodu (yalnız açık lobide) ve profil kartı. Başka kişisel bilgi yok. */
   const PR_ON = ROOT + '_on/', PR_PR = ROOT + '_pr/';
   const HB_MS = 5000, HB_AWAY_MS = 30000, AWAY_AFTER = 60000, ONLINE_MS = 12000, AWAY_TTL = 75000;
-  const CARD_MS = 60000, CARD_MIN_MS = 3000, WARM_MS = 7000, CAME_GAP = 600000, BLIP_MS = 20000, PMAX = 300;
+  const CARD_MS = 60000, CARD_MIN_MS = 3000, WARM_MS = 7000, CAME_GAP = 120000, BLIP_MS = 20000, PMAX = 300;
   const ST_RANK = { lobby: 0, race: 1, solo: 2, menu: 3, away: 4 };
   const P = {
     on: false, halt: false,                 // açık mı / sayfa kapanıyor (bfcache) — halt iken yeniden bağlanmaz
@@ -1170,7 +1171,7 @@
     if (R.phase === 'in' && R.lob) {
       const n = R.lob.p.filter(p => !p.o).length, lob = R.lob.st === 'lobby', open = lob && n < MAXP && !!R.code;
       const o = { st: lob ? 'lobby' : 'race', n, max: MAXP, open };
-      if (open) o.code = R.code;
+      if (R.code && n < MAXP) o.code = R.code;   // oda herkese görünür (link gerekmez); yarıştaysa katılan sonraki turda yarışır
       return o;
     }
     const S = FM.S;
@@ -1254,7 +1255,7 @@
     if (!e && Object.keys(P.peers).length >= PMAX) return;
     const wasOn = !!e && e.st !== 'away';
     const pc = typeof m.code === 'string' ? parseCode(m.code) : null;
-    const code = m.st === 'lobby' && pc ? pc.code : null;
+    const code = (m.st === 'lobby' || m.st === 'race') && pc ? pc.code : null;
     const card = P.cards[pid];
     const d = {
       pid, nick: cleanNick(m.nick) || (card ? card.nick : '') || 'Oyuncu', char: isChar(m.char) ? m.char : (card ? card.char : 'TAFTAF'),
@@ -1309,13 +1310,13 @@
     const t = now(), pid = e.pid;
     if (t < P.warmUntil) { P.cameAt[pid] = t; if (e.code) P.lobAt[e.code] = t; return; }   // ilk liste: zaten çevrimiçiydi
     if (P.gone[pid] && t - P.gone[pid] < BLIP_MS) return;                                   // kısa kesinti (sayfa yenileme, ağ değişimi)
-    if (P.cameAt[pid] && t - P.cameAt[pid] < CAME_GAP) return;                              // aynı kişi için 10 dk'da en fazla bir kez
+    if (P.cameAt[pid] && t - P.cameAt[pid] < CAME_GAP) return;                              // aynı kişi için 2 dk'da en fazla bir kez
     P.cameAt[pid] = t; if (e.code) P.lobAt[e.code] = t;
     emit('net:came', { p: pView(e, t) });
   }
   function pLobbyOpen(e) {
     const t = now(), c = e.code;
-    if (!c || c === R.code) return;                          // kendi odam değil
+    if (!c || !e.open || c === R.code) return;   // yalnızca lobideki (yeni kurulan) oda haber verilir                          // kendi odam değil
     if (P.lobAt[c] && t - P.lobAt[c] < CAME_GAP) return;
     P.lobAt[c] = t;
     if (t < P.warmUntil) return;

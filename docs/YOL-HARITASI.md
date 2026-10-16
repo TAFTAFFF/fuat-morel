@@ -22,6 +22,9 @@ Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 - 📋 "Dallanıp budaklanan çok yer var, sen düşün geliştir": arkadaşlarla oynama, karakterler, süs, oynanış, özel güçler
 - ✅ "Karakterler Fun Run 4'e göre çok büyük, telefona göre küçült" → telefonda görüş yüksekliği 520 (karakterler ekranın ~%12'si)
 - ✅ "Karakter kalitesi telefonda düşüyor, herkes yüksek çözünürlükte oynasın" → cihazın kendi DPR'si (en çok 3), yüksek DPR'de 2'nin altına inmez
+- ✅ "Düğmeleri de ölçekli küçült, zıplama tuşu çok büyük" → dokunmatik düğmeler ~%25 küçük
+- ✅ "Safari üst çubuğu çok büyük, tam ekran seçeneği koy" → iPhone'da TAM EKRAN rehberi (Ana Ekrana Ekle) + kayıt taşıma
+- ✅ "Oda kurunca link paylaşmak gerekmesin, odalar herkese görünsün; kim oyuna girdi/kim oda kurdu anlık küçük bildirim" → ARKADAŞLARLA'da AÇIK ODALAR + KATIL, menüde "n açık oda", "X oyuna girdi!" / "X oda kurdu!" bildirimi (yarışta küçük)
 - Not: "Karakterler güzel, eline sağlık" → karakter tasarımlarının ana hatları korunur.
 
 ## Ana ajanın fikirleri

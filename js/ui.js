@@ -1028,7 +1028,7 @@
           (rj
             ? '<span class="rj-wrap"><button class="btn b-green btn-friends rj" data-act="rejoin"><span class="bf-ic">' + svg('door') + '</span><span class="bf-t"><b>ODAYA GERİ DÖN</b><em>' + esc(rj.code) + ' · ' + ((+rj.mins || 0) < 1 ? 'az önce' : Math.round(+rj.mins) + ' dk önce') + '</em></span></button>' +
               '<button class="rbtn b-steel rj-x" data-act="rejoinx" aria-label="Odayı unut" title="Odayı unut">' + svg('close') + '</button></span>'
-            : '<button class="btn b-green btn-friends" data-act="' + (inR ? 'golobby' : 'go') + '" data-to="friends"><span class="bf-ic">' + svg('users') + '</span><span class="bf-t"><b>ARKADAŞLARLA</b><em>' + (inR ? 'Odaya dön' : 'Oda kur · Katıl') + '</em></span></button>') +
+            : '<button class="btn b-green btn-friends' + (!inR && friendsBtnSub().indexOf('açık oda') > 0 ? ' has-rooms' : '') + '" data-act="' + (inR ? 'golobby' : 'go') + '" data-to="friends"><span class="bf-ic">' + svg('users') + '</span><span class="bf-t"><b>ARKADAŞLARLA</b><em>' + (inR ? 'Odaya dön' : friendsBtnSub()) + '</em></span></button>') +
         '</div>' +
         '<nav class="tiles">' + th + '</nav>' +
       '</section>' +
@@ -1590,27 +1590,70 @@
     if (!c || typeof c !== 'object') c = gcall('defaultCfg') || { mode: sv().mode || 'classic', map: 'random', rounds: 3, bots: true };
     return normCfg(c);
   }
+  /** Açık odalar: çevrimiçi listesinde oda kodu yayınlayanlar koda göre gruplanır (link gerekmez; herkes görür). */
+  function roomList() {
+    const me = myPid(), mine = mpInRoom() ? ncall('code') : null, by = {};
+    for (const p of onlineList()) {
+      if (!p || p.me || p.pid === me || !p.code || p.code === mine || p.st === 'away') continue;
+      const r = by[p.code] || (by[p.code] = { code: p.code, ps: [], n: 0, max: 10, lobby: false });
+      r.ps.push(p); r.n = Math.max(r.n, (p.n | 0) || r.ps.length); r.max = (p.max | 0) || r.max;
+      if (p.st === 'lobby') r.lobby = true;
+    }
+    return Object.keys(by).map(k => by[k]).filter(r => r.n < r.max).sort((a, b) => (b.lobby - a.lobby) || (b.n - a.n));
+  }
+  function roomRow(r, i) {
+    const names = r.ps.map(p => p.nick || p.char).slice(0, 3).join(', ') + (r.ps.length > 3 ? ' +' + (r.ps.length - 3) : '');
+    const pts = r.ps.slice(0, 3).map(p => '<span class="frr-pt">' + pt(FM.CH[p.char] ? p.char : 'TAFTAF', 40, { skin: p.skin, hat: p.hat }) + '</span>').join('');
+    const sub = (r.lobby ? 'Lobide' : 'Yarışta · sonraki turda katılırsın') + ' · ' + r.n + '/' + r.max;
+    return '<div class="fr-room' + (r.lobby ? ' lob' : ' race') + '" style="--d:' + (i * .05).toFixed(2) + 's">' +
+      '<span class="frr-pts">' + pts + '</span>' +
+      '<span class="frr-tx"><b>' + esc(names) + '</b><span><i class="on-dot on"></i>' + esc(sub) + '</span></span>' +
+      '<button class="btn sm b-green frr-go" data-act="joinroom" data-code="' + esc(r.code) + '">' + svg('play') + '<span>KATIL</span></button>' +
+    '</div>';
+  }
+  function roomsHtml() {
+    const rooms = roomList();
+    return rooms.length ? rooms.map(roomRow).join('')
+      : '<div class="fr-empty">' + svg('users') + '<span>Şu an açık oda yok. <b>ODA KUR</b>, arkadaşların burada görüp tek dokunuşla katılsın.</span></div>';
+  }
   function renderFriends() {
     if (!NET()) return panel('ARKADAŞLARLA', emptyBox('info', 'Bu tarayıcı çok oyunculuyu desteklemiyor', 'Oyunu Chrome ya da Safari ile aç.'), 'pnl-fr', 'rb-green');
+    const nR = roomList().length;
     return panel('ARKADAŞLARLA',
-      '<div class="fr-wrap">' +
-        '<div class="frc frc-host">' +
-          '<span class="frc-art">' + svg('crown', 'gold') + '</span>' +
-          '<b class="frc-t">ODA KUR</b>' +
-          '<span class="frc-d">Odayı sen kur, linki arkadaşlarına at. <b>10 kişiye</b> kadar herkes kendi telefonundan aynı yarışta!</span>' +
-          '<button class="btn b-gold frc-btn" data-act="mpcreate">' + svg('users') + '<span>ODA KUR</span></button>' +
+      '<div class="fr-wrap fr-wrap2">' +
+        '<div class="frc frc-rooms">' +
+          '<b class="frc-t">AÇIK ODALAR<em class="fr-cnt' + (nR ? ' on' : '') + '">' + nR + '</em></b>' +
+          '<div class="fr-rl scroll" data-sk="fr-rooms">' + roomsHtml() + '</div>' +
         '</div>' +
-        '<div class="frc frc-join">' +
-          '<span class="frc-art">' + svg('door') + '</span>' +
-          '<b class="frc-t">KODLA KATIL</b>' +
-          '<span class="frc-d">Arkadaşının oda kodunu yaz. Attığı linke dokunman da yeterli.</span>' +
-          '<div class="code-in"><input class="cin" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="60" placeholder="KOD" aria-label="Oda kodu" data-enter="mpjoin" value="' + esc(st.mpCode || '') + '">' +
-          '<button class="btn b-blue frc-btn" data-act="mpjoin">' + svg('play') + '<span>KATIL</span></button></div>' +
+        '<div class="fr-side">' +
+          '<div class="frc frc-host">' +
+            '<b class="frc-t">' + svg('crown', 'gold') + 'ODA KUR</b>' +
+            '<span class="frc-d">Odan herkesin listesinde görünür, <b>link atman gerekmez</b>. 10 kişiye kadar!</span>' +
+            '<button class="btn b-gold frc-btn" data-act="mpcreate">' + svg('users') + '<span>ODA KUR</span></button>' +
+          '</div>' +
+          '<div class="frc frc-join">' +
+            '<b class="frc-t">' + svg('door') + 'KODLA KATIL</b>' +
+            '<div class="code-in"><input class="cin" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="60" placeholder="KOD" aria-label="Oda kodu" data-enter="mpjoin" value="' + esc(st.mpCode || '') + '">' +
+            '<button class="btn b-blue frc-btn" data-act="mpjoin">' + svg('play') + '<span>KATIL</span></button></div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
       '<div class="fr-nick"><span class="frn-pt">' + pt(selChar(), 48, { skin: equipped('skins', selChar()) }) + '</span><span class="frn-l">Takma adın</span><b class="frn-n">' + esc(myNick()) + '</b>' +
         '<button class="btn sm b-purple" data-act="nick">DEĞİŞTİR</button></div>',
       'pnl-fr', 'rb-green');
+  }
+  /** Ana menüdeki ARKADAŞLARLA düğmesi: açık oda sayısını canlı göster */
+  function friendsBtnSub() { const n = NET() ? roomList().length : 0; return n ? n + ' açık oda · Katıl' : 'Oda kur · Katıl'; }
+  function updateRoomsBadge() {
+    const b = $('.btn-friends:not(.rj)'); if (!b || b.getAttribute('data-act') !== 'go') return;
+    const em = $('.bf-t em', b), t = friendsBtnSub();
+    if (em && em.textContent !== t) em.textContent = t;
+    b.classList.toggle('has-rooms', t.indexOf('açık oda') > 0);
+  }
+  function updateRoomsList() {
+    const box = $('.fr-rl'), cnt = $('.fr-cnt'); if (!box) return;
+    const h = roomsHtml(); if (box.getAttribute('data-h') !== h) { box.setAttribute('data-h', h); box.innerHTML = h; }
+    if (cnt) { const n = roomList().length; cnt.textContent = n; cnt.classList.toggle('on', n > 0); }
   }
 
   /* ---------- LOBİ (üst çubuksuz tam ekran; parçalar ayrı ayrı ve yalnızca değişince yenilenir) ---------- */
@@ -1966,12 +2009,13 @@
     if (!p || p.me || (p.pid && p.pid === myPid())) return;
     const nick = p.nick || p.char || 'Arkadaşın';
     const lob = kind === 'lobby' && p.code;
-    const title = lob ? nick + ' lobi kurdu!' : nick + ' çevrimiçi oldu!';
+    const title = lob ? nick + ' oda kurdu!' : nick + ' oyuna girdi!';
     const sub = lob ? 'Lobide · ' + ((p.n | 0) || 1) + '/' + ((p.max | 0) || 10) + ' — katıl, birlikte yarışın' : stText(Object.assign({ online: true }, p));
     if (document.hidden) { sysNotify(title + (lob ? ' Katılmak için dokun.' : ''), p); return; }
     const canJoin = lob && st.view === 'menu' && !mpInRoom();
-    FM.haptic('pick');
-    note({ title, sub, icon: pt(FM.CH[p.char] ? p.char : 'TAFTAF', 48, {}, 'n-pt'), cls: 'n-friend' + (lob ? ' n-lobby' : ''), ms: lob ? 7000 : 4200,
+    const race = st.view === 'race';
+    if (!race) FM.haptic('pick');   // yarışta titreşim yok (oyun titreşimleriyle karışmasın); küçük ve kısa bildirim
+    note({ title, sub: race ? '' : sub, icon: pt(FM.CH[p.char] ? p.char : 'TAFTAF', 48, {}, 'n-pt'), cls: 'n-friend' + (lob ? ' n-lobby' : '') + (race ? ' n-mini' : ''), ms: race ? 2600 : lob ? 7000 : 4200,
       btn: canJoin ? '<button class="btn sm b-green n-btn" data-act="joinroom" data-code="' + esc(p.code) + '">KATIL</button>' : '' });
   }
   function sysNotify(body, p) {
@@ -3649,7 +3693,14 @@
     tryAutoJoin();
     if (!st.dailyShown && !FM.DEV && dailyReady()) {
       st.dailyShown = true;
-      setTimeout(() => { if (st.view === 'menu' && st.screen === 'menu' && !st.modal && dailyReady()) openDaily(); }, 800);
+      // başka pencere (takma ad sorusu vb.) açıksa kapanmasını bekle
+      const tryDaily = k => { if (st.view !== 'menu' || st.screen !== 'menu' || !dailyReady()) return; if (st.modal) { if (k < 40) setTimeout(() => tryDaily(k + 1), 1500); } else openDaily(); };
+      setTimeout(() => tryDaily(0), 800);
+    }
+    // takma ad hiç seçilmediyse (çevrimiçi listesinde karakter adıyla — ör. "Kral" — görünmesin) oturumda bir kez sor
+    if (!FM.DEV && NET() && sv().nickSet !== true && !st.nickAsked && !ncall('codeFromUrl')) {
+      st.nickAsked = true;
+      setTimeout(() => { if (st.view === 'menu' && st.screen === 'menu' && !st.modal && sv().nickSet !== true) openNick(null); }, 500);
     }
     // iPhone'da tarayıcı tam ekranı yok: bir kez "Ana Ekrana Ekle" ipucu
     if (touchMode && !FM.DEV && iosTab() && !lsGet('fm-ios-tip2')) {
@@ -3810,9 +3861,11 @@
       t = setTimeout(() => {
         t = 0;
         if (nowMs() - ptrDown < 350) { liveRefresh(); return; }
+        if (st.view === 'menu' && st.screen === 'menu') updateRoomsBadge();   // açık pencere olsa da rozet canlı kalsın
         if (st.view === 'menu' && !st.modal) {
           if (st.screen === 'online' || st.screen === 'clan') paint(false);
-          else if (st.screen === 'menu') updateOnlinePill();
+          else if (st.screen === 'menu') { updateOnlinePill(); updateRoomsBadge(); }
+          else if (st.screen === 'friends') updateRoomsList();
           else if (st.screen === 'lobby') updateLobby();
         } else if (st.view === 'menu' && st.screen === 'lobby') updateLobby();
       }, 250);

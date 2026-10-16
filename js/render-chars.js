@@ -474,6 +474,30 @@
     if (o.lw !== 0) { g.beginPath(); path(g); g.lineWidth = o.lw || 1.2; g.strokeStyle = o.line || LN; g.lineJoin = 'round'; g.stroke(); }
   }
 
+  /** Fun Run tarzı SPOR AYAKKABI (uzuvlar telefonda ayrı okunsun): burun +x yönünde; (x,y) tabanın orta noktası, s ölçek,
+      col gövde (genelde beyaz), acc şerit/dil rengi (karakterin kostümünden), sole taban. Parça sprite'ında çizilir → dış hat otomatik. */
+  function sneaker(g, x, y, s, col, acc, sole) {
+    g.save(); g.translate(x, y); g.scale(s, s);
+    const sh = B([-6.6, -4.4, -2.2, -5.6, 2.6, -5, 6.4, -3.4, 9.6, -0.8, 9.4, 2.2, 6, 2.8, -5.4, 2.8, -7.4, 0.4]);
+    cel(g, sh, col, {
+      lt: mix(col, '#ffffff', 0.5), dk: mix(col, '#7a86c2', 0.32), dd: [0.5, 1.1], ld: [0.6, 0.8], lw: 1,
+      fn: g2 => {
+        g2.fillStyle = sole; g2.fillRect(-9, 1.1, 20, 2.6);                                     // taban
+        lines(g2, [[-8, 1.1, 11, 1.1]], rgba(LN, 0.55), 0.7);
+        lines(g2, [[-3.8, -1.2, 1.6, -1.6, 6.4, 0.4]], acc, 2.1);                                 // yan şerit
+        g2.beginPath(); ell(g2, -3.6, -3.4, 2.4, 1.6, -0.3); g2.fillStyle = acc; g2.fill();           // dil
+        lines(g2, [[-1.6, -3.6, 0.6, -3], [-0.4, -4.4, 1.8, -3.8]], rgba(LN, 0.5), 0.6);             // bağcık
+        g2.beginPath(); ell(g2, 5.2, -2.6, 1.9, 0.9, 0.35); g2.fillStyle = 'rgba(255,255,255,0.8)'; g2.fill();   // burun parlaması
+      }
+    });
+    g.restore();
+  }
+  /** Yuvarlak el/pati (okunur el): (x,y) merkez, r yarıçap, col renk; iki parmak çizgisi */
+  function mitt(g, x, y, r, col) {
+    cel(g, EL(x, y, r * 1.08, r), col, { dd: [0.5, 1], ld: [0.6, 0.6], lw: 1 });
+    lines(g, [[x - r * 0.1, y + r * 0.9, x - r * 0.05, y + r * 0.35], [x + r * 0.45, y + r * 0.85, x + r * 0.45, y + r * 0.3]], rgba(LN, 0.6), 0.7);
+  }
+
   /** Göz. o: {ex, iris, inner(-1: burun solda / +1: burun sağda), style:'n'|'owl'|'bead', lidCol, lidN, look, sclera, spin} */
   function eye(g, x, y, rx, ry, o) {
     const ex = o.ex || 'n', ln = LN, style = o.style || 'n';
@@ -666,7 +690,7 @@
   let pcBytes = 0, NOW = 0, portBuild = false;
   const KEEP_MS = 1500;
   function stampNow() { NOW = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
-  function pcBudget() { const k = FM.gfx.rs(); return clamp(k * k * 7e6, 16e6, 64e6); }
+  function pcBudget() { const k = FM.gfx.rs(); return clamp(k * k * 9e6, 20e6, 72e6); }   // yakın yarışçılar 2× çözünürlükte: bütçe biraz geniş
   function pcDrop(key, s) {
     PC.delete(key); pcBytes -= s.b || 0;
     if (pcBytes < 0) pcBytes = 0;
@@ -909,14 +933,14 @@
         dd: [1, 2], ld: [1.2, 1.2],
         fn: g2 => lines(g2, [[-4, 2.6, 0, 3.8, 4, 2.4], [-4, 5.6, 0, 6.8, 4, 5.4]], P.stripe, 1.5)
       });
-      lines(g, [[-0.6, 12.4, -0.4, 11], [1.6, 12.2, 1.6, 10.8]], rgba(P.line, 0.7), 0.7);
+      mitt(g, 0.4, 10.6, 3.6, P.belly);   // krem pati: el ayrı okunsun
     },
     leg(g, P) {
-      cel(g, B([-3.8, -1.6, 3.8, -1.6, 4, 5, 6.8, 6.8, 8.8, 9.6, 7.4, 12.4, 0.5, 12.6, -3.6, 11.4, -4, 5]), P.fur, {
+      cel(g, B([-3.8, -1.6, 3.8, -1.6, 4, 5, 5.4, 7.4, 5, 9.8, 0.5, 10.4, -3.6, 9.8, -4, 5]), P.fur, {
         dd: [1, 2], ld: [1.2, 1.2],
         fn: g2 => lines(g2, [[-4.4, 2.4, 0, 3.4, 4.4, 2.2]], P.stripe, 1.6)
       });
-      lines(g, [[5.2, 12.4, 5.4, 10.6], [7.4, 12.2, 7.6, 10.6]], rgba(P.line, 0.7), 0.7);
+      sneaker(g, 2.2, 10.4, 1, '#ffffff', P.mask, mix(P.line, '#ffffff', 0.12));
     },
     back(ctx, P, p) { tailCurl(ctx, P, p, -8.6, -3.4); },
     headBack(ctx, P, p) {
@@ -993,14 +1017,13 @@
         lt: P.furL, ltAlpha: 0.7, dk: sh(P.fur, -0.45), dd: [1, 2], ld: [1.2, 1.2],
         fn: g2 => lines(g2, [[0, 6, 0.4, 12.6], [-2, 7, -2.6, 12], [2.2, 7, 2.8, 12.4]], rgba(P.sheen, 0.55), 0.8)
       });
+      // açık kanat ucu "el": koyu gövdeden ayrılsın
+      cel(g, B([-3.6, 11.2, 0.6, 10.4, 4, 11.6, 3.4, 14.8, 0.2, 15.8, -2.8, 14.4]), P.furL, { ltAlpha: 0.5, dd: [0.5, 1], ld: [0.5, 0.5], lw: 0.9 });
     },
     leg(g, P) {
-      g.lineCap = 'round';
-      g.beginPath(); g.moveTo(0.4, 10.6); g.lineTo(6.4, 11.8); g.moveTo(0.4, 10.8); g.lineTo(4.4, 12.8); g.moveTo(-0.4, 10.8); g.lineTo(-3.8, 11.8);
-      g.strokeStyle = P.leg; g.lineWidth = 2.3; g.stroke();
-      g.fillStyle = mix(P.leg, '#ffffff', 0.5); g.beginPath(); ell(g, 6.6, 11.8, 0.7, 0.6); ell(g, 4.6, 12.8, 0.6, 0.5); g.fill();
-      cel(g, B([-1.4, 3, 1.4, 3, 1.5, 11, -1.5, 11]), P.leg, { dd: [0.4, 0.6], ld: [0.4, 0.6], lw: 0.8 });
+      cel(g, B([-1.4, 3, 1.4, 3, 1.5, 10, -1.5, 10]), P.leg, { dd: [0.4, 0.6], ld: [0.4, 0.6], lw: 0.8 });
       cel(g, B([-4.3, -1.6, 4.3, -1.6, 4.6, 3.6, 1.2, 6.2, -3.8, 4.8]), P.fur, { lt: P.furL, ltAlpha: 0.7, dk: sh(P.fur, -0.45), dd: [0.8, 1.6], ld: [1, 1] });
+      sneaker(g, 1.6, 10.8, 0.92, '#ffffff', P.scarf, mix(P.line, '#ffffff', 0.12));
     },
     back(ctx, P, p) {
       const fl = clamp(p.flow, 0, 1.1), base = lerp(PI * 0.66, PI * 1.03, fl) + (p.backRot || 0);
@@ -1102,9 +1125,8 @@
       lines(g, [[-3, 15.2, -2.2, 17.2], [0.4, 14.4, 1.2, 16.6], [3.8, 14.4, 4.4, 16.8], [6.8, 15.2, 7.2, 17.4]], rgba(P.skinD, 0.95), 0.9);
     },
     leg(g, P) {
-      cel(g, B([-5.2, -2, 5.2, -2, 5.6, 4.4, 8.4, 6, 9.6, 8.6, 8, 10.6, -4, 10.6, -5.6, 7.4]), P.fur, { lt: P.furL, ltAlpha: 0.8, dd: [1, 1.8], ld: [1.2, 1.2] });
-      cel(g, B([-4.4, 8.2, 8.4, 7.8, 9.8, 9, 8.2, 10.8, -4.2, 10.8]), P.skin, { lt: P.skinL, dk: P.skinD, light: false, dd: [0.3, 0.6], lw: 0.9 });
-      lines(g, [[5.6, 7, 6, 9], [7.6, 7.4, 8, 9.2]], rgba(P.line, 0.6), 0.7);
+      cel(g, B([-5.2, -2, 5.2, -2, 5.6, 4.4, 5.8, 7, 4.4, 9, -4, 9, -5.6, 7]), P.fur, { lt: P.furL, ltAlpha: 0.8, dd: [1, 1.8], ld: [1.2, 1.2] });
+      sneaker(g, 2.8, 9.6, 1.18, '#ffffff', P.skinD, mix(P.line, '#ffffff', 0.12));
     }
   };
 
@@ -1255,18 +1277,12 @@
       g.beginPath(); ell(g, 1.6, -12, 0.8, 0.8); g.fillStyle = P.gemR; g.fill();
     },
     arm(g, P) {
-      cel(g, B([-3.2, -1.6, 3.2, -1.6, 3.5, 5.4, 4.5, 9.2, 2.8, 12.6, -1.6, 12.9, -3.9, 9.8, -3.5, 4.6]), P.fur, {
-        lt: P.furL, dd: [1, 2], ld: [1.2, 1.2],
-        fn: g2 => { g2.beginPath(); ell(g2, 0.4, 11.2, 4.4, 3); g2.fillStyle = rgba(P.muzzle, 0.85); g2.fill(); }
-      });
-      lines(g, [[-0.6, 12.4, -0.4, 11], [1.6, 12.2, 1.6, 10.8]], rgba(P.line, 0.6), 0.7);
+      cel(g, B([-3.2, -1.6, 3.2, -1.6, 3.5, 5.4, 4.5, 9.2, 2.8, 12.6, -1.6, 12.9, -3.9, 9.8, -3.5, 4.6]), P.fur, { lt: P.furL, dd: [1, 2], ld: [1.2, 1.2] });
+      mitt(g, 0.4, 10.6, 3.6, P.muzzle);
     },
     leg(g, P) {
-      cel(g, B([-3.8, -1.6, 3.8, -1.6, 4, 5, 6.8, 6.8, 8.8, 9.6, 7.4, 12.4, 0.5, 12.6, -3.6, 11.4, -4, 5]), P.fur, {
-        lt: P.furL, dd: [1, 2], ld: [1.2, 1.2],
-        fn: g2 => { g2.beginPath(); ell(g2, 3, 10.6, 6.4, 2.6); g2.fillStyle = rgba(P.muzzle, 0.75); g2.fill(); }
-      });
-      lines(g, [[5.2, 12.4, 5.4, 10.6], [7.4, 12.2, 7.6, 10.6]], rgba(P.line, 0.6), 0.7);
+      cel(g, B([-3.8, -1.6, 3.8, -1.6, 4, 5, 5.4, 7.4, 5, 9.8, 0.5, 10.4, -3.6, 9.8, -4, 5]), P.fur, { lt: P.furL, dd: [1, 2], ld: [1.2, 1.2] });
+      sneaker(g, 2.2, 10.4, 1, '#fff8ea', P.cape, mix(P.line, '#ffffff', 0.12));
     },
     back(ctx, P, p) { tailTuft(ctx, P, p, -8.4, -2.6); capeDraw(ctx, P, p); }
   };
@@ -1355,11 +1371,9 @@
         } });
     },
     leg(g, P) {
-      g.lineCap = 'round';
-      g.beginPath(); g.moveTo(1, 5.4); g.quadraticCurveTo(3, 6, 3.4, 8.4); g.moveTo(-0.6, 5.6); g.quadraticCurveTo(0.6, 7, 0.6, 8.8); g.moveTo(-2.2, 5.4); g.quadraticCurveTo(-2.6, 7, -1.8, 8.6);
-      g.strokeStyle = P.talon; g.lineWidth = 1.8; g.stroke();
-      cel(g, B([-4.6, -1.6, 4.6, -1.6, 5, 3.6, 2.2, 6.2, -2.8, 6.2, -5, 3.6]), P.fur, { dk: mix(P.fur, P.shade, 0.6), dd: [0.8, 1.6], ld: [1, 1],
+      cel(g, B([-4.6, -1.6, 4.6, -1.6, 5, 3.6, 2.2, 6.6, -2.8, 6.6, -5, 3.6]), P.fur, { dk: mix(P.fur, P.shade, 0.6), dd: [0.8, 1.6], ld: [1, 1],
         fn: g2 => lines(g2, [[-3, 3.4, -1.6, 5], [0, 3.6, 1, 5.4], [2.6, 3.2, 3.4, 4.8]], rgba(P.speck, 0.6), 0.8) });
+      sneaker(g, 1.2, 8.2, 0.9, '#ffffff', P.wingTip, mix(P.line, '#ffffff', 0.12));
     }
   };
 
@@ -1420,8 +1434,8 @@
       cel(g, B([-3.4, 7.4, 3.4, 7.4, 3.6, 9.8, -3.6, 9.8]), P.hoodD, { lt: P.hood, ld: [0.3, 0.5], dd: [0.3, 0.5], lw: 0.9 });
     },
     leg(g, P) {
-      cel(g, B([-3.8, -1.6, 3.8, -1.6, 4, 5, 7, 6.4, 9, 9, 7.6, 11.6, 0, 11.6, -3.6, 10.6, -4, 5]), P.fur, { lt: P.furL, dd: [1, 2], ld: [1.2, 1.2] });
-      lines(g, [[5.2, 11.4, 5.4, 9.8], [7.4, 11.2, 7.6, 9.8]], rgba(P.line, 0.6), 0.7);
+      cel(g, B([-3.8, -1.6, 3.8, -1.6, 4, 5, 5.2, 7.2, 4.6, 9.4, 0, 9.8, -3.6, 9.2, -4, 5]), P.fur, { lt: P.furL, dd: [1, 2], ld: [1.2, 1.2] });
+      sneaker(g, 2.4, 9.8, 1, '#ffffff', P.hood, mix(P.line, '#ffffff', 0.12));
     }
   };
 
@@ -2654,8 +2668,9 @@
      YARIŞÇI ÇİZİMİ
      ===================================================================== */
   let racerM = 1, racerDarkBg = false;
-  function drawRacer(ctx, r, isPlayer) {
+  function drawRacer(ctx, r, isPlayer, m) {
     const a = anim(r);
+    m = m || racerM;   // parça çözünürlük çarpanı (yakın yarışçılar 2×)
     const id = DEF[r.id] ? r.id : 'TAFTAF';
     const skin = SKINS[r.skin] ? r.skin : 'klasik';
     const D = DEF[id];
@@ -2709,10 +2724,10 @@
     ctx.scale(face * SC, SC);
     if (fcol) {
       ctx.save(); ctx.globalAlpha *= 0.82 + 0.18 * sin(a.t * 4);
-      try { drawFig(ctx, id, skin, racerM, p, a.t, 'rim:' + fcol, hat); } catch (e) { /* kenar ışığı çizilemedi */ }
+      try { drawFig(ctx, id, skin, m, p, a.t, 'rim:' + fcol, hat); } catch (e) { /* kenar ışığı çizilemedi */ }
       ctx.restore();
     }
-    drawFig(ctx, id, skin, racerM, p, a.t, true, hat);
+    drawFig(ctx, id, skin, m, p, a.t, true, hat);
     ctx.restore();
     // öndeki efektler
     if (!blinkHide) drawSkinFx(ctx, skin, a, fx, fy, SC);
@@ -3030,12 +3045,19 @@
     // çözünürlük çarpanı (4K'da keskin)
     const k = FM.gfx.rs(), dev = (V.S || 1) * SC;
     racerM = clamp(Math.ceil(dev / k - 0.15), 1, 3);
+    // ÇÖZÜNÜRLÜK: parçalar döndürülüp ölçeklendiğinden 1:1 önbellek kenarları yumuşatıyordu → yerel oyuncu ve ona yakın yarışçılar
+    // (≤4 yarışçıda herkes) 2× (racerM+1) çözünürlükte, uzaktakiler 1×; histerezisli (520/720 px) ki parçalar sürekli yeniden üretilmesin
+    const hiM = min(3, racerM + 1), few = list.length <= 4, px = pl ? pl.x : (S.player ? S.player.x : null);
     ctx.save();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     racerDarkBg = darkTheme();
     for (const r of list) drawShadow(ctx, r, r === pl);
     for (const r of list) {
-      try { drawRacer(ctx, r, r === pl); }
+      const a = anim(r);
+      let hi = r === pl || few || px == null;
+      if (!hi) { const d = abs(r.x - px); hi = a.hi ? d < 720 : d < 520; }
+      a.hi = hi;
+      try { drawRacer(ctx, r, r === pl, hi ? hiM : racerM); }
       catch (e) { if (errCount++ < 5) console.error('[render-chars]', e); }
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
@@ -3308,13 +3330,16 @@
   function queueWarm() {
     WARM.length = 0;
     const S = FM.S; if (!S || !S.racers) return;
+    // yakın çözünürlük (racerM+1): yerel oyuncu ve ≤4 yarışçıda herkes; kalabalıkta diğerleri 1× ile ısınır (yaklaşınca üretilir)
+    const few = S.racers.length <= 4, hiM = min(3, racerM + 1);
     for (const r of S.racers) {
       if (!r || !DEF[r.id]) continue;
       const skin = SKINS[r.skin] ? r.skin : 'klasik';
-      for (const nm of ['body', 'armF', 'armB', 'legF', 'legB']) WARM.push([r.id, skin, nm, '']);
-      for (const ex of ['n', 'b', 'f', 'h', 'o', 'x']) WARM.push([r.id, skin, 'head', ex]);
-      if (r.id === 'Nuss') { WARM.push([r.id, skin, 'wingF', '']); WARM.push([r.id, skin, 'wingB', '']); }
-      const hat = racerHat(r); if (hat) WARM.push(['hat', hat]);
+      const m = (few || r === S.player) ? hiM : racerM;
+      for (const nm of ['body', 'armF', 'armB', 'legF', 'legB']) WARM.push([r.id, skin, nm, '', m]);
+      for (const ex of ['n', 'b', 'f', 'h', 'o', 'x']) WARM.push([r.id, skin, 'head', ex, m]);
+      if (r.id === 'Nuss') { WARM.push([r.id, skin, 'wingF', '', m]); WARM.push([r.id, skin, 'wingB', '', m]); }
+      const hat = racerHat(r); if (hat) WARM.push(['hat', hat, '', '', m]);
     }
   }
   FM.on('race:start', queueWarm);
@@ -3332,7 +3357,8 @@
     let n = 0;
     while (WARM.length && n < 3) {
       const w = WARM.shift();
-      try { if (w[0] === 'hat') hatSprite(w[1], racerM, 1); else part(w[0], w[1], w[2], w[3], racerM, 1); } catch (e) { /* yok say */ }
+      const m = w[4] || racerM;
+      try { if (w[0] === 'hat') hatSprite(w[1], m, 1); else part(w[0], w[1], w[2], w[3], m, 1); } catch (e) { /* yok say */ }
       n++;
     }
   });

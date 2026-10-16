@@ -1075,15 +1075,17 @@
       const cx = (x0 + x1) / 2, cy = Math.min(y0, y1) - 70;
       const at = q => [(1 - q) * (1 - q) * x0 + 2 * (1 - q) * q * cx + q * q * x1, (1 - q) * (1 - q) * y0 + 2 * (1 - q) * q * cy + q * q * y1];
       const sz0 = 52, sz1 = Math.max(26, PICK.ts * .62);
-      for (let i = 3; i >= 1; i--) {
-        const q = clamp(k - i * .07, 0, 1), p = at(q);
-        ctx.globalAlpha = .28 - i * .06;
-        drawIcon(ctx, it, p[0], p[1], lerp(sz0, sz1, q) * (1 - i * .12), 56);
+      // iz: solan ışık noktaları + parıltılar (ikon kopyası değil: havadaki gerçek eşyalarla karışmasın)
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 6; i >= 1; i--) {
+        const q = clamp(k - i * .035, 0, 1), p = at(q);
+        ctx.globalAlpha = .5 * (1 - i / 7);
+        drawSpr(ctx, gfx.glowSprite(col, 22), p[0], p[1], 1 - i * .08);
+        if (i % 2 === 0) sparkle(ctx, p[0] + Math.sin(i * 2.1 + H.t * 9) * 9, p[1] + Math.cos(i * 1.7 + H.t * 8) * 9, 5 * (1 - i / 7), '#fff6c0');
       }
       const p = at(k);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .5;
-      drawSpr(ctx, gfx.glowSprite(col, 40), p[0], p[1]);
+      ctx.globalAlpha = .55;
+      drawSpr(ctx, gfx.glowSprite(col, 44), p[0], p[1]);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
       drawIcon(ctx, it, p[0], p[1], lerp(sz0, sz1, k), 56);
       if (u >= 1) {
@@ -1116,7 +1118,7 @@
     const me = (isGhost(P) || P.out) && S.spec ? S.spec : P;
     if (!me || !isFinite(+me.x)) return;
     const camX = S.cam.x, camY = S.cam.y, VW = V.VW || 960, VH = V.VH || 540;
-    const top = Lo.padT + 102, bot = Lo.H - Lo.padB - (Lo.touch ? Lo.H * .3 : 16) - 16;
+    const top = Lo.padT + 102, bot = Lo.H - Lo.padB - (Lo.touch ? Lo.H * .32 : 16) - 36;   // köşe düğmelerinin (ZIPLA/KAY, EŞYA/GÜÇ) üstünde
     if (bot - top < 40) return;
     const mx = me.x + (me.w || 28) / 2;
     const left = [], right = [];

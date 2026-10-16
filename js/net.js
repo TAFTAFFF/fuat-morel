@@ -47,6 +47,8 @@
   const JOIN_RESEND = 2000, JOIN_TIMEOUT = 9000, JOIN_TIMEOUT_ALIVE = 16000, JOIN_TIMEOUT_EMPTY = 4500;
   const CONNECT_TIMEOUT = 6000;     // CONNACK bu sürede gelmezse bu denemeyi bırak (HiveMQ bazen bağlantıyı askıda bırakıyor)
   const SETTLE_MS = 1500;          // (yeniden) abone olunca ev sahibi, retain lobiyi bu kadar bekler
+  const RECLAIM_MS = 2500;         // katılırken lobide ev sahibi biz görünüyorsak eski oturumun yanıtını bu kadar bekle, sonra geri al
+  const RJ_KEY = 'fm-oda', RJ_MAX = 15 * 60000, RJ_LIVE_MS = 10000;   // "odaya geri dön" kaydı: 15 dk geçerli, odadayken 10 sn'de bir tazelenir
   const BACKOFF = [300, 1000, 2000, 4000, 8000, 12000];
   const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 karakter: O/0/I/1 yok
   const ID_CH = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -112,7 +114,11 @@
   function ensureId() {
     const sv = FM.save; if (!isObj(sv)) return;
     let ch = false;
-    if (typeof sv.pid !== 'string' || !/^[a-z0-9]{4,16}$/.test(sv.pid)) { sv.pid = keptPid || ('p' + rnd(9)); ch = true; }
+    if (typeof sv.pid !== 'string' || !/^[a-z0-9]{4,16}$/.test(sv.pid)) {
+      // kayıt kaybolduysa "odaya geri dön" kaydındaki kimlik (ev sahibi aynı oyuncu olarak tanısın)
+      let rp = null; try { const o = JSON.parse(lsGet(RJ_KEY) || 'null'); if (o && typeof o.pid === 'string' && /^[a-z0-9]{4,16}$/.test(o.pid)) rp = o.pid; } catch (e) { rp = null; }
+      sv.pid = keptPid || rp || ('p' + rnd(9)); ch = true;
+    }
     keptPid = sv.pid;
     if (typeof sv.nick !== 'string' || !cleanNick(sv.nick)) {
       const base = cleanNick(sv.selChar && FM.CH && FM.CH[sv.selChar] ? sv.selChar : '') || 'Oyuncu';
@@ -291,6 +297,7 @@
   function onClose(reason, wasOpen) {
     log('bağlantı kapandı:', reason, 'açıktı', wasOpen);
     C.mq = null; Q.q.length = 0;
+    pRoomClosed();
     if (!C.want) { setConn('idle'); return; }
     const short = wasOpen && now() - C.openAt < 5000;            // açılıp hemen kapandı: başarısız say
     const offline = typeof navigator !== 'undefined' && navigator && navigator.onLine === false;
@@ -306,6 +313,36 @@
     clearTimeout(C.timer); C.timer = null;
     const m = C.mq; C.mq = null; if (m) m.end(why, true);
     attempt();
+  }
+
+  /* =================== "odaya geri dön" kaydı (TUR5 §7) ===================
+     localStorage['fm-oda'] = {code, broker, t (son odada olma ms), pid, hn (ev sahibinin adı), live (odadayken 10 sn'de bir), closed (pagehide ms)}.
+     Sayfa yenilenir / uygulama kapanıp açılırsa 15 dk içinde aynı odaya otomatik dönülür (netgame.js). Bilerek çıkınca silinir. */
+  function lsGet(k) { try { return typeof localStorage !== 'undefined' && localStorage ? localStorage.getItem(k) : null; } catch (e) { return null; } }
+  function lsSet(k, v) { try { if (typeof localStorage !== 'undefined' && localStorage) localStorage.setItem(k, v); } catch (e) { } }
+  function lsDel(k) { try { if (typeof localStorage !== 'undefined' && localStorage) localStorage.removeItem(k); } catch (e) { } }
+  const fin = v => typeof v === 'number' && isFinite(v);
+  function rjRead() {
+    let o = null; try { o = JSON.parse(lsGet(RJ_KEY) || 'null'); } catch (e) { o = null; }
+    if (!isObj(o) || !fin(o.t)) return null;
+    const pc = parseCode(o.code); if (!pc) return null;
+    return { code: pc.code, broker: fin(o.broker) && o.broker >= 0 && o.broker < BROKERS.length ? o.broker | 0 : pc.broker, t: o.t,
+      pid: tok(o.pid, null), hn: cleanNick(o.hn) || null, live: fin(o.live) ? o.live : 0, closed: fin(o.closed) ? o.closed : 0, host: !!o.host };
+  }
+  function rjWrite(extra) {
+    if (R.phase !== 'in' || !R.code) return;
+    const h = entry(R.hostPid), t = Date.now();
+    const o = { code: R.code, broker: C.bi >= 0 ? C.bi : (R.codeBi >= 0 ? R.codeBi : 0), t, pid: myPid(), hn: h ? h.n : '', live: t, closed: 0, host: R.role === 'host' ? 1 : 0 };
+    if (isObj(extra)) Object.assign(o, extra);
+    lsSet(RJ_KEY, JSON.stringify(o)); R.rjT = now();
+  }
+  function rjClear(code) { const o = rjRead(); if (!code || !o || o.code === code) lsDel(RJ_KEY); }
+  // geçerli kayıt (15 dk içinde, bu kimlikle) ya da null
+  function lastRoom() {
+    const o = rjRead(); if (!o) return null;
+    const age = Date.now() - o.t;
+    if (age < -60000 || age > RJ_MAX || (o.pid && o.pid !== myPid())) return null;
+    return o;
   }
 
   /* =================== oda durumu =================== */
@@ -446,7 +483,7 @@
       phase: null, role: null, code: null, base: null, rand4: null, everIn: false, lob: null, hostPid: null, kSeq: 0, provT: 0,
       seen: {}, info: {}, lastPing: 0, joinT0: 0, joinLast: 0, pingSeen: false, sawRetained: false, settleUntil: 0, codeBi: -1, joinRetry: 0,
       pubTimer: null, lastPub: 0, lastContest: 0, ctlSeen: [], pendLocal: {}, ready: false, pend: null, stTimer: null, lastState: 0,
-      suspended: false, plSig: '', statusSig: R.statusSig, needPub: false, cfg0: null
+      suspended: false, plSig: '', statusSig: R.statusSig, needPub: false, cfg0: null, rejoin: false, reclaim: null, reclaimT: 0, otherMe: 0, rjT: 0
     });
     for (const k in bufs) delete bufs[k];
     for (const k in offs) delete offs[k];
@@ -456,26 +493,39 @@
     R.lastTick = now();
     R.tickTimer = setInterval(tick, 500);
   }
-  function failRoom(code) {
-    const wasIn = R.phase === 'in';
+  // oda bağlantısını kapat + oda durumunu sıfırla (varlık kendi bağlantısına geçer)
+  function endRoom() {
     stopConnect(true); resetRoom(); setConn('idle'); statusChanged();
-    error(code, { wasIn });
+    try { pRoute(); } catch (e) { log('HATA pRoute ' + (e && e.stack || e)); }
   }
-  function leave(quietBye) {
+  // kalıcı hatalarda (oda yok, dolu, sürüm, atıldın) "odaya geri dön" kaydı silinir; bağlantı hatasında kalır (tekrar denenebilir)
+  const RJ_DROP = { noroom: 1, full: 1, ver: 1, kicked: 1, badcode: 1 };
+  function failRoom(code) {
+    const wasIn = R.phase === 'in', rj = !!R.rejoin, rc = R.code;
+    if (RJ_DROP[code]) rjClear(rc);
+    endRoom();
+    error(code, rj ? { wasIn, rejoin: true, room: rc } : { wasIn });
+  }
+  // involuntary = sayfa kapanıyor/yenileniyor (pagehide): kullanıcı odadan ÇIKMADI → geri dönüş kaydı kalır;
+  // yarış sürüyorsa devirde kendi kaydımız 'koptu' olarak kalır (dönünce aynı yarışçı); yalnız ev sahibiysek retain lobi SİLİNMEZ
+  // (15 dk içinde geri gelince oda bizimle sürer; gelmezsek ilk katılma denemesi bayat lobiyi temizler).
+  function leave(quietBye, involuntary) {
     if (!R.phase) return;
     const me = myPid();
     if (connected() && R.phase === 'in') {
       if (R.role === 'host' && R.lob) {
         const others = R.lob.p.filter(p => p.id !== me && !p.o && alive(p.id)).map(p => p.id).sort();
-        if (!others.length) pub('lobby', '', true, 'now');             // son kişi: retain lobiyi temizle (oda kapanır)
+        if (!others.length) { if (!involuntary) pub('lobby', '', true, 'now'); }   // son kişi: retain lobiyi temizle (oda kapanır)
         else {                                                         // devir: en küçük pid ev sahibi olur
-          const L = clone(R.lob); L.h = others[0]; L.e = (L.e | 0) + 1; L.p = L.p.filter(p => p.id !== me); L.ts = Date.now();
+          const L = clone(R.lob); L.h = others[0]; L.e = (L.e | 0) + 1; L.ts = Date.now();
+          if (involuntary && L.st !== 'lobby') { for (const p of L.p) if (p.id === me) p.o = 1; }
+          else L.p = L.p.filter(p => p.id !== me);
           pub('lobby', L, true, 'now');
         }
       }
       if (!quietBye) pub('bye/' + me, { f: me, sn: SN, cn: C.cn }, false, 'now');
     }
-    stopConnect(true); resetRoom(); setConn('idle'); statusChanged();
+    endRoom();
   }
 
   function onOpen() {
@@ -494,7 +544,7 @@
       R.lob = { v: VER, h: me, e: 0, st: 'lobby', cfg: isObj(R.cfg0) ? R.cfg0 : {}, p: [{ id: me, n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN }], x: [], ck: '', cl: null, ts: 0 };
       R.settleUntil = 0;
       publishLobby();
-      statusChanged(); emitLobby();
+      statusChanged(); emitLobby(); rjWrite();
     } else if (R.phase === 'joining') {
       if (!R.joinT0) R.joinT0 = now();
       sendJoin();
@@ -505,6 +555,7 @@
       else if (!entry(myPid()) || (entry(myPid()) || {}).o) sendJoin(true);
     }
     statusChanged();
+    pRoute();
   }
   function graceAll() { const t = now(); for (const k in R.seen) R.seen[k] = Math.max(R.seen[k], t - DROP_MS + 3500); if (R.hostPid) R.seen[R.hostPid] = Math.max(R.seen[R.hostPid] || 0, t - DROP_MS + 3500); }
 
@@ -536,6 +587,7 @@
 
   /* ---------------- gelen mesajlar ---------------- */
   function onMsg(topic, payload, retain) {
+    if (topic.charCodeAt(ROOT.length) === 95 && topic.indexOf(ROOT) === 0) { if (P.subMq && P.subMq === C.mq) pMsg(topic, payload, retain); return; }   // '_on/', '_pr/' (varlık)
     if (!R.base || topic.indexOf(R.base) !== 0) return;
     const sub = topic.slice(R.base.length);
     if (payload.length > 48 * 1024) return;
@@ -587,12 +639,18 @@
     R.lob = L; R.hostPid = L.h; R.provT = 0; if (!retain) seen(L.h);
     const mine = L.p.find(p => p.id === me);
     if (R.phase === 'joining') {
-      if (!mine || mine.sn !== SN) return;            // henüz kabul edilmedik
+      if (!mine || mine.sn !== SN) {                  // henüz kabul edilmedik
+        // lobide ev sahibi BİZİZ (sayfa yenilendi / uygulama kapanıp açıldı): canlı eski oturum yoksa birazdan geri alırız (joinTick)
+        if (L.h === me && !R.reclaim) { R.reclaim = L; R.reclaimT = now(); }
+        else if (L.h !== me) R.reclaim = null;
+        return;
+      }
       R.phase = 'in'; R.role = 'member'; R.everIn = true; C.persistent = true; C.per = 6;
       for (const p of L.p) seen(p.id);
       log('odaya katıldı', R.code, 'ev sahibi', L.h);
+      R.reclaim = null;
       statusChanged();
-      emitLobby();
+      emitLobby(); rjWrite();
       // yarış sürerken katıldık: haritayı kurabilmek için son başlatma bilgisini "geç" olarak ver
       if (L.ck) markCtl(L.ck);
       if (L.st === 'race' && L.cl && (L.cl.t === 'start' || L.cl.t === 'next')) emit('net:start', Object.assign({}, L.cl.d, { late: true }));
@@ -601,7 +659,7 @@
     if (prevHost && prevHost !== L.h) emit('net:host', { pid: L.h, me: false, prev: prevLobHost || prevHost });
     if (mine && mine.sn && mine.sn !== SN) {        // aynı pid başka oturumla katıldı → bu oturum çekilir
       log('başka oturum tarafından devralındı');
-      stopConnect(true); resetRoom(); setConn('idle'); statusChanged();
+      endRoom();
       error('dup');
       return;
     }
@@ -636,7 +694,7 @@
   function onPing(m) {
     const f = tok(m.f, null); if (!f) return;
     const me = myPid();
-    if (f === me) { if (m.sn === SN && m.cn === C.cn && typeof m.t === 'number') rttSample(now() - m.t); return; }
+    if (f === me) { if (m.sn === SN && m.cn === C.cn && typeof m.t === 'number') rttSample(now() - m.t); else if (m.sn !== SN) R.otherMe = now(); return; }
     const ent = entry(f);
     if (ent && ent.sn && m.sn && ent.sn !== m.sn && R.role !== 'host') return;   // eski oturumun pingi
     seen(f);
@@ -692,7 +750,7 @@
     seen(h);
     if (t === 'rej') {
       if (d.to !== me || !R.phase || (d.sn && d.sn !== SN)) return;     // başka oturuma (aynı pid) yönelik olabilir
-      if (d.why === 'kicked' && R.phase === 'in') { stopConnect(true); resetRoom(); setConn('idle'); statusChanged(); emit('net:kicked', { by: h, msg: ERR.kicked }); return; }
+      if (d.why === 'kicked' && R.phase === 'in') { rjClear(R.code); endRoom(); emit('net:kicked', { by: h, msg: ERR.kicked }); return; }
       failRoom(ERR[d.why] && d.why !== 'conn' && d.why !== 'nows' && d.why !== 'badcode' ? d.why : 'noroom');
       return;
     }
@@ -707,7 +765,7 @@
     if (t === 'kick') {
       if (d.to === me) {
         log('atıldı');
-        stopConnect(true); resetRoom(); setConn('idle'); statusChanged();
+        rjClear(R.code); endRoom();
         emit('net:kicked', { by: h, msg: ERR.kicked });
       }
       return;
@@ -844,11 +902,15 @@
     if (t - R.lastPing >= PING_MS) sendPing();
     if (R.phase === 'joining') joinTick(t);
     else if (R.phase === 'in') { if (R.role === 'host') hostTick(t); else memberTick(t); }
+    if (R.phase === 'in' && t - R.rjT > RJ_LIVE_MS && !(typeof document !== 'undefined' && document && document.hidden)) rjWrite();
     pruneBufs(t);
     emitPlayers(false);
   }, 'tick');
   function joinTick(t) {
     if (t - R.joinLast >= JOIN_RESEND) sendJoin();
+    // eski ev sahibi oturumumuz yanıt vermiyor (yenileme / uygulama kapandı) → odayı geri al. Yarış sürerken başkaları canlıysa
+    // geri ALMA: onlar birazdan aralarından yeni ev sahibi seçer (botları o devralır), biz üye olarak aynı yarışçıya döneriz.
+    if (R.reclaim && t - R.reclaimT > RECLAIM_MS && t - (R.otherMe || -1e9) > DROP_MS && (R.reclaim.st === 'lobby' || !R.pingSeen)) { reclaimHost(); return; }
     // hiç ping yok + retain lobi yok → oda yok (canlı odada ev sahibi 2 sn'de bir pingler); retain var ama yanıt yok → biraz daha bekle
     const lim = R.pingSeen ? JOIN_TIMEOUT_ALIVE : (R.sawRetained ? JOIN_TIMEOUT : JOIN_TIMEOUT_EMPTY);
     if (R.joinT0 && t - R.joinT0 > lim) {
@@ -907,6 +969,26 @@
     statusChanged();
     emit('net:host', { pid: me, me: true, prev: old });
     emitLobby();
+  }
+  function reclaimHost() {
+    const L = R.reclaim; R.reclaim = null;
+    if (!L || R.phase !== 'joining' || L.v !== VER) return;
+    const me = myPid(), alone = !R.pingSeen, pr = myProfile();
+    if (alone) {                                         // kimse yok: oda lobiye döner (yarım kalan yarış yok sayılır)
+      L.p = L.p.filter(p => p.id === me);
+      if (L.st !== 'lobby') { L.st = 'lobby'; L.cl = null; L.ck = ''; }
+    }
+    let mine = L.p.find(p => p.id === me);
+    if (!mine) { mine = { id: me }; L.p.unshift(mine); }
+    Object.assign(mine, { n: pr.n, c: pr.c, sk: pr.sk, tr: pr.tr, pl: pr.pl, rd: R.ready ? 1 : 0, w: 0, o: 0, sn: SN });
+    L.h = me; L.e = (L.e | 0) + 1;
+    log('ev sahipliği geri alındı', R.code, alone ? '(yalnız)' : '(lobide ' + L.p.length + ' kişi)');
+    R.lob = L; R.phase = 'in'; R.role = 'host'; R.everIn = true; R.hostPid = me; R.provT = 0; R.kSeq = 0; R.settleUntil = 0;
+    C.persistent = true; C.per = 6;
+    for (const p of L.p) if (p.id !== me) seen(p.id);
+    if (L.ck) markCtl(L.ck);
+    publishLobby();
+    statusChanged(); emitLobby(); rjWrite();
   }
   function onResume(why) {
     log('askıdan dönüş:', why);

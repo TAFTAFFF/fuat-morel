@@ -58,15 +58,16 @@
     if (m > 0) return m + ' dk';
     return sec + ' sn';
   }
-  /** "az önce" · "5 dk önce" · "2 sa önce" · "3 gün önce" (ms zaman damgasından) */
+  /** Son görülme: "az önce" (<1 dk) · "5 dk önce" · "2 sa önce" · "dün" · "3 gün önce" · "2 ay önce" (ms zaman damgasından) */
   function fmtAgo(ms) {
     if (!(+ms > 0)) return 'bilinmiyor';
     const d = Math.max(0, (Date.now() - +ms) / 1000);
-    if (d < 90) return 'az önce';
-    if (d < 3600) return Math.round(d / 60) + ' dk önce';
-    if (d < 86400) return Math.round(d / 3600) + ' sa önce';
-    if (d < 86400 * 60) return Math.round(d / 86400) + ' gün önce';
-    return Math.round(d / 86400 / 30) + ' ay önce';
+    if (d < 60) return 'az önce';
+    if (d < 3600) return Math.floor(d / 60) + ' dk önce';
+    if (d < 86400) return Math.floor(d / 3600) + ' sa önce';
+    if (d < 172800) return 'dün';
+    if (d < 86400 * 60) return Math.floor(d / 86400) + ' gün önce';
+    return Math.floor(d / 86400 / 30) + ' ay önce';
   }
   function fmtDate(ms) {
     if (!(+ms > 0)) return '—';
@@ -799,7 +800,8 @@
     tabs: { shop: 'up', missions: 'daily', help: 'controls' },
     cview: null, modal: null, onOk: null, pausedByRot: false, dailyShown: false,
     lastMatch: { rounds: 3 }, flashKey: null, resData: null, quitArm: 0, lastCur: null, devForce: false,
-    mpEmo: {}, mpCode: '', fakeLobby: null, nickThen: null, mpRaced: false, imp: null
+    mpEmo: {}, mpCode: '', fakeLobby: null, nickThen: null, mpRaced: false, imp: null,
+    cd: null, lbTab: 'set', bestT: {}, fakeNet: null, hintShown: false, rejoining: false
   };
   function showLayer(name, on) { Ls[name].classList.toggle('on', !!on); }
   function selChar() { const s = sv(); return FM.CH[s.selChar] ? s.selChar : 'TAFTAF'; }
@@ -862,6 +864,7 @@
       '<div class="cur cur-coin" data-cur="coins" title="Altın">' + coinI(48, 'cur-ic') + '<b>' + fmtN(coins()) + '</b></div>' +
       '<div class="cur cur-gem" data-cur="gems" title="Elmas">' + gemI(48, 'cur-ic') + '<b>' + fmtN(gems()) + '</b></div>' +
       '<div class="tb-sp"></div>' +
+      (!sub && st.screen === 'menu' ? onlinePillHtml() : '') +
       (dr ? '<button class="rbtn b-red tb-gift" data-act="daily" aria-label="Günlük ödül" title="Günlük ödül hazır!">' + svg('gift') + '<i class="dot"></i></button>' : '') +
       (sub || !fsOK() ? '' : '<button class="rbtn b-steel tb-full" data-act="full" aria-label="Tam ekran" title="Tam ekran">' + svg('full') + '</button>') +
       (st.screen === 'settings' ? '' : '<button class="rbtn b-steel tb-set" data-act="go" data-to="settings" aria-label="Ayarlar" title="Ayarlar">' + svg('gear') + '</button>') +
@@ -903,12 +906,16 @@
     });
     void rounds;
     const inR = mpInRoom();
+    const rj = !inR && !mpBusy() ? rejoinData() : null;
     return '<div class="mm">' +
       '<section class="mm-l">' +
         '<div class="logo-wrap"><canvas class="logo" data-art="logo" aria-label="Fuat Morel"></canvas></div>' +
         '<div class="play-row">' +
           '<span class="play-wrap"><span class="pl-glow"></span><button class="btn b-gold btn-play" data-act="play"><span class="shine"></span><span class="pl-ic">' + svg('play') + '</span><span class="pl-t">OYNA</span></button></span>' +
-          '<button class="btn b-green btn-friends" data-act="' + (inR ? 'golobby' : 'go') + '" data-to="friends"><span class="bf-ic">' + svg('users') + '</span><span class="bf-t"><b>ARKADAŞLARLA</b><em>' + (inR ? 'Odaya dön' : 'Oda kur · Katıl') + '</em></span></button>' +
+          (rj
+            ? '<span class="rj-wrap"><button class="btn b-green btn-friends rj" data-act="rejoin"><span class="bf-ic">' + svg('door') + '</span><span class="bf-t"><b>ODAYA GERİ DÖN</b><em>' + esc(rj.code) + ' · ' + ((+rj.mins || 0) < 1 ? 'az önce' : Math.round(+rj.mins) + ' dk önce') + '</em></span></button>' +
+              '<button class="rbtn b-steel rj-x" data-act="rejoinx" aria-label="Odayı unut" title="Odayı unut">' + svg('close') + '</button></span>'
+            : '<button class="btn b-green btn-friends" data-act="' + (inR ? 'golobby' : 'go') + '" data-to="friends"><span class="bf-ic">' + svg('users') + '</span><span class="bf-t"><b>ARKADAŞLARLA</b><em>' + (inR ? 'Odaya dön' : 'Oda kur · Katıl') + '</em></span></button>') +
         '</div>' +
         '<nav class="tiles">' + th + '</nav>' +
       '</section>' +
@@ -1198,47 +1205,7 @@
       '</div>', 'pnl-ms', 'rb-green');
   }
 
-  /* =====================================================================
-     13) KLAN
-     ===================================================================== */
-  function renderClan() {
-    const sel = selChar();
-    const mem = FM.ORDER.map(id => ({ id, ch: FM.CH[id] || {}, tr: trophies(id) })).sort((a, b) => b.tr - a.tr);
-    const total = mem.reduce((s, m) => s + m.tr, 0);
-    const day = Math.floor(Date.now() / 864e5);
-    let onl = 0, rows = '';
-    mem.forEach((m, i) => {
-      const me = m.id === sel;
-      const on = me || hashStr(m.id + ':' + day) > .38;
-      if (on) onl++;
-      const hrs = 1 + Math.floor(hashStr(day + '#' + m.id) * 20);
-      rows += '<div class="cm ' + (me ? 'me' : '') + '" style="--d:' + (i * .05).toFixed(2) + 's">' +
-        '<span class="cm-rk rk-' + (i + 1) + '">' + (i + 1) + '</span>' +
-        '<span class="cm-pt">' + pt(m.id, 64, { skin: equipped('skins', m.id) }) + '<i class="on-dot ' + (on ? 'on' : '') + '"></i></span>' +
-        '<span class="cm-id"><b>' + esc(m.id) + (me ? '<em class="you">SEN</em>' : '') + '</b><span class="cm-st ' + (on ? 'on' : '') + '">' + (on ? 'Çevrimiçi' : hrs + ' sa önce') + '</span></span>' +
-        '<span class="cm-role">' + roleBadge(m.ch.role) + '</span>' +
-        '<span class="cm-tr">' + trophyI(32, 'cm-tri') + '<b>' + fmtN(m.tr) + '</b></span>' +
-      '</div>';
-    });
-    const side =
-      '<div class="cl-side">' +
-        '<div class="cl-flag"><div class="cl-glow"></div><canvas data-art="flag" aria-label="Klan bayrağı"></canvas></div>' +
-        '<div class="cl-name">FUAT MOREL</div>' +
-        '<div class="cl-tag">' + svg('spade') + 'Kırmızı-siyah maçanın klanı</div>' +
-        '<div class="cl-stats">' +
-          '<span class="cs">' + trophyI(32, 'cs-i') + '<b>' + fmtN(total) + '</b><em>Klan Kupası</em></span>' +
-          '<span class="cs">' + svg('users', 'cs-i') + '<b>' + mem.length + '/50</b><em>Üyeler</em></span>' +
-          '<span class="cs">' + '<i class="on-dot on big"></i><b>' + onl + '</b><em>Çevrimiçi</em></span>' +
-          '<span class="cs">' + svg('lock', 'cs-i') + '<b>500</b><em>Gerekli Kupa</em></span>' +
-        '</div>' +
-        '<p class="cl-desc">Bayrağın altında herkes eşit koşar. Lider Caner, rozetini hak eden en hızlı ayaklara verir!</p>' +
-      '</div>';
-    return panel('KLAN',
-      '<div class="cl-wrap">' + side +
-        '<div class="cl-list"><div class="cl-hd"><span>#</span><span>Üye</span><span>Rütbe</span><span>Kupa</span></div>' +
-        '<div class="scroll cl-rows" data-sk="clan">' + rows + '</div></div>' +
-      '</div>', 'pnl-clan', 'rb-dark');
-  }
+  /* 13) KLAN ve ÇEVRİMİÇİ ekranları: aşağıda 15c bölümünde (gerçek varlık verisi) */
 
   /* =====================================================================
      14) AYARLAR
@@ -1447,6 +1414,8 @@
   function mpInRoom() { return !!(ncall('inRoom')); }
   function mpBusy() { return !!(ncall('busy')); }
   function mpHost() { return !!(ncall('isHost')); }
+  /** Son 15 dk içinde girilen oda (sayfa yenilenince geri dönmek için): {code, mins, nick} | null */
+  function rejoinData() { const v = gcall('rejoinInfo'); return v && typeof v === 'object' && v.code ? v : null; }
   /** Ağ maçı ekranda mı (duraklatma yok, odadan ayrıl menüsü) */
   function mpLive() { return !!(S.netRole && gcall('live')); }
   function mpActive() { return !!gcall('active'); }
@@ -1515,6 +1484,7 @@
         '<div class="pnl lb-set"></div>' +
       '</div>' +
       '<div class="lb-foot"></div>' +
+      '<div class="lb-cd" aria-live="polite"></div>' +
       '<div class="emo lb-emo">' + EMOJIS.map(e => '<button class="emo-b" data-act="emo" data-e="' + esc(e) + '">' + esc(e) + '</button>').join('') + '</div>' +
     '</div>';
   }
@@ -1539,12 +1509,15 @@
       const ch = FM.CH[p.char] ? p.char : 'TAFTAF';
       const dim = p.off || (!p.alive && !p.me);
       const em = st.mpEmo[p.pid];
-      h += '<div class="pc ' + (p.me ? 'me ' : '') + (dim ? 'off ' : '') + (p.host ? 'host ' : '') + (p.ready ? 'rdy' : '') + '" style="--pc:' + pColor(i) + '">' +
+      const rdyTag = '<span class="pc-tag t-rdy">' + svg('check') + 'HAZIR</span>';
+      const right = p.host
+        ? '<span class="pc-tags"><span class="pc-tag t-host">EV SAHİBİ</span>' + (p.ready && !dim ? '<i class="pc-ck" title="Hazır">' + svg('check') + '</i>' : '') + '</span>'
+        : p.ready ? rdyTag : '<span class="pc-tag t-wait">BEKLİYOR</span>';
+      h += '<div class="pc ' + (p.me ? 'me ' : '') + (dim ? 'off ' : '') + (p.host ? 'host ' : '') + (p.ready && !dim ? 'rdy' : '') + '" style="--pc:' + pColor(i) + '">' +
         '<span class="pc-pt">' + pt(ch, 48, { skin: p.skin }) + (p.host ? '<i class="pc-crown">' + svg('crown', 'gold') + '</i>' : '') + '</span>' +
         '<span class="pc-m"><b class="pc-n"><span>' + esc(p.nick || ch) + '</span>' + (p.me ? '<em class="you">SEN</em>' : '') + '</b>' +
           '<span class="pc-c">' + esc(ch) + (p.waiting ? ' · izliyor' : '') + (dim ? ' · bağlantı yok' : '') + '</span></span>' +
-        '<span class="pc-r">' + (p.host ? '<span class="pc-tag t-host">EV SAHİBİ</span>' : p.ready ? '<span class="pc-tag t-rdy">' + svg('check') + 'HAZIR</span>' : '<span class="pc-tag t-wait">BEKLİYOR</span>') +
-          pingHtml(p.ping) + '</span>' +
+        '<span class="pc-r">' + right + pingHtml(p.ping) + '</span>' +
         (em && t - em.t < 3200 ? '<span class="pc-emo">' + esc(em.e) + '</span>' : '') +
       '</div>';
     });
@@ -1554,8 +1527,31 @@
     for (let i = n + bots; i < 10; i++) h += '<div class="pc slot" data-act="share" role="button" tabindex="0"><span class="pc-pt">' + svg('users') + '</span><span class="pc-m"><b class="pc-n"><span>Boş yer</span></b><span class="pc-c">Dokun, arkadaşını davet et</span></span></div>';
     return h;
   }
+  /** Sağ panel: iki sekme — ODA AYARLARI / ÇEVRİMİÇİ (arkadaşlar; KATIL / DAVET) */
+  function lobbyFriendRows(d) {
+    const inRoom = {}; d.pl.forEach(p => { inRoom[p.pid] = 1; });
+    const myCode = String((d.lob && d.lob.code) || '');
+    return people().filter(p => !p.me && p.online && !inRoom[p.pid] && !(p.st === 'lobby' && p.code && p.code === myCode));
+  }
   function lobbySet(d) {
     const host = !!(d.lob && d.lob.isHost);
+    const fr = lobbyFriendRows(d);
+    const tabs = '<div class="ls-tabs" role="tablist">' +
+      '<button class="ls-tab ' + (st.lbTab !== 'fr' ? 'on' : '') + '" role="tab" data-act="lbtab" data-t="set">' + svg('gear') + '<span>AYARLAR</span></button>' +
+      '<button class="ls-tab ' + (st.lbTab === 'fr' ? 'on' : '') + '" role="tab" data-act="lbtab" data-t="fr"><i class="on-dot ' + (fr.length ? 'on' : '') + '"></i><span>ÇEVRİMİÇİ</span>' + (fr.length ? '<i class="badge sm">' + fr.length + '</i>' : '') + '</button></div>';
+    if (st.lbTab === 'fr') {
+      let rows = '';
+      for (const p of fr) {
+        const ch = FM.CH[p.char] ? p.char : 'TAFTAF';
+        rows += '<div class="fo" data-act="prof" data-pid="' + esc(p.pid) + '" role="button"><span class="fo-pt">' + pt(ch, 40, { skin: p.skin }) + '<i class="on-dot ' + dotCls(p) + '"></i></span>' +
+          '<span class="fo-m"><b>' + esc(p.nick || ch) + '</b>' + statusLine(p) + '</span>' +
+          (joinable(p) ? '<button class="btn sm b-blue fo-b" data-act="joinroom" data-code="' + esc(p.code) + '">KATIL</button>'
+            : '<button class="btn sm b-green fo-b" data-act="invite" data-nick="' + esc(p.nick || ch) + '">' + svg('share') + '<span>DAVET</span></button>') + '</div>';
+      }
+      if (!fr.length) rows = '<div class="fo-empty">' + svg('users') + '<b>Şu an çevrimiçi arkadaşın yok</b><span>Odan açıkken arkadaşların ÇEVRİMİÇİ listesinde odanı görür. Linki de paylaşabilirsin.</span></div>';
+      return tabs + '<div class="fo-list scroll" data-sk="lb-fr">' + rows + '</div>' +
+        '<button class="btn b-green fo-share" data-act="share">' + svg('share') + '<span>LİNKİ PAYLAŞ</span></button>';
+    }
     const cfg = normCfg(d.lob && d.lob.cfg);
     const m = modeOf(cfg.mode);
     const arr = k => host
@@ -1564,7 +1560,7 @@
     const a = arr('mode'), b = arr('map');
     let rd = '';
     for (const n of [1, 3, 5]) rd += '<button class="rd ' + (n === cfg.rounds ? 'on' : '') + '" ' + (host ? 'data-act="lcfg" data-k="rounds" data-v="' + n + '"' : 'disabled') + ' aria-label="' + n + ' tur">' + n + '</button>';
-    return '<h4 class="ls-h">' + svg('gear') + '<span>ODA AYARLARI</span>' + (host ? '' : '<em>ev sahibi seçer</em>') + '</h4>' +
+    return tabs + (host ? '' : '<p class="ls-note">Ayarları ev sahibi seçer</p>') +
       '<div class="ls-row"><span class="ls-l">MOD</span>' + a[0] + '<span class="ls-v">' + anyIcon(m.ic, 32, 'ls-ic') + '<b>' + esc(m.n) + '</b></span>' + a[1] + '</div>' +
       '<p class="ls-d">' + esc(firstSentence(m.d)) + '</p>' +
       '<div class="ls-row"><span class="ls-l">HARİTA</span>' + b[0] + '<span class="ls-v ls-map ' + (cfg.map === 'random' ? 'rnd' : '') + '" style="' + mapBg(cfg.map) + '"><b>' + esc(mapName(cfg.map)) + '</b></span>' + b[1] + '</div>' +
@@ -1572,38 +1568,287 @@
       '<div class="ls-row ls-2"><span class="ls-l">TUR</span><span class="rd-o">' + rd + '</span>' +
         '<span class="ls-l ls-bl">BOT</span><button class="tgl ' + (cfg.bots ? 'on' : '') + '" ' + (host ? 'data-act="lcfg" data-k="bots"' : 'disabled') + ' role="switch" aria-checked="' + !!cfg.bots + '" aria-label="Botlar"><i></i><span class="tg-on">AÇIK</span><span class="tg-off">KAPALI</span></button></div>';
   }
+  /** Otomatik başlama geri sayımı (5..1): FM.netgame.countdown() ya da son 'mp:countdown' olayı */
+  function curCd(d) {
+    if (d && d.cd !== undefined) return d.cd;
+    const v = gcall('countdown');
+    if (typeof v === 'number') return v;
+    const c = st.cd;
+    return c && c.left != null && nowMs() - c.t < 2500 ? c.left : null;
+  }
+  function lobbyCd(d) {
+    const n = curCd(d);
+    if (n != null) return '<div class="cd-in" data-n="' + n + '"><span class="cd-t">Herkes hazır!</span><b class="cd-n">' + n + '</b><span class="cd-s">Yarış başlıyor…</span></div>';
+    const c = st.cd;
+    if (c && c.msg && nowMs() - c.t < 3200) return '<div class="cd-in cd-x"><span class="cd-t">Geri sayım iptal edildi</span><span class="cd-s">' + esc(c.msg) + '</span></div>';
+    return '';
+  }
   function lobbyFoot(d) {
     const host = !!(d.lob && d.lob.isHost);
     const me = d.pl.find(p => p.me) || {};
-    const others = d.pl.filter(p => !p.me && !p.off);
-    const rdy = others.filter(p => p.ready).length;
+    const humans = d.pl.filter(p => !p.off);
+    const rdy = humans.filter(p => p.ready).length;
+    const cd = curCd(d);
     const ch = FM.CH[me.char] ? me.char : selChar();
+    let info;
+    if (cd != null) info = '<b>' + cd + '</b> sn sonra başlıyor';
+    else if (humans.length && rdy === humans.length) info = '<b>Herkes hazır!</b>';
+    else info = '<b>' + rdy + '/' + humans.length + '</b> hazır<br>Herkes hazır olunca başlar';
     let h = '<button class="rbtn b-orange lf-emo" data-act="lbemo" aria-label="Emoji gönder" title="Emoji gönder">' + svg('smile') + '</button>' +
       '<button class="btn b-blue lf-ch" data-act="chpick"><span class="lf-pt">' + pt(ch, 44, { skin: me.skin || equipped('skins', ch) }) + '</span><span class="lf-ct"><em>KARAKTER</em><b>' + esc(ch) + '</b></span></button>' +
-      '<div class="tb-sp"></div>';
-    if (host) {
-      h += '<span class="lf-info">' + (others.length ? '<b>' + rdy + '/' + others.length + '</b> hazır' : 'Arkadaşların gelince başlat<br>(ya da botlarla hemen)') + '</span>' +
-        '<button class="btn b-gold lf-go" data-act="lbstart"><span class="shine"></span>' + svg('play') + '<span>BAŞLAT</span></button>';
-    } else {
-      h += '<span class="lf-info">' + (me.ready ? 'Ev sahibi başlatınca<br>yarış başlar' : 'Hazır olunca dokun') + '</span>' +
-        '<button class="btn ' + (me.ready ? 'b-steel on' : 'b-green') + ' lf-go lf-rdy" data-act="lbready">' + svg('check') + '<span>' + (me.ready ? 'HAZIRSIN' : 'HAZIRIM') + '</span></button>';
-    }
+      '<div class="tb-sp"></div>' +
+      '<span class="lf-info ' + (cd != null ? 'cd' : '') + '">' + info + '</span>' +
+      '<button class="btn ' + (me.ready ? 'b-steel on' : 'b-green') + ' lf-rdy" data-act="lbready">' + svg('check') + '<span>' + (me.ready ? 'HAZIRSIN' : 'HAZIRIM') + '</span></button>';
+    if (host) h += '<button class="btn b-gold lf-go" data-act="lbstart"><span class="shine"></span>' + svg('play') + '<span>HEMEN BAŞLAT</span></button>';
     return h;
   }
   function updateLobby(force) {
     if (st.view !== 'menu' || st.screen !== 'lobby') return;
     const d = lobbyData(); if (!d) return;
-    const parts = [['.lb-code', lobbyCode], ['.lb-conn', lobbyConn], ['.lb-pl-in', lobbyPlayers], ['.lb-set', lobbySet], ['.lb-foot', lobbyFoot]];
+    const parts = [['.lb-code', lobbyCode], ['.lb-conn', lobbyConn], ['.lb-pl-in', lobbyPlayers], ['.lb-set', lobbySet], ['.lb-foot', lobbyFoot], ['.lb-cd', lobbyCd]];
     for (const p of parts) {
       const el = $(p[0], Ls.scr); if (!el) continue;
       let h = '';
       try { h = p[1](d); } catch (e) { console.error('[ui lobi]', e); continue; }
-      if (force || el._h !== h) { el._h = h; el.innerHTML = h; }
+      if (force || el._h !== h) {
+        const keep = el.querySelector ? el.querySelector('[data-sk]') : null, sc = keep ? keep.scrollTop : 0;
+        el._h = h; el.innerHTML = h;
+        if (keep) { const k2 = el.querySelector('[data-sk]'); if (k2) k2.scrollTop = sc; }
+      }
     }
     const pl = $('.lb-pl-in', Ls.scr); if (pl) syncHint(pl);
   }
 
-  const SCREENS = { menu: renderMenu, chars: renderChars, shop: renderShop, missions: renderMissions, clan: renderClan, settings: renderSettings, help: renderHelp, solo: renderSolo, friends: renderFriends, lobby: renderLobby };
+  /* =====================================================================
+     15c) ÇEVRİMİÇİ + KLAN + PROFİL KARTLARI
+          Yalnızca GERÇEK varlık verisi (FM.net.online / FM.net.profiles / FM.meta.card). Hiçbir sosyal veri uydurulmaz:
+          veri yoksa boş durum gösterilir.
+     ===================================================================== */
+  const LG_FALLBACK = [
+    { id: 'bronz', n: 'Bronz', col: '#d98a4a', min: 0 }, { id: 'gumus', n: 'Gümüş', col: '#c9d4e4', min: 300 },
+    { id: 'altin', n: 'Altın', col: '#ffd23f', min: 800 }, { id: 'elmas', n: 'Elmas', col: '#5ee0ff', min: 1600 },
+    { id: 'efsane', n: 'Efsane', col: '#ff5ad2', min: 3000 }
+  ];
+  /** Kupaya göre lig {id, n, col, min, next, nextN, idx, pct}: FM.meta.league varsa o, yoksa kupadan hesapla */
+  function leagueOf(tr, lg) {
+    const v = mcall('league', +tr || 0);
+    if (v && typeof v === 'object' && v.n) return v;
+    let i = 0;
+    for (let j = 1; j < LG_FALLBACK.length; j++) if ((+tr || 0) >= LG_FALLBACK[j].min) i = j;
+    const k = lg ? LG_FALLBACK.findIndex(x => x.id === lg) : -1;
+    if (k >= 0) i = k;
+    const L = LG_FALLBACK[i], N = LG_FALLBACK[i + 1] || null;
+    return { id: L.id, n: L.n, col: L.col, min: L.min, next: N ? N.min : null, nextN: N ? N.n : null, idx: i, pct: N ? clamp(((+tr || 0) - L.min) / (N.min - L.min), 0, 1) : 1 };
+  }
+  function lgBadge(L, cls) {
+    return '<span class="lg ' + (cls || '') + '" style="--lg:' + esc(L.col) + '" title="' + esc(L.n) + ' Ligi">' + svg('shieldL') + '<b>' + esc(L.n) + '</b></span>';
+  }
+  const myPid = () => (st.fakeNet ? 'me0' : String(ncall('pid') || ''));
+  const onlineList = () => { const v = st.fakeNet ? st.fakeNet.online : ncall('online'); return Array.isArray(v) ? v.filter(p => p && p.pid) : []; };
+  const profileList = () => { const v = st.fakeNet ? st.fakeNet.profiles : ncall('profiles'); return Array.isArray(v) ? v.filter(p => p && p.pid) : []; };
+  function myCard() { const c = mcall('card'); return c && typeof c === 'object' ? c : null; }
+  function stText(p) {
+    if (!p.online) return 'çevrimdışı';
+    switch (p.st) {
+      case 'lobby': return 'Lobide' + (p.n ? ' · ' + (p.n | 0) + '/' + ((p.max | 0) || 10) : '');
+      case 'race': return 'Yarışta';
+      case 'solo': return 'Tek başına oynuyor';
+      case 'away': return 'Uzakta';
+      default: return 'Menüde';
+    }
+  }
+  /** Açık lobisi olan, katılınabilecek oyuncu mu */
+  const joinable = p => !!(p && !p.me && p.online && p.st === 'lobby' && p.code && p.open !== false && !((p.n | 0) >= ((p.max | 0) || 10)));
+  /** Bilinen herkes: ben (FM.meta.card, her zaman en üstte) + profil kartları + kartı henüz gelmemiş çevrimiçi olanlar */
+  function people() {
+    const me = myPid(), onl = {}, out = [], seen = {};
+    for (const o of onlineList()) onl[o.pid] = o;
+    const mc = myCard() || {};
+    const mo = onl[me];
+    const self = { pid: me || 'me', me: true, online: !!mo, st: (mo && mo.st) || (mpInRoom() ? 'lobby' : 'menu'), nick: myNick(), char: mc.char || selChar(), skin: mc.skin || equipped('skins', selChar()),
+      lvl: mc.lvl, tr: mc.tr != null ? mc.tr : undefined, play: mc.play, races: mc.races, wins: mc.wins, kills: mc.kills, best: mc.best, since: mc.since, lg: mc.lg };
+    if (self.tr === undefined) { let t = 0; for (const id of FM.ORDER) t += trophies(id); self.tr = t; }
+    if (self.lvl === undefined) self.lvl = levelInfo().level;
+    if (self.play === undefined) { const pt0 = mcall('playTime'); if (typeof pt0 === 'number') self.play = pt0; }
+    out.push(self); seen[self.pid] = 1;
+    for (const p of profileList()) {
+      if (seen[p.pid] || p.pid === me) continue;
+      seen[p.pid] = 1;
+      const o = onl[p.pid];
+      out.push(Object.assign({}, p, { me: false, online: !!(o || p.online), st: (o && o.st) || p.st || 'menu', code: o && o.code, n: o && o.n, max: o && o.max, open: o && o.open, nick: (o && o.nick) || p.nick, char: (o && o.char) || p.char }));
+    }
+    for (const o of onlineList()) {
+      if (seen[o.pid] || o.me || o.pid === me) continue;
+      seen[o.pid] = 1;
+      out.push({ pid: o.pid, me: false, online: true, st: o.st, nick: o.nick, char: o.char, code: o.code, n: o.n, max: o.max, open: o.open });
+    }
+    const rank = p => (p.me ? 0 : joinable(p) ? 1 : p.online && p.st !== 'away' ? 2 : p.online ? 3 : 4);
+    return out.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || (a.p.online ? 0 : (+b.p.ls || 0) - (+a.p.ls || 0)) || (+b.p.tr || 0) - (+a.p.tr || 0) || a.i - b.i).map(x => x.p);
+  }
+  function dotCls(p) { return !p.online ? '' : p.st === 'away' ? 'away' : 'on'; }
+  /** Durum satırı: yalnızca FM.net online === true bildirirse yeşil "Çevrimiçi"; yoksa tam son görülme (data-ls: canlı güncellenir) */
+  function statusLine(p) {
+    if (p.me) return p.online ? '<span class="cm-st on">Çevrimiçi · sen</span>' : '<span class="cm-st">Şu an oyundasın</span>';
+    if (p.online) return '<span class="cm-st ' + (p.st === 'away' ? 'away' : 'on') + '">' + (p.st === 'away' ? '' : 'Çevrimiçi · ') + esc(stText(p)) + '</span>';
+    return '<span class="cm-st" data-ls="' + (+p.ls > 0 ? Math.round(+p.ls) : 0) + '">son görülme: ' + esc(fmtAgo(p.ls)) + '</span>';
+  }
+  function personRow(p, i) {
+    const L = leagueOf(p.tr, p.lg), ch = FM.CH[p.char] ? p.char : 'TAFTAF';
+    return '<div class="cm ' + (p.me ? 'me ' : '') + (p.online ? 'is-on ' : 'is-off ') + '" data-act="prof" data-pid="' + esc(p.pid) + '" role="button" style="--d:' + (Math.min(i, 8) * .04).toFixed(2) + 's">' +
+      '<span class="cm-pt">' + pt(ch, 64, { skin: p.skin }) + '<i class="on-dot ' + dotCls(p) + '"></i></span>' +
+      '<span class="cm-id"><b><span class="cm-n">' + esc(p.nick || ch) + '</span>' + (p.me ? '<em class="you">SEN</em>' : '') + '</b>' + statusLine(p) + '</span>' +
+      '<span class="cm-lgc">' + (p.tr != null ? lgBadge(L, 'sm') : '') + '</span>' +
+      '<span class="cm-play" title="Oynama süresi">' + svg('clock', 'cm-ci') + '<b>' + esc(fmtPlay(p.play)) + '</b></span>' +
+      '<span class="cm-tr" title="Toplam kupa">' + trophyI(32, 'cm-tri') + '<b>' + (p.tr != null ? fmtN(p.tr) : '—') + '</b></span>' +
+      (joinable(p) ? '<button class="btn sm b-green cm-join" data-act="joinroom" data-code="' + esc(p.code) + '">KATIL</button>' : '<span class="cm-chev">' + svg('chevR') + '</span>') +
+    '</div>';
+  }
+  function renderOnline() {
+    const all = people().filter(p => p.online || p.me), others = all.filter(p => !p.me);
+    let rows = '';
+    all.forEach((p, i) => { rows += personRow(p, i); });
+    if (!others.length) rows += '<div class="onl-empty">' + emptyBox('users', 'Şu an kimse çevrimiçi değil', 'Arkadaşların oyunu açınca burada görünür. Birini çağırmak için ARKADAŞLARLA › oda kur, linki paylaş.') + '</div>';
+    const open = others.filter(joinable).length;
+    return panel('ÇEVRİMİÇİ',
+      '<div class="onl-wrap">' +
+        '<div class="onl-sum"><span class="on-dot on big"></span><b>' + others.length + '</b><span>arkadaşın çevrimiçi' + (open ? ' · <em>' + open + ' açık lobi</em>' : '') + '</span>' +
+          '<button class="btn sm b-green" data-act="go" data-to="friends">' + svg('users') + '<span>ODA KUR</span></button></div>' +
+        '<div class="cl-list"><div class="cl-hd cl-hd2"><span>Oyuncu</span><span>Lig</span><span>Süre</span><span>Kupa</span></div>' +
+        '<div class="scroll cl-rows" data-sk="online">' + rows + '</div></div>' +
+      '</div>', 'pnl-onl', 'rb-green');
+  }
+  function renderClan() {
+    const ppl = people(), me = ppl.find(p => p.me) || ppl[0];
+    const onlN = ppl.filter(p => p.online).length, others = ppl.filter(p => !p.me);
+    const totTr = ppl.reduce((s, p) => s + (+p.tr || 0), 0), totPlay = ppl.reduce((s, p) => s + (+p.play || 0), 0);
+    const L = leagueOf(me.tr, me.lg);
+    let rows = '';
+    ppl.forEach((p, i) => { rows += personRow(p, i); });
+    if (!others.length) rows += '<div class="onl-empty">' + emptyBox('users', 'Henüz kimse görünmüyor', 'Arkadaşların oyunu açınca burada görünür.') + '</div>';
+    const prog = L.next != null
+      ? '<span class="cs cs-lg"><span class="cs-lgh">' + lgBadge(L) + '</span><span class="bar bar-lg"><i style="width:' + Math.round((L.pct || 0) * 100) + '%"></i></span><em>' + fmtN(Math.max(0, L.next - (+me.tr || 0))) + ' kupa daha: ' + esc(L.nextN || 'sonraki lig') + '</em></span>'
+      : '<span class="cs cs-lg"><span class="cs-lgh">' + lgBadge(L) + '</span><em>En yüksek lig!</em></span>';
+    const side =
+      '<div class="cl-side">' +
+        '<div class="cl-flag"><div class="cl-glow"></div><canvas data-art="flag" aria-label="Klan bayrağı"></canvas></div>' +
+        '<div class="cl-name">FUAT MOREL</div>' +
+        '<div class="cl-tag">' + svg('spade') + 'Kırmızı-siyah maçanın klanı</div>' +
+        '<div class="cl-stats">' +
+          '<span class="cs">' + trophyI(32, 'cs-i') + '<b>' + fmtN(totTr) + '</b><em>Toplam Kupa</em></span>' +
+          '<span class="cs">' + svg('users', 'cs-i') + '<b>' + ppl.length + '</b><em>Oyuncu</em></span>' +
+          '<span class="cs"><i class="on-dot on big"></i><b>' + onlN + '</b><em>Çevrimiçi</em></span>' +
+          '<span class="cs">' + svg('clock', 'cs-i') + '<b>' + esc(fmtPlay(totPlay)) + '</b><em>Birlikte oynanan</em></span>' +
+          prog +
+        '</div>' +
+      '</div>';
+    return panel('KLAN',
+      '<div class="cl-wrap">' + side +
+        '<div class="cl-list"><div class="cl-hd cl-hd2"><span>Oyuncu</span><span>Lig</span><span>Süre</span><span>Kupa</span></div>' +
+        '<div class="scroll cl-rows" data-sk="clan">' + rows + '</div></div>' +
+      '</div>', 'pnl-clan', 'rb-dark');
+  }
+  /** Oyuncu ayrıntı sayfası: oynama süresi, kupa, lig, yarış/birincilik, en çok oynanan karakter, "Sana karşı" */
+  function openProfile(pid) {
+    const p = people().find(x => x.pid === pid);
+    if (!p) return;
+    const L = leagueOf(p.tr, p.lg), ch = FM.CH[p.char] ? p.char : 'TAFTAF';
+    const best = FM.CH[p.best] ? p.best : null;
+    let h2h = null;
+    if (!p.me) { const all = st.fakeNet ? st.fakeNet.h2h : mcall('h2h'); h2h = all && all[p.pid] ? all[p.pid] : null; }
+    const cell = (ic, lbl, val) => '<div class="pf-c"><span class="pf-ci">' + ic + '</span><em>' + lbl + '</em><b>' + val + '</b></div>';
+    const wr = (+p.races > 0 && p.wins != null) ? ' <small>(%' + Math.round((+p.wins || 0) / p.races * 100) + ')</small>' : '';
+    openModal('prof',
+      '<div class="pnl pnl-prof">' + ribbon(esc(up(p.nick || ch)), p.online ? 'rb-green' : 'rb-dark') +
+        '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
+        '<div class="pf-body">' +
+          '<div class="pf-l"><span class="pf-pt">' + pt(ch, 120, { skin: p.skin }) + '<i class="on-dot big2 ' + dotCls(p) + '"></i></span>' +
+            lgBadge(L) + statusLine(p).replace('cm-st', 'pf-st') +
+            (p.me ? '<em class="you">SEN</em>' : '') + '</div>' +
+          '<div class="pf-r"><div class="pf-g">' +
+            cell(svg('clock'), 'Oynama süresi', esc(fmtPlay(p.play))) +
+            cell(trophyI(28), 'Toplam kupa', p.tr != null ? fmtN(p.tr) : '—') +
+            cell(svg('star', 'gold'), 'Seviye', p.lvl != null ? fmtN(p.lvl) : '—') +
+            cell(svg('flag'), 'Yarış', p.races != null ? fmtN(p.races) : '—') +
+            cell(svg('crown', 'gold'), 'Birincilik', p.wins != null ? fmtN(p.wins) + wr : '—') +
+            cell(best ? pt(best, 36, {}) : svg('user'), 'En çok oynadığı', best ? esc(best) : '—') +
+          '</div>' +
+          (p.since ? '<div class="pf-since">İlk oynama: ' + esc(fmtDate(p.since)) + '</div>' : '') +
+          (h2h ? '<div class="pf-h2h"><span>Sana karşı</span><b class="w">' + (h2h.w | 0) + '</b><i>–</i><b class="l">' + (h2h.l | 0) + '</b><em>sen ' + (h2h.w | 0) + ' kez, ' + esc(p.nick || ch) + ' ' + (h2h.l | 0) + ' kez önde bitirdi</em></div>'
+                      : (!p.me ? '<div class="pf-h2h none"><span>Sana karşı</span><em>Henüz aynı yarışta olmadınız</em></div>' : '')) +
+          '</div>' +
+        '</div>' +
+        '<div class="cf-btns">' + (joinable(p) ? '<button class="btn b-green cf-ok" data-act="joinroom" data-code="' + esc(p.code) + '">' + svg('play') + '<span>LOBİYE KATIL</span></button>' : '<button class="btn b-steel" data-act="mclose">KAPAT</button>') + '</div>' +
+      '</div>');
+  }
+  function joinCode(code) {
+    code = String(code || '').trim();
+    if (!code) return;
+    if (st.modal === 'prof') closeModalHard();
+    if (mpInRoom() && ncall('code') === code) { showScreen('lobby'); return; }
+    if (st.view !== 'menu') { note({ title: 'Yarış sürüyor', sub: 'Yarıştan sonra katılabilirsin.', icon: svg('info'), cls: 'n-tip', ms: 1800 }); return; }
+    const go = () => withNick(() => mpJoin(code));
+    if (mpInRoom()) confirmBox({ title: 'ODA DEĞİŞTİR', rcls: 'rb-purple', art: '<div class="cf-art cf-warn">' + svg('door') + '</div>', text: 'Odandan ayrılıp <b>' + esc(code) + '</b> odasına katılmak ister misin?', ok: svg('play') + '<span>KATIL</span>', okCls: 'b-green', onOk: () => { setTimeout(go, 0); return true; } });
+    else go();
+  }
+  /** Menüdeki ÇEVRİMİÇİ düğmesinin sayısını yerinde güncelle (tüm menüyü yeniden çizmeden) */
+  function updateOnlinePill() {
+    const el = $('.tb-onl', Ls.scr); if (!el) return;
+    const n = onlineList().filter(p => !p.me && p.pid !== myPid()).length;
+    el.classList.toggle('has', n > 0);
+    const b = $('.onl-n', el); if (b) b.textContent = '(' + n + ')';
+    const d = $('.on-dot', el); if (d) d.classList.toggle('on', n > 0);
+  }
+  function onlinePillHtml() {
+    const n = onlineList().filter(p => !p.me && p.pid !== myPid()).length;
+    return '<button class="btn sm b-green tb-onl ' + (n > 0 ? 'has' : '') + '" data-act="go" data-to="online" aria-label="Çevrimiçi arkadaşlar" title="Çevrimiçi arkadaşlar"><i class="on-dot ' + (n > 0 ? 'on' : '') + '"></i><span class="onl-t">ÇEVRİMİÇİ</span><b class="onl-n">(' + n + ')</b></button>';
+  }
+
+  /* ---------- arkadaş bildirimleri (§8.4): uygulama içi kart + (arka plandayken, izin varsa) sistem bildirimi ---------- */
+  function friendNote(kind, p) {
+    if (!p || p.me || (p.pid && p.pid === myPid())) return;
+    const nick = p.nick || p.char || 'Arkadaşın';
+    const lob = kind === 'lobby' && p.code;
+    const title = lob ? nick + ' lobi kurdu!' : nick + ' çevrimiçi oldu!';
+    const sub = lob ? 'Lobide · ' + ((p.n | 0) || 1) + '/' + ((p.max | 0) || 10) + ' — katıl, birlikte yarışın' : stText(Object.assign({ online: true }, p));
+    if (document.hidden) { sysNotify(title, lob ? 'Lobi açık, katıl!' : 'Oyuna katıl!', p); return; }
+    const canJoin = lob && st.view === 'menu' && !mpInRoom();
+    FM.haptic('pick');
+    note({ title, sub, icon: pt(FM.CH[p.char] ? p.char : 'TAFTAF', 48, {}, 'n-pt'), cls: 'n-friend' + (lob ? ' n-lobby' : ''), ms: lob ? 7000 : 4200,
+      btn: canJoin ? '<button class="btn sm b-green n-btn" data-act="joinroom" data-code="' + esc(p.code) + '">KATIL</button>' : '' });
+  }
+  function sysNotify(title, body, p) {
+    try {
+      if (!setting('notify') || notifPerm() !== 'granted') return false;
+      const code = p && p.code ? String(p.code) : '';
+      const abs = u => { try { return new URL(u, location.href).href; } catch (e) { return u; } };
+      const opts = { body, icon: abs('icons/icon-192.png'), badge: abs('icons/favicon-64.png'), tag: 'fm-' + (code ? 'lobi-' : 'cevrimici-') + ((p && p.pid) || 'x'), renotify: true, data: { code, pid: p && p.pid } };
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(reg => reg.showNotification('Fuat Morel', opts)).catch(() => { try { new Notification('Fuat Morel', opts); } catch (e) { /* yok say */ } });
+      } else new Notification('Fuat Morel', opts);
+      return true;
+    } catch (e) { return false; }
+  }
+  /** Ayarlar › Bildirimler anahtarı: açarken (kullanıcı hareketiyle) izin iste */
+  function toggleNotify(el) {
+    const on = !!setting('notify') && notifPerm() === 'granted';
+    const paint2 = v => { setSetting('notify', v); if (el && el.isConnected) { el.classList.toggle('on', v); el.setAttribute('aria-checked', String(v)); } };
+    if (on) { paint2(false); return; }
+    const perm = notifPerm();
+    if (perm === 'none') { note({ title: 'Bildirim desteklenmiyor', sub: 'Bu tarayıcı bildirim gösteremiyor.', icon: svg('bell'), cls: 'n-err', ms: 2600 }); refreshSoon(); return; }
+    if (perm === 'denied') { note({ title: 'Bildirim izni kapalı', sub: 'Tarayıcı ayarlarından bu site için izin ver.', icon: svg('bell'), cls: 'n-err', ms: 3200 }); refreshSoon(); return; }
+    const done = r => {
+      if (r === 'granted') { paint2(true); note({ title: 'Bildirimler açık', sub: 'Arkadaşın çevrimiçi olunca haber verilecek.', icon: svg('bell'), cls: 'n-ok', ms: 2400 }); }
+      else { paint2(false); note({ title: 'İzin verilmedi', sub: 'Bildirimler kapalı kaldı.', icon: svg('bell'), cls: 'n-err', ms: 2400 }); }
+      refreshSoon();
+    };
+    if (perm === 'granted') { done('granted'); return; }
+    try {
+      const r = Notification.requestPermission(done);
+      if (r && typeof r.then === 'function') r.then(done, () => done('denied'));
+    } catch (e) { done('denied'); }
+  }
+
+  const SCREENS = { menu: renderMenu, chars: renderChars, shop: renderShop, missions: renderMissions, clan: renderClan, settings: renderSettings, help: renderHelp, solo: renderSolo, friends: renderFriends, lobby: renderLobby, online: renderOnline };
   const NO_TB = { lobby: 1 };
 
   /* =====================================================================
@@ -2196,25 +2441,33 @@
     if (sc && meRow) sc.scrollTop = Math.max(0, meRow.offsetTop - sc.clientHeight / 2 + meRow.offsetHeight / 2);
     if (mp) mpTick();
   }
-  /** Sonuç paneli alt düğmeleri. Çok oyunculuda "SONRAKİ TUR" yalnızca ev sahibinde; diğerlerinde "Ev sahibi bekleniyor" */
+  /** Sonuç paneli alt düğmeleri. Çok oyunculuda "SONRAKİ TUR" yalnızca ev sahibinde; diğerlerinde "Sonraki tur 5…" (autoLeft, herkeste doğru) */
   function resFoot(mp, last) {
     if (!mp) return '<button class="rbtn b-steel res-home" data-act="resquit" aria-label="Menüye dön" title="Menüye dön">' + svg('home') + '</button>' +
       '<button class="btn b-gold btn-next" data-act="next"><span>' + (last ? 'FİNAL' : 'SONRAKİ TUR') + '</span>' + svg('play') + '</button>';
     const al = gcall('autoLeft');
+    const lbl = last ? 'Final' : 'Sonraki tur';
     return '<button class="rbtn b-steel res-home" data-act="mpleave" aria-label="Odadan ayrıl" title="Odadan ayrıl">' + svg('door') + '</button>' +
       (mpHost()
-        ? '<button class="btn b-gold btn-next" data-act="next"><span>' + (last ? 'FİNAL' : 'SONRAKİ TUR') + '</span><em class="auto" data-auto>' + (al != null ? al : '') + '</em>' + svg('play') + '</button>'
-        : '<div class="btn b-steel btn-next wait is-static"><span>EV SAHİBİ BEKLENİYOR</span><i class="dots"><i></i><i></i><i></i></i></div>');
+        ? '<button class="btn b-gold btn-next" data-act="next"><span>' + (last ? 'FİNAL' : 'SONRAKİ TUR') + '</span>' + (al != null ? '<em class="auto" data-auto>' + al + '</em>' : '') + svg('play') + '</button>'
+        : al != null
+          ? '<div class="btn b-steel btn-next wait is-static nxt"><span>' + lbl + ' <b class="nxt-n">' + al + '</b>…</span></div>'
+          : '<div class="btn b-steel btn-next wait is-static"><span>EV SAHİBİ BEKLENİYOR</span><i class="dots"><i></i><i></i><i></i></i></div>');
   }
-  /** Ev sahibinin otomatik ilerleme geri sayımı (sonuç/final ekranında) */
+  /** Çok oyunculu sonuç/final ekranında otomatik ilerleme geri sayımı (herkeste) */
   let mpTickT = 0;
   function mpTick() {
     clearInterval(mpTickT);
     mpTickT = setInterval(() => {
       if (st.view !== 'results' && st.view !== 'final') { clearInterval(mpTickT); mpTickT = 0; return; }
-      const al = gcall('autoLeft');
-      for (const el of $$('[data-auto]')) el.textContent = al != null ? String(al) : '';
-    }, 500);
+      if (st.view === 'results') {
+        const f = $('.res-foot', Ls.res);
+        if (f) { const h = resFoot(true, !!st.resLast); if (f._h !== h) { f._h = h; f.innerHTML = h; } }
+      } else {
+        const f = $('.fin-btns', Ls.fin);
+        if (f && st.finData && st.finData.mp) { const h = finBtns(true); if (f._h !== h) { f._h = h; f.innerHTML = h; } }
+      }
+    }, 400);
   }
   /** Telefonda sonsuz CSS animasyonları (konfeti, dönen ışınlar, nabız) birkaç saniye sonra dursun: GPU/pil */
   function calmLater(layer) {
@@ -2260,15 +2513,11 @@
           '<div class="fin-pt">' + svg('crown', 'gold fin-crown') + pt(win.id, 220, { skin: win.skin, expr: 'h' }, 'fin-img') + '</div>' +
           '<div class="fin-title">' + (champ ? 'ŞAMPİYON!' : 'MAÇ BİTTİ') + '</div>' +
           '<div class="fin-sub">' + (champ ? 'Klanın en hızlısı sensin, <b>' + esc(win.name || win.id) + '</b>!' : 'Şampiyon <b>' + esc(win.name || win.id) + '</b> · Sen <b>' + myPlace + '.</b> oldun') + '</div>' +
+          awardsHtml(standings, isMe) +
         '</div>' +
         '<div class="pnl fin-pnl">' + ribbon('TOPLAM PUAN', champ ? 'rb-gold' : 'rb-red') +
           '<div class="fin-in"><div class="fin-rows' + (standings.length > 4 ? ' scroll' : '') + '" data-sk="fin-rows">' + rows + '</div>' + (d.mp && !st.mpRaced ? '' : finRewards()) +
-          '<div class="fin-btns">' + (d.mp
-            ? '<button class="btn b-steel" data-act="mpleave">' + svg('door') + '<span>AYRIL</span></button>' +
-              (mpHost() ? '<button class="btn b-green btn-again" data-act="tolobby">' + svg('users') + '<span>LOBİYE DÖN</span><em class="auto" data-auto></em></button>'
-                : '<div class="btn b-steel btn-again wait is-static"><span>EV SAHİBİ BEKLENİYOR</span><i class="dots"><i></i><i></i><i></i></i></div>')
-            : '<button class="btn b-steel" data-act="menu">' + svg('home') + '<span>MENÜ</span></button>' +
-              '<button class="btn b-green btn-again" data-act="replay">' + svg('reset') + '<span>TEKRAR OYNA</span></button>') + '</div></div>' +
+          '<div class="fin-btns">' + finBtns(!!d.mp) + '</div></div>' +
         '</div>' +
         (champ ? confetti(touchMode ? 22 : 60) : '') +
       '</div>';
@@ -2278,6 +2527,66 @@
     if (d.mp) mpTick();
   }
   function clearFinal() { showLayer('fin', false); Ls.fin.innerHTML = ''; }
+  /** Final alt düğmeleri. Ağda: ev sahibinde LOBİYE DÖN, herkeste "Lobiye dönülüyor… N" (otomatik; menüye atılmaz) */
+  function finBtns(mp) {
+    if (!mp) return '<button class="btn b-steel" data-act="menu">' + svg('home') + '<span>MENÜ</span></button>' +
+      '<button class="btn b-green btn-again" data-act="replay">' + svg('reset') + '<span>TEKRAR OYNA</span></button>';
+    const al = gcall('autoLeft');
+    return '<button class="btn b-steel" data-act="mpleave">' + svg('door') + '<span>AYRIL</span></button>' +
+      (mpHost()
+        ? '<button class="btn b-green btn-again" data-act="tolobby">' + svg('users') + '<span>LOBİYE DÖN</span>' + (al != null ? '<em class="auto" data-auto>' + al + '</em>' : '') + '</button>'
+        : '<div class="btn b-steel btn-again wait is-static"><span>' + (al != null ? 'Lobiye dönülüyor <b class="nxt-n">' + al + '</b>…' : 'Lobiye dönülecek') + '</span><i class="dots"><i></i><i></i><i></i></i></div>');
+  }
+
+  /* ---------- maç sonu eğlenceli ödüller (final sıralamasındaki / yarışçı verilerinden; veri yoksa ödül atlanır) ---------- */
+  const racerKey = r => (r && (r.pid || (r.id + ':' + (r.idx == null ? '' : r.idx)))) || '';
+  /** Her turun sonunda en hızlı bitiş süresini yarışçıya göre biriktir ("Roket") */
+  function trackRound(res) {
+    const rk = res && res.ranking;
+    if (!Array.isArray(rk)) return;
+    for (const r of rk) {
+      if (!r || !r.finished || !(+r.ftime > 0)) continue;
+      const k = racerKey(r), cur = st.bestT[k];
+      if (!cur || r.ftime < cur) st.bestT[k] = +r.ftime;
+    }
+  }
+  function funAwards(stn) {
+    const rows = stn.filter(Boolean);
+    if (rows.length < 2) return [];
+    const num = v => (typeof v === 'number' && isFinite(v) ? v : null);
+    const out = [];
+    const best = (key, dir, min) => {
+      let w = null, wv = null, n = 0, all = [];
+      for (const r of rows) {
+        const v = num(typeof key === 'function' ? key(r) : r[key]);
+        if (v == null) continue;
+        all.push(v);
+        if (wv == null || (dir > 0 ? v > wv : v < wv)) { w = r; wv = v; }
+      }
+      if (!w || all.length < 2) return null;
+      void n;
+      if (min != null && (dir > 0 ? wv < min : wv > min)) return null;
+      return { w, v: wv, all };
+    };
+    let a = best('kills', 1, 1);
+    if (a) out.push({ k: 'kill', ic: gi('x_boom', 40), t: 'EN ÇOK AVLAYAN', w: a.w, v: a.v + ' rakip' });
+    a = best('coins', 1, 1);
+    if (a) out.push({ k: 'coin', ic: coinI(40), t: 'ALTIN AVCISI', w: a.w, v: fmtN(a.v) + ' altın' });
+    a = best('deaths', -1, null);
+    if (a && Math.max.apply(null, a.all) > a.v) out.push({ k: 'life', ic: '<i class="gi fb-svg c-gold">' + svg('halo') + '</i>', t: 'ÖLÜMSÜZ', w: a.w, v: a.v === 0 ? 'hiç ölmedi' : a.v + ' ölüm' });
+    a = best(r => (st.bestT[racerKey(r)] > 0 ? st.bestT[racerKey(r)] : null), -1, null);
+    if (a) out.push({ k: 'rocket', ic: gi('mis', 40), t: 'ROKET', w: a.w, v: fmtTime(a.v) + ' en hızlı tur' });
+    return out;
+  }
+  function awardsHtml(stn, isMe) {
+    let aw = [];
+    try { aw = funAwards(stn); } catch (e) { console.error('[ui ödüller]', e); }
+    if (!aw.length) return '';
+    return '<div class="fin-aw">' + aw.map((x, i) =>
+      '<div class="fa fa-' + x.k + (isMe(x.w) ? ' me' : '') + '" style="--d:' + (1.3 + i * .18).toFixed(2) + 's"><span class="fa-ic">' + x.ic + '</span>' +
+        '<span class="fa-m"><em>' + x.t + '</em><b>' + esc(x.w.name || x.w.id) + (isMe(x.w) ? ' <i class="you">SEN</i>' : '') + '</b><span>' + esc(x.v) + '</span></span>' +
+        '<span class="fa-pt">' + pt(x.w.id, 44, { skin: x.w.skin }) + '</span></div>').join('') + '</div>';
+  }
   function finRewards() {
     const mr = FM.meta && FM.meta.lastMatchRewards;
     if (!mr || typeof mr !== 'object') return '';
@@ -2319,7 +2628,7 @@
     const el = document.createElement('div');
     el.className = 'note ' + (o.cls || '') + (st.view === 'race' ? ' in-race' : '');
     el.innerHTML = '<span class="n-ic">' + (o.icon || svg('star')) + '</span><span class="n-tx"><b>' + esc(o.title || '') + '</b>' + (o.sub ? '<span>' + esc(o.sub) + '</span>' : '') + '</span>' +
-      (o.rw ? '<span class="n-rw">' + rewardChips(o.rw, 20) + '</span>' : '');
+      (o.rw ? '<span class="n-rw">' + rewardChips(o.rw, 20) + '</span>' : '') + (o.btn || '');
     Ls.notes.appendChild(el);
     if (cel) noteCel = el;
     else { if (noteFb) dropNote(noteFb, true); noteFb = el; }
@@ -2479,10 +2788,17 @@
     st.mpRaced = false;
     showScreen('lobby');
   }
-  function shareInfo() {
+  function shareInfo(to) {
     const code = String(ncall('code') || (st.fakeLobby && st.fakeLobby.lob.code) || '');
     const link = ncall('shareLink') || (location.origin + location.pathname + '?oda=' + code);
-    return { code, link, text: 'Fuat Morel odama gel! Oda kodu: ' + code };
+    return { code, link, text: (to ? to + ', ' : '') + 'Fuat Morel odama gel! Oda kodu: ' + code };
+  }
+  /** "Odaya geri dönülüyor…" bekleme penceresi (otomatik ya da elle geri dönüş) */
+  function openRejoin(code) {
+    st.rejoining = true;
+    const c = String(code || (rejoinData() || {}).code || ncall('code') || '');
+    if (st.modal === 'mpwait') { const t = $('.cf-t', Ls.mdl); if (t) t.innerHTML = c ? '<b>' + esc(c) + '</b> odasına bağlanılıyor…' : 'Odana bağlanılıyor…'; return; }
+    openWait('ODAYA GERİ DÖNÜLÜYOR', c ? '<b>' + esc(c) + '</b> odasına bağlanılıyor…' : 'Odana bağlanılıyor…');
   }
   function copyText(t) {
     const fallback = () => {
@@ -2500,8 +2816,8 @@
     if (ok) note({ title: 'Kopyalandı!', sub: what || 'Linki arkadaşlarına yapıştır.', icon: svg('copy'), cls: 'n-ok', ms: 1700 });
     else note({ title: 'Kopyalanamadı', sub: 'Kodu elle yaz: ' + shareInfo().code, icon: svg('info'), cls: 'n-err', ms: 2600 });
   }
-  function doShare() {
-    const si = shareInfo();
+  function doShare(to) {
+    const si = shareInfo(typeof to === 'string' ? to : '');
     if (!si.code) return;
     if (navigator.share && touchMode) {
       try { const p = navigator.share({ title: 'Fuat Morel', text: si.text, url: si.link }); if (p && p.catch) p.catch(() => { }); return; } catch (e) { /* aşağıdaki pencere */ }
@@ -2869,10 +3185,30 @@
     claimDaily: el => claimDaily(el),
     daily: () => openDaily(),
     tgl: el => {
-      const k = el.getAttribute('data-set'), cur = (sv().settings || {})[k] !== false;
+      const k = el.getAttribute('data-set'), cur = !!setting(k);
       setSetting(k, !cur);
       el.classList.toggle('on', !cur); el.setAttribute('aria-checked', String(!cur));
+      if (k === 'haptic' && !cur) FM.haptic('ready');
+      if (k === 'lefty' || k === 'btnSize') applyTcPrefs();
     },
+    segset: el => {
+      const k = el.getAttribute('data-set'), v = el.getAttribute('data-v');
+      setSetting(k, v);
+      for (const b of $$('.seg button[data-set="' + k + '"]', Ls.scr)) b.classList.toggle('on', b.getAttribute('data-v') === v);
+      if (k === 'btnSize') { applyTcPrefs(); FM.haptic('tap'); }
+    },
+    tglnotify: el => toggleNotify(el),
+    rejoin: () => {
+      const rj = rejoinData(); if (!rj) { refreshSoon(); return; }
+      const ok = gcall('rejoin');
+      if (ok === false) { note({ title: 'Odaya dönülemedi', sub: 'Oda kapanmış olabilir.', icon: svg('door'), cls: 'n-err', ms: 2800 }); gcall('forgetRoom'); refreshSoon(); return; }
+      openRejoin(rj.code);
+    },
+    rejoinx: () => { gcall('forgetRoom'); refreshSoon(); },
+    joinroom: el => joinCode(el.getAttribute('data-code')),
+    prof: el => openProfile(el.getAttribute('data-pid')),
+    invite: el => doShare(el.getAttribute('data-nick')),
+    lbtab: el => { const t = el.getAttribute('data-t') === 'fr' ? 'fr' : 'set'; if (st.lbTab === t) return; st.lbTab = t; updateLobby(true); },
     q: el => { const v = el.getAttribute('data-v') === 'low' ? 'low' : 'high'; setSetting('quality', v); for (const b of $$('.seg button')) b.classList.toggle('on', b.getAttribute('data-v') === v); },
     full: () => toggleFull(),
     reset: () => confirmBox({
@@ -2929,7 +3265,7 @@
     nickok: () => nickOk(),
     mpcreate: () => withNick(mpCreate),
     mpjoin: () => { const i = $('.cin', Ls.scr); const v = i ? i.value : st.mpCode; st.mpCode = v || ''; withNick(() => mpJoin(v)); },
-    mpcancel: () => { closeModalHard(); gcall('leave'); if (NET() && !mpInRoom()) ncall('clearUrlCode'); },
+    mpcancel: () => { const rj = st.rejoining; st.rejoining = false; closeModalHard(); gcall('leave'); if (rj) gcall('forgetRoom'); if (NET() && !mpInRoom()) ncall('clearUrlCode'); },
     lbleave: () => confirmBox({
       title: 'ODADAN AYRIL', rcls: 'rb-red', art: '<div class="cf-art cf-warn">' + svg('door') + '</div>',
       text: mpHost() ? 'Ayrılırsan ev sahipliği başka bir oyuncuya geçer.' : 'Odadan ayrılıp ana menüye dönülsün mü?',
@@ -2978,7 +3314,7 @@
         if (!ok) { note({ title: 'Başlatılamadı', sub: 'Bağlantıyı bekle ve tekrar dene.', icon: svg('info'), cls: 'n-err', ms: 2000 }); return; }
         if (el && el.isConnected) el.disabled = true;
       };
-      if (notReady > 0) confirmBox({ title: 'HERKES HAZIR DEĞİL', rcls: 'rb-gold', text: '<b>' + notReady + '</b> oyuncu henüz hazır değil. Yine de başlatılsın mı?', ok: svg('play') + '<span>BAŞLAT</span>', okCls: 'b-gold', onOk: () => { setTimeout(go, 0); return true; } });
+      if (notReady > 0) confirmBox({ title: 'HERKES HAZIR DEĞİL', rcls: 'rb-gold', text: '<b>' + notReady + '</b> oyuncu henüz hazır değil. Yine de hemen başlatılsın mı?', ok: svg('play') + '<span>HEMEN BAŞLAT</span>', okCls: 'b-gold', onOk: () => { setTimeout(go, 0); return true; } });
       else go();
     },
     chpick: () => openCharPick(),
@@ -3075,7 +3411,11 @@
      24) OYUN OLAYLARI
      ===================================================================== */
   FM.on('ui:menu', () => {
+    // odadaysan ve lobideysen menüye değil lobiye dön ("lobi unutulmasın")
+    if (mpInRoom() && (gcall('state') || {}).phase === 'lobby' && !FM.DEV) { showLobby(); return; }
     showScreen('menu');
+    // sayfa yenilenince otomatik odaya dönülüyorsa (mp:rejoining olayı ui yüklenmeden geldiyse) bekleme penceresi
+    if (!st.modal && !mpInRoom() && mpBusy() && !ncall('codeFromUrl')) openRejoin(ncall('code'));
     // ?oda=KOD linkiyle açıldıysa doğrudan katıl (takma ad yoksa önce sor)
     tryAutoJoin();
     if (!st.dailyShown && !FM.DEV && dailyReady()) {
@@ -3088,9 +3428,9 @@
       setTimeout(() => { if (st.view === 'menu') note({ title: 'Tam ekran oyna!', sub: 'Paylaş › Ana Ekrana Ekle ile aç, adres çubuğu kaybolsun.', icon: svg('full'), cls: 'n-tip', ms: 6500 }); }, 2600);
     }
   });
-  FM.on('match:start', d => { st.lastMatch = { rounds: (d && d.rounds) || S.ROUNDS || roundsSel() }; });
+  FM.on('match:start', d => { st.lastMatch = { rounds: (d && d.rounds) || S.ROUNDS || roundsSel() }; st.bestT = {}; });
   FM.on('race:start', () => enterRace(true));
-  FM.on('race:end', () => { releaseAllTouch(); });
+  FM.on('race:end', d => { releaseAllTouch(); try { trackRound(d); } catch (e) { console.error('[ui tur izi]', e); } });
   FM.on('ui:podium', res => showResults(res && res.ranking ? res : S.lastResult));
   FM.on('match:end', d => {
     // ağ maçı: final ekranını mp:final çizer (takma adlar, ev sahibi düğmeleri)
@@ -3118,7 +3458,20 @@
     showScreen('friends');
     withNick(() => mpJoin(code));
   }
-  FM.on('mp:lobby', () => { try { showLobby(); } catch (e) { console.error('[ui mp:lobby]', e); } });
+  FM.on('mp:lobby', d => { st.cd = null; st.rejoining = false; if (d && d.back) st.lbTab = 'set'; try { showLobby(); } catch (e) { console.error('[ui mp:lobby]', e); } });
+  FM.on('mp:countdown', d => {
+    d = d || {};
+    const left = d.left == null ? null : (d.left | 0);
+    if (left != null && left >= 1) { st.cd = { left, t: nowMs() }; FM.haptic('count'); }
+    else {
+      const was = !!(st.cd && st.cd.left != null);
+      const why = { unready: 'Biri hazırı geri aldı.', join: 'Odaya yeni biri katıldı.', leave: 'Biri odadan ayrıldı.' }[d.reason];
+      st.cd = was && why ? { left: null, msg: why, t: nowMs() } : null;
+      if (st.cd) setTimeout(() => updateLobby(), 3300);
+    }
+    updateLobby();
+  });
+  FM.on('mp:rejoining', d => openRejoin(d && d.code));
   FM.on('net:lobby', () => updateLobby());
   FM.on('net:players', () => updateLobby());
   FM.on('net:status', s => {
@@ -3139,7 +3492,15 @@
     openErr('kicked', (d && d.msg) || 'Ev sahibi seni odadan çıkardı.');
   });
   FM.on('mp:left', d => {
-    if (st.modal === 'mpwait' || st.modal === 'share' || st.modal === 'chpick') closeModalHard();
+    st.cd = null; st.rejoining = false;
+    if (d && d.reason === 'rejoin-failed') {
+      if (st.modal === 'mpwait') closeModalHard();
+      if (st.view === 'menu' && st.screen !== 'menu') showScreen('menu'); else if (st.view === 'menu') refreshSoon();
+      note({ title: 'Odaya dönülemedi', sub: 'Oda kapanmış ya da bağlantı kurulamadı.', icon: svg('door'), cls: 'n-err', ms: 3600 });
+      FM.haptic('hit');
+      return;
+    }
+    if (st.modal === 'mpwait' || st.modal === 'share' || st.modal === 'chpick' || st.modal === 'prof') closeModalHard();
     if (st.view === 'menu' && (st.screen === 'lobby' || st.screen === 'friends')) showScreen(d && d.reason === 'left' ? 'menu' : 'friends');
     else if (st.view === 'results' || st.view === 'final') { if (FM.game && typeof FM.game.toMenu === 'function') FM.game.toMenu(); else showScreen('menu'); }
     if (d && d.reason === 'left') ncall('clearUrlCode');
@@ -3164,7 +3525,7 @@
     if (!f || !Array.isArray(f.standings)) return;
     const stn = f.standings.map(x => {
       const r = gcall('racer', x.pid) || {};
-      return { id: FM.CH[x.char] ? x.char : 'TAFTAF', name: x.nick || x.char, skin: x.skin, total: x.total | 0, bot: !!x.bot, me: !!x.me, kills: r.kills | 0 };
+      return { id: FM.CH[x.char] ? x.char : 'TAFTAF', pid: x.pid, name: x.nick || x.char, skin: x.skin, total: x.total | 0, bot: !!x.bot, me: !!x.me, kills: typeof r.kills === 'number' ? r.kills : undefined, coins: typeof r.coins === 'number' ? r.coins : undefined, deaths: typeof r.deaths === 'number' ? r.deaths : undefined };
     });
     showFinal({ mp: true, standings: stn, champion: !!f.champion });
   });
@@ -3193,6 +3554,58 @@
     note({ title: 'SEVİYE ATLADIN!', sub: 'Seviye ' + lv + ' oldun', icon: '<span class="n-lvb">' + svg('star', 'gold') + '<b>' + lv + '</b></span>', cls: 'n-lv', ms: 3600 });
     sfx('levelup');
   });
+  /* ---------- 5. tur: titreşim (YALNIZCA ARAYÜZ tetikler), yuvaya vardı, arkadaş varlığı, canlı "son görülme" ---------- */
+  const localR = r => !!r && r === S.player && S.mode !== 'demo';
+  FM.on('box', d => { if (d && localR(d.r) && d.item !== null) FM.haptic('pick'); });
+  FM.on('charge:full', d => { if (d && localR(d.r)) FM.haptic('ready'); });
+  FM.on('death', d => { if (d && localR(d.r)) FM.haptic('death'); });
+  FM.on('hit', d => { if (d && localR(d.victim)) FM.haptic('hit'); });
+  FM.on('finish', d => { if (d && localR(d.r)) FM.haptic(d.place === 1 ? 'win' : 'pick'); });
+  FM.on('match:end', d => { if (d && d.champion) FM.haptic('win'); });
+  FM.on('aim:start', () => { /* ilk dokunuş titreşimi aimStart'ta; klavye/başka kaynaktan gelenler için burada hafif */ });
+  FM.on('hud:arrive', d => bumpSlot(d && d.kind === 'ab' ? 'ab' : 'item'));
+  FM.on('net:came', d => { try { friendNote('came', d && d.p); } catch (e) { console.error('[ui net:came]', e); } });
+  FM.on('net:lobby-open', d => { try { friendNote('lobby', d && d.p); } catch (e) { console.error('[ui net:lobby-open]', e); } });
+  /** Canlı veri gelince açık ekranları yenile (parmak basılıyken değil: dokunuş yutulmasın) */
+  let ptrDown = 0;
+  root.addEventListener('pointerdown', () => { ptrDown = nowMs(); }, true);
+  const liveRefresh = (() => {
+    let t = 0;
+    return () => {
+      if (t) return;
+      t = setTimeout(() => {
+        t = 0;
+        if (nowMs() - ptrDown < 350) { liveRefresh(); return; }
+        if (st.view === 'menu' && !st.modal) {
+          if (st.screen === 'online' || st.screen === 'clan') paint(false);
+          else if (st.screen === 'menu') updateOnlinePill();
+          else if (st.screen === 'lobby') updateLobby();
+        } else if (st.view === 'menu' && st.screen === 'lobby') updateLobby();
+      }, 250);
+    };
+  })();
+  FM.on('net:online', liveRefresh);
+  FM.on('net:profiles', liveRefresh);
+  FM.on('meta:card', liveRefresh);
+  /** "son görülme: 5 dk önce" yazıları ekran açıkken canlı kalsın (net olaylarından bağımsız, 20 sn'de bir) */
+  function refreshAgo() {
+    for (const el of $$('[data-ls]', root)) {
+      const ms = +el.getAttribute('data-ls');
+      el.textContent = 'son görülme: ' + fmtAgo(ms);
+    }
+  }
+  setInterval(() => { if (!document.hidden) refreshAgo(); }, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshAgo(); liveRefresh(); } });
+  // bildirime dokunulunca (sw.js notificationclick) açık oyuna oda kodu gelir
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.addEventListener) {
+      navigator.serviceWorker.addEventListener('message', e => {
+        const m = e && e.data;
+        if (m && m.type === 'fm-join' && m.code) { try { joinCode(String(m.code)); } catch (err) { console.error(err); } }
+      });
+    }
+  } catch (e) { /* servis çalışanı yok */ }
+
   FM.on('resize', () => {
     checkRotate();
     if (st.view === 'menu' || st.modal) { clearTimeout(UI._rz); UI._rz = setTimeout(redrawArt, 120); }
@@ -3245,6 +3658,31 @@
     }
     return { lob: { code: 'K7MXQ', isHost: host, max: 10, st: 'lobby', cfg: { mode: FM.params.mode || 'elim', map: FM.params.map || 'desert', rounds: 3, bots: true, fill: 4 } }, pl, stt: { conn: 'open', rtt: 84, phase: 'in' } };
   }
+  /** Geliştirici: sahte varlık verisi (yalnızca ?dev=1&fakenet=1 ekran görüntüleri için; oyunda HİÇ kullanılmaz) */
+  function devFakeNet() {
+    const now = Date.now(), H = 3600e3, D = 24 * H;
+    const online = [
+      { pid: 'me0', nick: myNick(), char: selChar(), st: 'menu', me: true },
+      { pid: 'p1', nick: 'Kral', char: 'Kral', st: 'lobby', code: 'K7MXQ', n: 3, max: 10, open: true },
+      { pid: 'p2', nick: 'Caner', char: 'Caner', st: 'race' },
+      { pid: 'p3', nick: 'ertan', char: 'ertan', st: 'menu' },
+      { pid: 'p4', nick: 'LUL', char: 'LUL', st: 'solo' },
+      { pid: 'p5', nick: 'Nusret', char: 'Nuss', st: 'away' }
+    ];
+    const pr = (pid, nick, char, tr, play, lvl, races, wins, best, ls, extra) => Object.assign({ pid, nick, char, skin: 'klasik', lvl, tr, play, races, wins, kills: wins * 3, best, since: now - 40 * D, ls, online: false, st: 'menu' }, extra || {});
+    const profiles = [
+      pr('p1', 'Kral', 'Kral', 1320, 45360, 18, 212, 61, 'Kral', now - 4000, { online: true, st: 'lobby' }),
+      pr('p2', 'Caner', 'Caner', 2150, 98100, 24, 480, 167, 'Caner', now - 3000, { online: true, st: 'race' }),
+      pr('p3', 'ertan', 'ertan', 410, 7260, 6, 40, 4, 'ertan', now - 2000, { online: true }),
+      pr('p4', 'LUL', 'LUL', 0, 540, 1, 3, 0, 'LUL', now - 5000, { online: true, st: 'solo' }),
+      pr('p5', 'Nusret', 'Nuss', 880, 21000, 11, 90, 22, 'Nuss', now - 70000, { online: true, st: 'away' }),
+      pr('p6', 'baso', 'baso', 3120, 180000, 31, 900, 410, 'baso', now - 2 * H - 600000),
+      pr('p7', 'Fuat', 'TAFTAF', 150, 3900, 3, 12, 1, 'TAFTAF', now - 26 * H),
+      pr('p8', 'Morel', 'Kral', 95, 1500, 2, 9, 0, 'Kral', now - 5 * D),
+      pr('p9', 'Emir', 'Nuss', 0, 300, 1, 2, 0, 'Nuss', now - 40 * 60000)
+    ];
+    return { online, profiles, h2h: { p1: { nick: 'Kral', w: 12, l: 8 } } };
+  }
   function devOpen() {
     const P = FM.params || {}, u = P.ui;
     if (!u) {
@@ -3253,10 +3691,14 @@
       else if ((P.scene || 'race') === 'race' && touchMode) { st.devForce = true; enterRace(); }
       return;
     }
+    if (P.fakenet === '1') st.fakeNet = devFakeNet();
     if (P.tab && st.tabs[u] !== undefined) st.tabs[u] = P.tab;
     if (P.cv && FM.CH[P.cv]) st.cview = P.cv;
     switch (u) {
-      case 'menu': case 'chars': case 'shop': case 'missions': case 'clan': case 'settings': case 'help': showScreen(u); break;
+      case 'menu': case 'chars': case 'shop': case 'missions': case 'clan': case 'settings': case 'help': case 'online': showScreen(u); break;
+      case 'prof': showScreen('clan'); openProfile(P.pid || 'p1'); break;
+      case 'ftoast': friendNote(P.kind === 'lobby' ? 'lobby' : 'came', { pid: 'p1', nick: 'Kral', char: 'Kral', st: 'lobby', code: 'K7MXQ', n: 3, max: 10 }); showScreen('menu'); break;
+      case 'rejoinwait': showScreen('menu'); openRejoin('K7MXQ'); break;
       case 'daily': showScreen('menu'); openDaily(); break;
       case 'confirm': showScreen('settings'); ACT.reset(); break;
       case 'pause': st.devForce = true; enterRace(); openPause(); break;
@@ -3265,7 +3707,11 @@
       case 'final': showFinal(devFakeFinal()); break;
       case 'rotate': setTouch(true); showScreen('menu'); Ls.rot.classList.add('on'); break;
       case 'solo': case 'friends': showScreen(u); break;
-      case 'lobby': st.fakeLobby = devFakeLobby(P.host !== '0', +P.np || 6); showScreen('lobby'); break;
+      case 'lobby':
+        st.fakeLobby = devFakeLobby(P.host !== '0', +P.np || 6);
+        if (P.tab === 'fr') st.lbTab = 'fr';
+        if (P.cd) st.fakeLobby.cd = +P.cd;
+        showScreen('lobby'); break;
       case 'nick': showScreen('friends'); openNick(null); break;
       case 'wait': showScreen('friends'); openWait('ODAYA KATILINIYOR', '<b>K7MXQ</b> odası aranıyor…'); break;
       case 'mperr': showScreen('friends'); openErr(P.code || 'noroom', P.code === 'ver' ? 'Oyunun yeni bir sürümü var. Sayfayı yenile.' : 'Bu kodla açık bir oda yok. Kodu kontrol et ya da arkadaşından yeni link iste.'); break;

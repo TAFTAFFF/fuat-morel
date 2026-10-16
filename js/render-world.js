@@ -5449,18 +5449,18 @@
       const r = b.r;
       // TEHLİKE İPUCU: uyarıda (st 1) ve yuvarlanırken kayanın önündeki yol kırmızıya döner, sola akan oklar "kaya geliyor" der
       {
-        const wa = b.st === 1 ? .25 + .75 * b.k : Math.max(0, 1 - b.k * 1.1);
+        const wa = b.st === 1 ? .6 + .4 * b.k : Math.max(0, 1 - b.k * 1.1);   // uyarı 0.8 sn: hemen güçlü başlar
         if (wa > .02) {
           const xa = Math.max(b.x0, vx0 - 20), xb = Math.min(b.st === 2 ? b.bx - r : b.x1, vx1 + 20);
           if (xb > xa) {
             const pulse = .6 + .4 * Math.sin(tk * 8);
             ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-            ctx.globalAlpha = wa * (.25 + .2 * pulse); ctx.fillStyle = '#ff2a2a'; ctx.fillRect(xa, b.y - 4, xb - xa, 4);
+            ctx.globalAlpha = wa * (.3 + .25 * pulse); ctx.fillStyle = '#ff2a2a'; ctx.fillRect(xa, b.y - 4, xb - xa, 4);
             const off = (tk * 110) % 56;
             ctx.beginPath();
-            for (let x = b.x1 - off; x > xa - 10; x -= 56) { if (x > xb + 10) continue; ctx.moveTo(x + 6, b.y - 16); ctx.lineTo(x, b.y - 10); ctx.lineTo(x + 6, b.y - 4); }
-            ctx.globalAlpha = wa * .6; ctx.strokeStyle = '#3a0a00'; ctx.lineWidth = 6.2; ctx.stroke();
-            ctx.globalAlpha = wa * (.6 + .4 * pulse); ctx.strokeStyle = '#ff9a3a'; ctx.lineWidth = 3.2; ctx.stroke();
+            for (let x = b.x1 - off; x > xa - 10; x -= 56) { if (x > xb + 10) continue; ctx.moveTo(x + 7, b.y - 18); ctx.lineTo(x, b.y - 11); ctx.lineTo(x + 7, b.y - 4); }
+            ctx.globalAlpha = wa * .75; ctx.strokeStyle = '#3a0a00'; ctx.lineWidth = 6.6; ctx.stroke();
+            ctx.globalAlpha = wa * (.75 + .25 * pulse); ctx.strokeStyle = '#ff9a3a'; ctx.lineWidth = 3.4; ctx.stroke();
             ctx.restore();
           }
         }

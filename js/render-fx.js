@@ -3111,10 +3111,11 @@
   /* hedef: elden hedefe kesikli bağ + renkli nişangâh */
   function drawAimTarget(ctx, lx, ly, t, col, ok) {
     const tx = num(t.x, 0) + num(t.w, 28) / 2, ty = num(t.y, 0) + num(t.h, 42) / 2;
-    ctx.setLineDash([8, 10]); ctx.lineDashOffset = -((FXT * 80) % 18);
+    ctx.setLineDash([9, 11]); ctx.lineDashOffset = -((FXT * 80) % 20);
     ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(tx, ty);
-    ctx.lineWidth = 5; ctx.strokeStyle = rgba(col.dark, .45); ctx.stroke();
-    ctx.lineWidth = 2; ctx.strokeStyle = col.core; ctx.stroke();
+    ctx.lineWidth = 6.5; ctx.strokeStyle = rgba(col.dark, .55); ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = col.base; ctx.stroke();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = col.core; ctx.stroke();
     ctx.setLineDash([]);
     const sc = 1 + .06 * Math.sin(FXT * 8);
     ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3;
@@ -3211,17 +3212,24 @@
     const x = rcx(p), fy = num(p.y, 0) + num(p.h, 42);
     if (!inView(x, fy, 90)) return;
     const col = powCol(p), pulse = .5 + .5 * Math.sin(FXT * 6);
-    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3 + .25 * pulse;
-    spr(ctx, glowSprite(col), x, fy - 2, 0, 1.7, .6); resetXf(ctx);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .4 + .3 * pulse;
+    spr(ctx, glowSprite(col), x, fy - 2, 0, 2.1, .7); resetXf(ctx);
     ctx.globalCompositeOperation = 'source-over';
-    const rx = 23 + pulse * 3, ry = rx * .36;
     ctx.lineCap = 'round';
-    ctx.globalAlpha = .95;
+    // dışa yayılan nabız halkası (0.9 sn'de bir)
+    const pk = (FXT % .9) / .9;
+    ctx.globalAlpha = (1 - pk) * .8;
+    ctx.beginPath(); ctx.ellipse(x, fy - 1, 22 + pk * 34, (22 + pk * 34) * .36, 0, 0, TAU);
+    ctx.lineWidth = 5 - pk * 3; ctx.strokeStyle = rgba(INK, .45); ctx.stroke();
+    ctx.lineWidth = 3 - pk * 2; ctx.strokeStyle = mix(col, '#ffffff', .4); ctx.stroke();
+    // dönen kesikli ana halka
+    const rx = 24 + pulse * 3, ry = rx * .36;
+    ctx.globalAlpha = 1;
     ctx.beginPath(); ctx.ellipse(x, fy - 1, rx, ry, 0, 0, TAU);
-    ctx.lineWidth = 6; ctx.strokeStyle = rgba(INK, .5); ctx.stroke();
+    ctx.lineWidth = 7; ctx.strokeStyle = rgba(INK, .5); ctx.stroke();
     ctx.setLineDash([9, 7]); ctx.lineDashOffset = -FXT * 45;
-    ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
-    ctx.lineWidth = 1.2; ctx.strokeStyle = '#fff6c0'; ctx.stroke();
+    ctx.lineWidth = 3.6; ctx.strokeStyle = col; ctx.stroke();
+    ctx.lineWidth = 1.4; ctx.strokeStyle = '#fff6c0'; ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }

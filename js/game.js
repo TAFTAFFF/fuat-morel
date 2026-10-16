@@ -801,9 +801,14 @@
   game.finishRacer = finishRacer;
 
   /* =================== EŞYALAR =================== */
+  /* Eşya şansı sıraya göre (f: 0 lider → 1 sonuncu). Lastik bant: liderden çok geride kalan (far 0..1) daha çok hız/füze/
+     yıldırım/mıknatıs, daha az tuzak/ağ/kalkan alır — geriden gelenin yarışa dönme şansı artar. */
   function rollItem(r) {
     const rk = ranking().indexOf(r), f = S.racers.length > 1 ? rk / (S.racers.length - 1) : 0;
+    let lead = -1e9; for (const q of S.racers) if (!q.out && !q.finished && q.x > lead) lead = q.x;
+    const far = rk > 0 && lead > -1e9 ? clamp((lead - r.x - 500) / 1500, 0, 1) : 0;
     const w = { saw: 14, dyn: 12, trap: 6 + 10 * (1 - f), mis: rk > 0 ? 6 + 12 * f : 0, bolt: f > .6 ? 5 : 0, ice: 5 + 6 * f, mag: rk > 0 ? 5 + 8 * f : 0, net: 4 + 10 * (1 - f), ink: rk > 0 ? 3 + 6 * f : 0, speed: 8 + 14 * f, shield: 8 + 6 * (1 - f), balloon: 9 };
+    if (far > 0) { w.speed *= 1 + 1.6 * far; w.mis *= 1 + .8 * far; w.bolt += 6 * far; w.mag *= 1 + far; w.trap *= 1 - .6 * far; w.net *= 1 - .6 * far; w.shield *= 1 - .4 * far; }
     // Kaos: saldırı eşyaları çok daha sık
     if (S.gameMode === 'chaos') for (const k in w) w[k] *= ATTACK[k] ? 1.7 : .6;
     // kalabalık yarış (5-10 kişi): hedef çok olduğundan saldırılar daha öldürücü → saldırı eşyası biraz seyrek (kaos hariç)
@@ -821,31 +826,95 @@
     for (const q of S.racers) { if (q === r || q.dead > 0 || q.finished) continue; const d = q.x - r.x; if (d > 0 && d < range && (!best || d < best.x - r.x)) best = q; }
     return best;
   }
-  function useItem(r) {
+  function behindOf(r, range) {
+    let best = null;
+    for (const q of S.racers) { if (q === r || q.dead > 0 || q.finished || q.out) continue; const d = r.x - q.x; if (d > 0 && d < range && (!best || d < r.x - best.x)) best = q; }
+    return best;
+  }
+  // nişan yönündeki (yarım açısı spread olan koni içindeki) en yakın rakip; yakın ve nişana yakın olan önce
+  function pickTarget(r, d, range, spread) {
+    const ox = cxOf(r), oy = cyOf(r), cs = Math.cos(spread);
+    let best = null, bs = 1e9;
+    for (const q of S.racers) {
+      if (q === r || q.dead > 0 || q.finished || q.out) continue;
+      const dx = cxOf(q) - ox, dy = cyOf(q) - oy, dist = Math.hypot(dx, dy) || 1;
+      if (dist > range) continue;
+      const dot = (dx * d.x + dy * d.y) / dist;
+      if (dot < cs) continue;
+      const sc = dist * (2 - dot);
+      if (sc < bs) { bs = sc; best = q; }
+    }
+    return best;
+  }
+  // start kalabalığında saldırı eşyası kilitli (eşya elde kalır)
+  const attackLocked = it => !!ATTACK[it] && S.raceT < START_LOCK && (S.mode === 'race' || S.mode === 'demo');
+  /* Eşya kullan. ax/ay: nişan yönü (yoksa/0 ise varsayılan). Yönlü eşyada p'ye ax/ay (2 ondalık) eklenir; varlığın tüm
+     başlangıç değerleri (x, y, vx, vy, tgt) p'dedir → ağda aynı p ile her istemcide aynı varlık kurulur. */
+  function useItem(r, ax, ay) {
     if (!r.item || r.dead > 0 || r.finished) return;
-    if (ATTACK[r.item] && S.raceT < START_LOCK && (S.mode === 'race' || S.mode === 'demo')) {
-      // start kalabalığında saldırı eşyası kilitli: eşya elde kalır
+    if (attackLocked(r.item)) {
       if (r === S.player && !r.bot && !r.lockMsg) { r.lockMsg = 1; FM.fx.toast('Eşya ' + Math.max(1, Math.ceil(START_LOCK - S.raceT)) + ' sn sonra hazır!', '#ffb347'); }
       return;
     }
     const it = r.item;
-    const p = itemParams(r, it);
-    if (!p) return;   // tuzak çukurun üstünde kurulamaz / füzenin hedefi yok: eşya elde kalır
+    const d = AIM_ITEMS[it] ? aimDir(ax, ay) : null;
+    const p = itemParams(r, it, d);
+    if (!p) {   // tuzak çukura düşecek / füzenin hedefi yok: eşya elde kalır
+      if (r === S.player && !r.bot && S.mode === 'race') FM.fx.toast(it === 'mis' ? 'Hedef yok!' : it === 'trap' ? 'Tuzak buraya kurulamaz!' : 'Şimdi olmaz!', '#ffb347');
+      return;
+    }
+    if (d) { p.ax = d.x; p.ay = d.y; }
     r.item = null;
     const ents = castItem(r, it, p);
     FM.emit('item:use', { r, item: it, p, ents });
   }
-  /* Eşya kullanım parametreleri (konum, hız, hedef) — kullananın telefonunda hesaplanır; ağda aynen yayınlanır ve
-     castItem her istemcide aynı varlığı kurar. null = şu an kullanılamaz (eşya elde kalır). */
-  function itemParams(r, it) {
-    const cx = cxOf(r), cy = cyOf(r);
+  // yön: birim vektör, 2 ondalığa yuvarlanmış (ağda giden değerle birebir aynı hesap)
+  function aimDir(ax, ay) { const d = dirOf(ax, ay); return d ? { x: r2(d.x), y: r2(d.y) } : null; }
+  /* Fırlatılan eşyanın (testere/dinamit/tuzak/ağ) başlangıç değerleri; d = nişan yönü ya da null (varsayılan atış). Doğrulama YOK
+     (aimPreview bunu çizer); itemParams kullanılamaz atışları ayrıca eler. */
+  function throwParams(r, it, d) {
+    const cx = cxOf(r), cy = cyOf(r), inh = Math.max(0, r.vx) * THROW_INH;
     switch (it) {
-      case 'saw': return { x: cx + 20, y: r.y + r.h - 16, vx: 720 + Math.max(0, r.vx) * .3 };
-      // uzun atış: patlama atanın ~250+ px önüne düşer (eskiden 114 px: atan sık sık kendini patlatıyordu)
-      case 'dyn': return { x: cx + 10, y: r.y, vx: Math.max(0, r.vx) + 520, vy: -600 };
-      case 'trap': { const gy = groundY(r.x - 12, r.y + r.h - 10); return gy === null ? null : { x: r.x - 26, y: gy - 12 }; }
-      case 'net': return { x: r.x - 56, y: r.y - 30 };
+      case 'saw': {
+        if (!d) return { x: cx + 20, y: r.y + r.h - 16, vx: 720 + Math.max(0, r.vx) * .3, vy: 0 };
+        // yatay (ya da yerdeyken aşağı) nişan → yerde yuvarlanır (ileri/geri); yukarı/çapraz → kavisli atış
+        const roll = Math.abs(d.y) < .3 || (d.y > 0 && r.onGround), sx = d.x < 0 ? -1 : 1;
+        if (roll) return { x: r1(cx + 20 * sx), y: r1(r.y + r.h - 16), vx: r1(sx * SAW_V + Math.max(0, r.vx) * .3), vy: 0 };
+        return { x: r1(cx + 18 * d.x), y: r1(cy - 6), vx: r1(d.x * SAW_V + Math.max(0, r.vx) * .3), vy: r1(d.y * SAW_V) };
+      }
+      // varsayılan uzun atış: patlama atanın ~250+ px önüne düşer. Yönlüde hafif yukarı kavis (DYN_LOB): yatay nişan da yay çizer
+      case 'dyn':
+        if (!d) return { x: cx + 10, y: r.y, vx: Math.max(0, r.vx) + 520, vy: -600 };
+        return { x: r1(cx + 10 * d.x), y: r1(r.y), vx: r1(d.x * DYN_V + inh), vy: r1(d.y * DYN_V - DYN_LOB) };
+      case 'trap': {
+        if (!d) { const gy = groundY(r.x - 12, r.y + r.h - 10); return gy === null ? null : { x: r.x - 26, y: gy - 12 }; }
+        const p = { x: r1(cx - 17 + 8 * d.x), y: r1(r.y + r.h - 30), vx: r1(d.x * TRAP_V + inh), vy: r1(d.y * TRAP_V - TRAP_LOB) };
+        if (!p.vx && !p.vy) p.vx = .1;   // (0,0) hız "yerine bırakılan tuzak" demek: atış olarak tanınsın
+        return p;
+      }
+      case 'net': {
+        if (!d) return { x: r.x - 56, y: r.y - 30 };
+        const p = { x: r1(cx - 22 + 10 * d.x), y: r1(r.y - 30), vx: r1(d.x * NET_V + inh), vy: r1(d.y * NET_V) };
+        if (!p.vx && !p.vy) p.vx = .1;
+        return p;
+      }
+    }
+    return null;
+  }
+  /* Eşya kullanım parametreleri (konum, hız, hedef) — kullananın telefonunda hesaplanır; ağda aynen yayınlanır ve
+     castItem her istemcide aynı varlığı kurar. null = şu an kullanılamaz (eşya elde kalır). d: nişan yönü | null. */
+  function itemParams(r, it, d) {
+    const cx = cxOf(r), cy = cyOf(r);
+    if (d === undefined) d = null;
+    switch (it) {
+      case 'saw': case 'dyn': case 'net': return throwParams(r, it, d);
+      case 'trap': {
+        const p = throwParams(r, it, d);
+        return p && d && !simThrow(r, 'trap', p, false).ok ? null : p;   // çukura düşecek atış: eşya elde kalır
+      }
       case 'mis': {
+        // geri çekilmiş nişan (ax < -0.3): arkandaki en yakın rakip; yoksa lider (lider sensen ikinci)
+        if (d && d.x < -.3) { const tgt = behindOf(r, 2600); return tgt ? { x: cx, y: r.y - 30, tgt } : null; }
         const rk = ranking().filter(q => !q.finished && q.dead <= 0);
         const tgt = rk[0] === r ? rk[1] : rk[0];
         return tgt ? { x: cx, y: r.y - 30, tgt } : null;   // hedef yok: eşya boşa gitmesin
@@ -855,20 +924,40 @@
       default: return { x: cx, y: cy, rx: r.x };
     }
   }
+  // atılan eşyanın varlığı (castItem ve önizleme/yapay zekâ simülasyonu AYNI nesneyi kurar)
+  function mkThrown(r, it, p) {
+    switch (it) {
+      case 'saw': return { type: 'saw', x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, r: 15, o: r, age: 0, life: 2.4, b: 0 };
+      case 'dyn': return { type: 'dyn', x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, o: r, age: 0, fuse: DYN_FUSE };
+      case 'trap': {
+        const e = { type: 'trap', x: p.x, y: p.y, w: 34, h: 12, o: r, age: 0, life: 16 };
+        // fırlatılan tuzak: uçar, yere oturunca kurulur (age 0'dan); atan 1.6 sn kendi tuzağına basmaz
+        if (p.vx || p.vy) { e.fly = true; e.vx = p.vx || 0; e.vy = p.vy || 0; e.og = 1.6; }
+        return e;
+      }
+      case 'net': {
+        const e = { type: 'net', x: p.x, y: p.y, w: 44, h: 76, o: r, age: 0, life: 10, n: 0 };
+        if (p.vx || p.vy) { e.fly = true; e.vx = p.vx || 0; e.vy = p.vy || 0; }   // fırlatılan ağ: yavaşlayıp durunca kurulur
+        return e;
+      }
+    }
+    return null;
+  }
+  // istatistik/çizim için yön etiketi
+  const aimTag = d => !d ? null : d.x < -.3 ? 'back' : d.y < -.35 ? 'up' : d.y > .35 ? 'down' : 'fwd';
   /* Eşyanın etkisini uygular / varlığını kurar; kurulan varlıkları döndürür. Uzak (ağ) kullanıcıda kendi durumuna (hız, kalkan,
-     balon) dokunulmaz — onu kendi telefonu simüle eder; alan etkileri (buz, mürekkep) harm() ile yalnızca yerel yetkililere işler. */
+     balon) dokunulmaz — onu kendi telefonu simüle eder; alan etkileri (buz, mürekkep) harm() ile yalnızca yerel yetkililere işler.
+     Yön p.ax/p.ay'den (yoksa varsayılan); eski (yönsüz) ağ mesajlarıyla uyumlu. */
   function castItem(r, it, p) {
     const out = [], own = !isRemote(r);
     const add = e => { S.ents.push(e); out.push(e); };
+    const d = dirOf(p.ax, p.ay);
     switch (it) {
       case 'speed': if (own) { r.boost = 3.2; r.shield = 0; } break;
       case 'shield': if (own) { r.shield = 4; r.boost = 0; } break;
       case 'balloon': if (own) r.balloon = true; break;
-      case 'saw': add({ type: 'saw', x: p.x, y: p.y, vx: p.vx, vy: 0, r: 15, o: r, age: 0, life: 2.4, b: 0 }); break;
-      case 'dyn': add({ type: 'dyn', x: p.x, y: p.y, vx: p.vx, vy: p.vy, o: r, age: 0, fuse: .95 }); break;
-      case 'trap': add({ type: 'trap', x: p.x, y: p.y, w: 34, h: 12, o: r, age: 0, life: 16 }); break;
-      case 'net': add({ type: 'net', x: p.x, y: p.y, w: 44, h: 76, o: r, age: 0, life: 10, n: 0 }); break;
-      case 'mis': add({ type: 'mis', x: p.x, y: p.y, vx: 0, vy: 0, tgt: p.tgt || null, o: r, age: 0, warn: 1.1 }); break;
+      case 'saw': case 'dyn': case 'trap': case 'net': { const e = mkThrown(r, it, p); if (e) { if (d) e.aim = aimTag(d); add(e); } break; }
+      case 'mis': add({ type: 'mis', x: p.x, y: p.y, vx: 0, vy: 0, tgt: p.tgt || null, o: r, age: 0, warn: 1.1, back: !!(d && d.x < -.3), aim: d ? aimTag(d) : undefined }); break;
       case 'bolt': for (const q of p.tg || []) add({ type: 'bolt', tgt: q, o: r, t: 1.8, age: 0 }); break;
       case 'ice': for (const q of S.racers) if (q !== r) harm(q, 'freeze', 2.2, r, 'ice'); FM.fx.ring(p.x, p.y, 300, '#bfefff', .6); break;
       case 'mag': add({ type: 'mag', o: r, t: .45, age: 0 }); break;
@@ -877,9 +966,12 @@
     return out;
   }
   function explode(x, y, rad, owner, cause) {
+    const pad = cause === 'meteor' ? 6 : 14;   // meteor biraz daha affedici
     for (const q of S.racers) {
       if (cause === 'mis' && q === owner) continue;   // güdümlü füze sahibine zarar vermez
-      if (Math.hypot(cxOf(q) - x, cyOf(q) - y) < rad + 14) harm(q, 'kill', 0, owner, cause);
+      const dd = Math.hypot(cxOf(q) - x, cyOf(q) - y);
+      if (dd < rad + pad) harm(q, 'kill', 0, owner, cause);
+      else if (dd < rad + pad + 40 && q === S.player) nearMissNote(q, cause || 'explode');
     }
     FM.fx.ring(x, y, rad, '#ffb347', .45, 10);
     FM.fx.glow(x, y, rad * 1.8, 'rgba(255,170,60,1)', .35);
@@ -892,25 +984,63 @@
   }
 
   /* =================== ÖZEL GÜÇLER =================== */
-  function useAbility(r) {
+  const abK = r => 1 + (r.abLv - 1) * .1;   // seviye başına %10 güç
+  function useAbility(r, ax, ay) {
     if (r.charge < 100 || r.dead > 0 || r.finished) return;
     r.charge = 0;
+    const d = AIM_ABS[r.id] ? aimDir(ax, ay) : null;
     const p = { x: cxOf(r), y: cyOf(r), fy: r.y + r.h };
-    if (r.id === 'Caner') p.tgt = aheadOf(r, 1300);
+    if (d) { p.ax = d.x; p.ay = d.y; }
+    if (r.id === 'Caner') p.tgt = canerTarget(r, d);
     const ents = castAbility(r, p);
     FM.emit('ability', { r, id: r.id, p, ents });
   }
-  /* Özel gücün etkisi (p = kullanım anındaki gövde merkezi x,y + ayak fy; Caner için hedef tgt). Kurulan varlıkları döndürür.
+  // Caner'in hedefi: varsayılan öndeki en yakın; nişanlıysa nişan yönündeki (önde/arkada) en yakın rakip
+  function canerTarget(r, d) {
+    if (!d) return aheadOf(r, 1300);
+    return pickTarget(r, d, 1300, 1) || (d.x >= 0 ? aheadOf(r, 1300) : null);
+  }
+  // TAFTAF atılım yönü: her zaman biraz ileri (geri nişan aynalanır), en dik ~67° yukarı, en çok ~19° aşağı
+  function dashVec(d) {
+    if (!d) return { x: 1, y: 0 };
+    const x = Math.max(.35, Math.abs(d.x)), y = clamp(d.y, -.85, .35), l = Math.hypot(x, y);
+    return { x: x / l, y: y / l };
+  }
+  const dashDur = (r, v) => .55 * abK(r) * (1 - .3 * Math.max(0, -v.y));   // yukarı atılım biraz kısa
+  // baso dalgası: ileri/geri, yataydan en çok ~40° sapar
+  function waveVec(d) {
+    if (!d) return { x: 1, y: 0 };
+    const sx = d.x < -.05 ? -1 : 1, a = clamp(Math.atan2(d.y, Math.abs(d.x)), -.7, .7);
+    return { x: sx * Math.cos(a), y: Math.sin(a) };
+  }
+  // Kral kükremesi konisi: dibindeki (KRAL_NEAR) herkes + nişan yönünde yarım açısı spread olan koni
+  function inCone(dx, dy, d, len, spread) {
+    const dist = Math.hypot(dx, dy);
+    if (dist > len) return false;
+    if (dist < KRAL_NEAR) return true;
+    return (dx * d.x + dy * d.y) / dist > Math.cos(spread);
+  }
+  /* Özel gücün etkisi (p = kullanım anındaki gövde merkezi x,y + ayak fy; Caner için hedef tgt; yönlüde ax/ay). Kurulan varlıkları döndürür.
      Uzak (ağ) kullanıcıda kendi hareketi (atılım/kızak/süzülüş/hız) uygulanmaz; alan etkileri yalnızca yerel yetkililere işler. */
   function castAbility(r, p) {
     const out = [], own = !isRemote(r);
-    const cx = p.x, cy = p.y, fy = p.fy != null ? p.fy : cy + RH / 2, k = 1 + (r.abLv - 1) * .1; // seviye başına %10 güç
+    const cx = p.x, cy = p.y, fy = p.fy != null ? p.fy : cy + RH / 2, k = abK(r);
+    const d = AIM_ABS[r.id] ? dirOf(p.ax, p.ay) : null;
     if (S.mode !== 'demo') FM.fx.toast(`${r.name}: ${FM.CH[r.id].ab}!`, FM.CH[r.id].col2);
     switch (r.id) {
-      case 'TAFTAF': if (own) { r.dash = .55 * k; r.climb = false; if (r.slide) setSlide(r, false); } FM.fx.burst(cx, cy, ['#5b2a86', '#c9a0ff'], 16, 200, 0, 'star'); break;
+      case 'TAFTAF': {
+        if (own) {
+          const v = dashVec(d);
+          r.dashX = v.x; r.dashY = v.y; r.dash = dashDur(r, v); r.climb = false; if (r.slide) setSlide(r, false);
+          // yukarı atılım: yerden kalkar, bitince çift zıplama hakkı kalır (güvenli iniş)
+          if (v.y < -.2) { r.jumps = Math.min(r.jumps, 1); r.onGround = false; r.slam = false; r.slamPerf = false; }
+        }
+        FM.fx.burst(cx, cy, ['#5b2a86', '#c9a0ff'], 16, 200, 0, 'star');
+        break;
+      }
       case 'Caner': {
         const tgt = p.tgt;
-        if (tgt) for (let i = 0; i < 3; i++) { const e = { type: 'crow', x: cx - 10 * i, y: cy - 20 - i * 12, tgt, o: r, life: 3.5, first: i === 0, ph: i, age: 0, dur: 2.0 * k }; S.ents.push(e); out.push(e); }
+        if (tgt) for (let i = 0; i < 3; i++) { const e = { type: 'crow', x: cx - 10 * i, y: cy - 20 - i * 12, tgt, o: r, life: 3.5, first: i === 0, ph: i, age: 0, dur: 2.0 * k, fx: cxOf(tgt) < cx ? -1 : 1 }; S.ents.push(e); out.push(e); }
         else { if (own) r.boost = 2.2 * k; FM.fx.burst(cx, cy, ['#c0182e', '#1d1d26'], 16, 220); }
         break;
       }
@@ -924,7 +1054,12 @@
       case 'ertan': if (own) { r.sled = 1.25 * k; if (r.onGround) setSlide(r, true); } FM.fx.burst(cx, cy + 10, ['#bfefff', '#ffffff'], 14, 160, 200, 'ice'); break;
       case 'Kral': {
         const rad = 420 * k;
-        for (const q of S.racers) { const dx = cxOf(q) - cx; if (q !== r && dx > -60 && dx < rad && Math.abs(cyOf(q) - cy) < 200) harm(q, 'knock', 1.0 * k, r, 'Kral'); }
+        for (const q of S.racers) {
+          if (q === r) continue;
+          const dx = cxOf(q) - cx, dy = cyOf(q) - cy;
+          // varsayılan: öndeki yakın rakipler (eski kutu); nişanlı: koni nişan yönüne (ileri/geri/yukarı)
+          if (d ? inCone(dx, dy, d, rad, KRAL_SPREAD) : (dx > -60 && dx < rad && Math.abs(dy) < 200)) harm(q, 'knock', 1.0 * k, r, 'Kral');
+        }
         S.ents = S.ents.filter(e => {
           if (e.o === r || e.type === 'bolt' || e.type === 'mag') return true;
           const ex = e.type === 'trap' || e.type === 'net' ? e.x + e.w / 2 : e.x, ey = e.type === 'trap' || e.type === 'net' ? e.y + e.h / 2 : e.y;
@@ -932,12 +1067,278 @@
           return true;
         });
         FM.fx.ring(cx, cy, rad, '#ffd23f', .6, 10);
+        if (d) FM.fx.burst(cx + d.x * 70, cy + d.y * 70, ['#ffd23f', '#ffffff', '#ff9e3d'], 14, 360, 0, 'star', 4);
         break;
       }
-      case 'Nuss': if (own) { r.fly = 2.4 * k; r.vy = -520; r.climb = false; if (r.slide) setSlide(r, false); } FM.fx.burst(cx, cy, ['#ffffff', '#7be3ff'], 16, 200, 100, 'leaf'); break;
-      case 'baso': { const e = { type: 'wave', x: cx + r.w / 2, y: cy, o: r, life: 1.15 * k, hit: [], age: 0, dur: 3.2 * k }; S.ents.push(e); out.push(e); break; }
+      case 'Nuss': {
+        if (own) {
+          // nişan: yukarı → daha çok kalkış, ileri → daha hızlı ve alçak süzülüş (varsayılan: eskisi gibi)
+          const up = d ? clamp(-d.y, 0, 1) : -1;
+          r.fly = 2.4 * k; r.vy = up < 0 ? -520 : -(300 + 420 * up); r.flyMul = up < 0 ? 1.3 : 1.3 + .22 * (1 - up);
+          r.climb = false; if (r.slide) setSlide(r, false);
+        }
+        FM.fx.burst(cx, cy, ['#ffffff', '#7be3ff'], 16, 200, 100, 'leaf');
+        break;
+      }
+      case 'baso': {
+        const v = waveVec(d);
+        const e = { type: 'wave', x: cx + v.x * r.w / 2, y: cy, o: r, life: 1.15 * k, hit: [], age: 0, dur: 3.2 * k, vx: v.x * WAVE_V, vy: v.y * WAVE_V };
+        if (d) { e.aim = aimTag(d); e.dir = v.x < 0 ? -1 : 1; }
+        S.ents.push(e); out.push(e);
+        break;
+      }
     }
     return out;
+  }
+
+  /* =================== VARLIK HAREKETİ (gerçek varlık ve önizleme/yapay zekâ simülasyonu AYNI fonksiyonları kullanır) ===================
+     sol(px, py) → nokta katının içinde mi (gerçekte solidAt; önizlemede yakın katılarla aynı test). */
+  function moveSaw(e, dt, sol) {   // true = duvardan sekti
+    e.vy = Math.min(1500, e.vy + G * dt);
+    e.x += e.vx * dt;
+    let wall = false;
+    if (sol(e.x + Math.sign(e.vx) * e.r, e.y)) { e.vx = -e.vx * .9; e.x += e.vx * dt * 2; e.b++; wall = true; }
+    e.y += e.vy * dt;
+    if (e.vy < 0 && sol(e.x, e.y - e.r)) { e.y -= e.vy * dt; e.vy = 0; }   // yukarı atış tavana çarptı
+    if (e.vy > 0 && sol(e.x, e.y + e.r)) { let k = 0; while (sol(e.x, e.y + e.r) && k < 60) { e.y -= 1; k++; } e.vy = 0; }
+    return wall;
+  }
+  function moveDyn(e, dt, sol) {
+    e.vy = Math.min(1500, e.vy + G * dt);
+    e.x += e.vx * dt;
+    if (sol(e.x, e.y)) { e.x -= e.vx * dt; e.vx = -e.vx * .4; }
+    e.y += e.vy * dt;
+    if (e.vy < 0 && sol(e.x, e.y - 6)) { e.y -= e.vy * dt; e.vy = 0; }
+    if (e.vy > 0 && sol(e.x, e.y + 6)) { let k = 0; while (sol(e.x, e.y + 6) && k < 60) { e.y -= 1; k++; } e.vy = -e.vy * .3; e.vx *= .55; }
+  }
+  function moveTrap(e, dt, sol) {  // true = yere oturdu (kuruluma başlar)
+    e.vy = Math.min(1500, e.vy + G * dt);
+    const nx = e.x + e.vx * dt;
+    if (sol(nx + 17 + Math.sign(e.vx) * 17, e.y + 6)) e.vx = -e.vx * .3; else e.x = nx;
+    e.y += e.vy * dt;
+    if (e.vy < 0 && sol(e.x + 17, e.y)) { e.y -= e.vy * dt; e.vy = 0; }
+    if (e.vy > 0 && sol(e.x + 17, e.y + e.h)) {
+      let k = 0; while (sol(e.x + 17, e.y + e.h) && k < 60) { e.y -= 1; k++; }
+      e.vx = e.vy = 0; e.fly = false;
+      return true;
+    }
+    return false;
+  }
+  function moveNet(e, dt, sol) {   // true = durdu (kuruldu)
+    const v = Math.hypot(e.vx, e.vy), dv = NET_DEC * dt;
+    if (v <= dv) { e.vx = e.vy = 0; e.fly = false; return true; }
+    const k = (v - dv) / v; e.vx *= k; e.vy *= k;
+    const nx = e.x + e.vx * dt, ny = e.y + e.vy * dt, mx = nx + 22, my = ny + 38;
+    if (sol(mx + Math.sign(e.vx) * 22, my) || (e.vy > 0 && sol(mx, ny + 76)) || (e.vy < 0 && sol(mx, ny))) { e.vx = e.vy = 0; e.fly = false; return true; }
+    e.x = nx; e.y = ny;
+    return false;
+  }
+  // yakın katılar (önizleme/simülasyon hızlı olsun) ve onlarla nokta testi
+  function solTest(x0, x1) {
+    const list = [];
+    for (const s of S.L.solids) if (s.x < x1 && s.x + s.w > x0) list.push(s);
+    return (px, py) => { for (let i = 0; i < list.length; i++) { const s = list[i]; if (px >= s.x && px < s.x + s.w && py >= s.y && py < s.y + s.h) return true; } return false; };
+  }
+  const entPt = e => e.type === 'trap' ? [e.x + 17, e.y + 6] : e.type === 'net' ? [e.x + 22, e.y + 38] : [e.x, e.y];
+  /* Atılan eşyanın yolunu GERÇEK hareket fonksiyonlarıyla simüle eder. rec: yol noktalarını kaydet (≤ ~26 nokta).
+     probe(e, t) true dönerse durur (yapay zekâ / nişan yardımı isabet testi). Sonuç: {pts, ok, x, y, t, hit}
+     Durma: testere ilk duvar sekmesinde, dinamit fitil bitince (patlama noktası), tuzak yere oturunca, ağ durunca; sıvıya düşen durur. */
+  function simThrow(r, it, p, rec, probe) {
+    const e = mkThrown(r, it, p), res = { pts: rec ? [] : null, ok: false, x: 0, y: 0, t: 0, hit: null };
+    if (!e || !S.L) return res;
+    const span = it === 'saw' ? 1100 : 800;
+    const sol = solTest(Math.min(e.x, cxOf(r)) - span, Math.max(e.x, cxOf(r)) + span);
+    const T = it === 'saw' ? .8 : it === 'dyn' ? e.fuse : it === 'trap' ? 1.6 : 1.2, dt = C.STEP;
+    const every = Math.max(1, Math.round(T / dt / 22)), liq = S.L.liq;
+    let t = 0, n = 0, stop = false, ok = it === 'saw' || it === 'dyn';
+    if (rec) { const q = entPt(e); res.pts.push([r1(q[0]), r1(q[1])]); }
+    const thrown = !(it === 'trap' || it === 'net') || !!e.fly;   // yerine bırakılan tuzak/ağ hareket etmez
+    if (!thrown) ok = true;
+    while (t < T && !stop && thrown) {
+      t += dt; n++;
+      if (it === 'saw') stop = moveSaw(e, dt, sol);
+      else if (it === 'dyn') moveDyn(e, dt, sol);
+      else if (it === 'trap') { if (moveTrap(e, dt, sol)) { ok = true; stop = true; } }
+      else if (it === 'net') { if (moveNet(e, dt, sol)) { ok = true; stop = true; } }
+      if (e.y > liq + 25) { stop = true; ok = it === 'dyn'; }
+      if (probe && probe(e, t)) { res.hit = true; stop = true; }
+      if (rec && (stop || n % every === 0)) { const q = entPt(e); res.pts.push([r1(q[0]), r1(q[1])]); }
+    }
+    if (it === 'net' && !stop) ok = true;
+    if (rec && res.pts.length < 2) { const q = entPt(e); res.pts.push([r1(q[0]), r1(q[1])]); }
+    const q = entPt(e); res.x = q[0]; res.y = q[1]; res.t = t; res.ok = ok;
+    return res;
+  }
+
+  /* =================== NİŞAN: önizleme, nişan yardımı, yönlü mü? =================== */
+  /* aimPreview(r, kind, ax, ay) → { kind, key, shape: 'arc'|'line'|'cone'|'target'|'none', pts, cone, tgt, ok, ax, ay }
+     Gerçek fizikle (aynı sabitler ve hareket fonksiyonları) hesaplanır. ok=false: şu an kullanılamaz (kilit, hedef yok, dolmadı…). */
+  function aimPreview(r, kind, ax, ay) {
+    const A = { kind, key: null, shape: 'none', pts: null, cone: null, tgt: null, ok: false, ax: 0, ay: 0 };
+    if (!r || !S.L) return A;
+    const d = aimDir(ax, ay);
+    if (d) { A.ax = d.x; A.ay = d.y; }
+    const alive = r.dead <= 0 && !r.finished && !r.out;
+    const cx = cxOf(r), cy = cyOf(r);
+    if (kind === 'item') {
+      const it = r.item; A.key = it || null;
+      if (!it) return A;
+      A.ok = alive && !attackLocked(it);
+      if (!AIM_ITEMS[it]) return A;
+      if (it === 'mis') { const p = itemParams(r, it, d); A.shape = 'target'; A.tgt = p ? p.tgt : null; if (!A.tgt) A.ok = false; return A; }
+      if (it === 'trap' && !d) {   // varsayılan: ayağın dibine/arkasına bırakılır
+        const gy = groundY(r.x - 12, r.y + r.h - 10);
+        A.shape = 'arc'; A.pts = gy === null ? [[r1(cx), r1(cy)], [r1(r.x - 9), r1(cy + 30)]] : [[r1(cx), r1(cy)], [r1(r.x - 20), r1(gy - 30)], [r1(r.x - 9), r1(gy - 6)]];
+        if (gy === null) A.ok = false;
+        return A;
+      }
+      if (it === 'net' && !d) { A.shape = 'line'; A.pts = [[r1(cx), r1(cy)], [r1(r.x - 34), r1(r.y + 8)]]; return A; }
+      const p = throwParams(r, it, d);
+      const sim = simThrow(r, it, p, true);
+      A.pts = sim.pts; A.shape = it === 'saw' && !p.vy ? 'line' : 'arc';
+      if (!sim.ok) A.ok = false;
+      return A;
+    }
+    // özel güç
+    A.key = r.id;
+    A.ok = alive && r.charge >= 100;
+    if (!AIM_ABS[r.id]) return A;
+    const k = abK(r);
+    switch (r.id) {
+      case 'Caner': A.tgt = canerTarget(r, d); A.shape = A.tgt ? 'target' : 'none'; break;
+      case 'Kral': A.shape = 'cone'; A.cone = d ? { x: r1(cx), y: r1(cy), ang: r2(Math.atan2(d.y, d.x)), spread: KRAL_SPREAD, len: 420 * k } : { x: r1(cx), y: r1(cy), ang: 0, spread: .45, len: 420 * k }; break;
+      case 'baso': {
+        const v = waveVec(d), len = WAVE_V * 1.15 * k, x0 = cx + v.x * r.w / 2;
+        A.shape = 'line'; A.pts = [];
+        for (let i = 0; i <= 12; i++) A.pts.push([r1(x0 + v.x * len * i / 12), r1(cy + v.y * len * i / 12)]);
+        break;
+      }
+      case 'TAFTAF': {
+        const v = dashVec(d), dur = dashDur(r, v), sp = RUN * DASH_V, sol = solTest(cx - 200, cx + sp * dur + 200);
+        let x = cx, y = cy; A.shape = 'line'; A.pts = [[r1(x), r1(y)]];
+        for (let i = 1; i <= 20; i++) {
+          const nx = x + v.x * sp * dur / 20, ny = y + v.y * sp * dur / 20;
+          if (sol(nx + v.x * 14, ny + v.y * 21) || sol(nx + 14, ny)) {
+            if (!sol(x, ny + v.y * 21) && v.y < 0) { y = ny; A.pts.push([r1(x), r1(y)]); continue; }   // duvar boyunca yukarı kayar
+            break;
+          }
+          x = nx; y = ny;
+          if (i % 2 === 0) A.pts.push([r1(x), r1(y)]);
+        }
+        if (A.pts.length < 2) A.pts.push([r1(x + 1), r1(y)]);
+        break;
+      }
+      case 'Nuss': {
+        const up = d ? clamp(-d.y, 0, 1) : -1, mul = up < 0 ? 1.3 : 1.3 + .22 * (1 - up);
+        let x = cx, y = cy, vx = Math.max(0, r.vx), vy = up < 0 ? -520 : -(300 + 420 * up);
+        const sol = solTest(cx - 100, cx + 900), dt = 1 / 60, tgt = RUN * mul;
+        A.shape = 'arc'; A.pts = [[r1(x), r1(y)]];
+        for (let i = 1; i <= 84; i++) {
+          vx += clamp(tgt - vx, -AIRACC * 1.6 * dt, AIRACC * dt);
+          vy = Math.min(90, vy + G * .12 * (inLowG(x) ? LOWG : 1) * dt);
+          x += vx * dt; y += vy * dt;
+          if (sol(x + 14, y) || sol(x, y + 21)) { A.pts.push([r1(x), r1(y)]); break; }
+          if (i % 4 === 0) A.pts.push([r1(x), r1(y)]);
+        }
+        break;
+      }
+    }
+    return A;
+  }
+  game.aimPreview = aimPreview;
+  // yerel oyuncunun elindeki eşya (kind 'item') / gücü (kind 'ab') yönlü mü? (arayüz: false ise nişan çizgisi yok, basınca hemen kullan)
+  game.aimable = function (kind) {
+    const P = S.player;
+    if (!P || P.ghost || P.out || P.spec || P.ctrl === 'spec') return false;
+    if (kind === 'ab') return !!AIM_ABS[P.id] && P.charge >= 100;
+    return !!(P.item && AIM_ITEMS[P.item]);
+  };
+  game.AIM_ITEMS = AIM_ITEMS; game.AIM_ABS = AIM_ABS;
+  /* Nişan yardımı (dokunmatikte varsayılan açık; FM.save.settings.aimAssist): nişanın ±15° çevresinde, GERÇEK yolu simüle
+     edilen atışın isabet ettiği en yakın açıya çeker (testere, dinamit), baso dalgasını yöndeki rakibe çevirir. */
+  const ASSIST_LIM = .27;
+  function assistOn() { const s = FM.save && FM.save.settings, v = s ? s.aimAssist : undefined; return v === undefined || v === null ? !!FM.isTouch : !!v; }
+  // atış rakiplerden birine isabet eder mi? (testere: yolda temas; dinamit: patlama alanında, atan güvende)
+  function throwHits(r, it, d, rivals) {
+    const p = throwParams(r, it, d); if (!p) return null;
+    let got = null;
+    if (it === 'saw') {
+      simThrow(r, it, p, false, (e, t) => {
+        for (const q of rivals) { const tx = cxOf(q) + q.vx * t, ty = cyOf(q); if (Math.abs(tx - e.x) < e.r + 16 && Math.abs(ty - e.y) < e.r + 22) { got = q; return true; } }
+        return false;
+      });
+      return got;
+    }
+    if (it === 'dyn') {
+      const s = simThrow(r, it, p, false), T = s.t, rad = 95 + 14;
+      if (Math.hypot(cxOf(r) + Math.max(0, r.vx) * T - s.x, cyOf(r) - s.y) < rad + 25) return null;   // kendini vurmasın
+      for (const q of rivals) if (Math.hypot(cxOf(q) + q.vx * T - s.x, cyOf(q) - s.y) < rad - 25) return q;
+    }
+    return null;
+  }
+  function assistAim(r, kind, ax, ay) {
+    const res = { ax: +ax || 0, ay: +ay || 0, snap: null };
+    const d = dirOf(ax, ay);
+    if (!d || !r || r.bot || !assistOn() || !S.L) return res;
+    const key = kind === 'item' ? r.item : AIM_ABS[r.id] ? r.id : null;
+    if (key !== 'saw' && key !== 'dyn' && key !== 'baso') return res;
+    const rivals = S.racers.filter(q => q !== r && q.dead <= 0 && !q.finished && !q.out && Math.abs(q.x - r.x) < 950);
+    if (!rivals.length) return res;
+    const a0 = Math.atan2(d.y, d.x);
+    if (key === 'baso') {
+      const v0 = waveVec(d); let best = null, bd = ASSIST_LIM, ba = 0;
+      for (const q of rivals) {
+        const dx = cxOf(q) - cxOf(r), dy = cyOf(q) - cyOf(r), t = Math.abs(dx) / WAVE_V;
+        if (Math.sign(dx) !== Math.sign(v0.x)) continue;
+        const a = Math.atan2(dy, dx + q.vx * t), df = Math.abs(Math.atan2(Math.sin(a - a0), Math.cos(a - a0)));
+        if (df < bd) { bd = df; best = q; ba = a; }
+      }
+      if (best) { res.ax = r2(Math.cos(ba)); res.ay = r2(Math.sin(ba)); res.snap = best; }
+      return res;
+    }
+    // balistik arama: önce nişanın kendisi, sonra ±0.05 rad adımlarla dışa doğru
+    for (let i = 0; i <= 10; i++) {
+      const kk = i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * .05;
+      if (Math.abs(kk) > ASSIST_LIM) break;
+      const a = a0 + kk, dd = aimDir(Math.cos(a), Math.sin(a));
+      const q = throwHits(r, key, dd, rivals);
+      if (q) { if (i > 0) { res.ax = dd.x; res.ay = dd.y; } res.snap = q; break; }
+    }
+    return res;
+  }
+  game.assistAim = assistAim;
+  /* aim:start/aim:end (yerel oyuncu; ses için) — FM.input.aim geçişleri. game.step ve updateAim çağırır (darbe tüketilmeden önce). */
+  let aimPrev = null;
+  function trackAim() {
+    const I = FM.input, cur = I && (I.aim === 'item' || I.aim === 'ab') ? I.aim : null;
+    if (cur === aimPrev) return;
+    if (aimPrev) {
+      const P = S.player, pulse = aimPrev === 'item' ? I.use : I.ab;
+      const can = !!P && S.mode === 'race' && P.dead <= 0 && !P.finished && !P.out && (aimPrev === 'item' ? !!P.item && !attackLocked(P.item) : P.charge >= 100);
+      FM.emit('aim:end', { kind: aimPrev, fired: !!pulse && can });
+    }
+    if (cur) FM.emit('aim:start', { kind: cur });
+    aimPrev = cur;
+  }
+  // her karede (main.js): yerel oyuncu nişan alıyorsa FM.S.aim = önizleme, almıyorsa null
+  game.updateAim = function () {
+    trackAim();
+    const I = FM.input, P = S.player, kind = I && I.aim;
+    if ((kind !== 'item' && kind !== 'ab') || !P || P.ghost || P.out || !S.L || !(S.mode === 'race' || S.mode === 'count')) { S.aim = null; return null; }
+    const a = assistAim(P, kind, I.ax, I.ay);
+    const A = aimPreview(P, kind, a.ax, a.ay);
+    A.rax = I.ax || 0; A.ray = I.ay || 0; A.assist = a.snap || null;
+    S.aim = A;
+    return A;
+  };
+  // bırakılan nişanın son yönü: ekranda görülen (yardımlı) yön aynen kullanılır; darbe tüketilince ham yön sıfırlanır
+  function fireAim(r, kind) {
+    const I = FM.input, A = S.aim;
+    let ax = +I.ax || 0, ay = +I.ay || 0;
+    if (A && A.kind === kind && A.rax === ax && A.ray === ay) { ax = A.ax; ay = A.ay; }
+    else { const a = assistAim(r, kind, ax, ay); ax = a.ax; ay = a.ay; }
+    if (!I.aim) I.ax = I.ay = 0;
+    return { ax, ay };
   }
 
   /* =================== VARLIKLAR =================== */
@@ -951,11 +1352,7 @@
       e.age = (e.age || 0) + dt;
       switch (e.type) {
         case 'saw': {
-          e.vy = Math.min(1500, e.vy + G * dt);
-          e.x += e.vx * dt;
-          if (solidAt(e.x + Math.sign(e.vx) * e.r, e.y)) { e.vx = -e.vx * .9; e.x += e.vx * dt * 2; e.b++; if (e.b > 2) e.life = 0; FM.fx.sparks(e.x, e.y, 6, '#ffe9a0', 260); }
-          e.y += e.vy * dt;
-          if (e.vy > 0 && solidAt(e.x, e.y + e.r)) { let k = 0; while (solidAt(e.x, e.y + e.r) && k < 60) { e.y -= 1; k++; } e.vy = 0; }
+          if (moveSaw(e, dt, solidAt)) { if (e.b > 2) e.life = 0; FM.fx.sparks(e.x, e.y, 6, '#ffe9a0', 260); }
           e.life -= dt; if (e.y > C.KILLY) e.life = 0;
           for (const q of S.racers) {
             if (q === e.o && e.b === 0 && e.age < .7) continue;
@@ -965,17 +1362,17 @@
           break;
         }
         case 'dyn': {
-          e.vy = Math.min(1500, e.vy + G * dt);
-          e.x += e.vx * dt;
-          if (solidAt(e.x, e.y)) { e.x -= e.vx * dt; e.vx = -e.vx * .4; }
-          e.y += e.vy * dt;
-          if (e.vy > 0 && solidAt(e.x, e.y + 6)) { let k = 0; while (solidAt(e.x, e.y + 6) && k < 60) { e.y -= 1; k++; } e.vy = -e.vy * .3; e.vx *= .55; }
+          moveDyn(e, dt, solidAt);
           if (e.age > e.fuse || e.y > C.KILLY) { explode(e.x, e.y, 95, e.o, 'dyn'); e.dead = true; }
           break;
         }
         case 'trap': {
           e.life -= dt; if (e.life <= 0) e.dead = true;
+          // fırlatılan tuzak: uçarken kurulu değil (age 0'da tutulur); sıvıya düşerse kaybolur
+          if (e.fly) { e.age = 0; moveTrap(e, dt, solidAt); if (e.y > S.L.liq + 20) e.dead = true; break; }
+          if (e.og > 0) e.og -= dt;
           if (e.age > .5) for (const q of S.racers) {
+            if (q === e.o && e.og > 0) continue;
             if (q.dead <= 0 && ov(q, e) && !(q.sled > 0) && q.fly <= 0) {
               const hit = harm(q, 'kill', 0, e.o, 'trap');
               if (hit || q.dead > 0) { e.dead = true; e.snap = true; FM.fx.burst(e.x + 17, e.y, ['#888888', '#cccccc'], 10); FM.emit('trap:snap', { e, r: q }); break; }
@@ -985,7 +1382,10 @@
         }
         case 'net': {
           e.life -= dt; if (e.life <= 0) e.dead = true;
+          // fırlatılan ağ: uçarken kurulu değil; durunca kısa süre sonra açılır
+          if (e.fly) { moveNet(e, dt, solidAt); e.age = Math.min(e.age, .45); if (e.y > S.L.liq + 20) e.dead = true; break; }
           if (e.age > .6) for (const q of S.racers) {
+            if (q === e.o) continue;   // kendi ağın seni tutmaz (ileri fırlatılan ağın içinden geçebilirsin)
             if (q.dead <= 0 && q.netted <= 0 && ov(q, e) && !(q.sled > 0)) {
               if (harm(q, 'net', 1.5, e.o, 'net')) { e.n++; q.x = e.x + e.w / 2 - q.w / 2; FM.fx.sparks(e.x + 22, e.y + 38, 10, '#7be3ff', 300); if (e.n >= 2) e.dead = true; }
             }
@@ -995,9 +1395,9 @@
         case 'mis': {
           let t = e.tgt;
           if (!t || t.dead > 0 || t.finished) {
-            // hedef öldü/bitirdi: sahibi dışındaki lideri yeniden hedefle; kimse yoksa zararsızca sön
-            const rk = ranking().filter(q => q !== e.o && !q.finished && q.dead <= 0);
-            t = e.tgt = rk[0] || null;
+            // hedef öldü/bitirdi: geri atılmış füze arkadaki en yakını, ileri atılmış sahibi dışındaki lideri yeniden hedefler; kimse yoksa söner
+            if (e.back) t = e.tgt = behindOf(e.o, 2600);
+            else { const rk = ranking().filter(q => q !== e.o && !q.finished && q.dead <= 0); t = e.tgt = rk[0] || null; }
             if (!t) { e.dead = true; FM.fx.puff(e.x, e.y, 8, 'rgba(90,86,96,.8)', 12, 90); break; }
           }
           if (e.age < e.warn) { e.x = cxOf(e.o); e.y = e.o.y - 34; break; }
@@ -1047,10 +1447,13 @@
           break;
         }
         case 'wave': {
-          e.x += 880 * dt; e.life -= dt; if (e.life <= 0) e.dead = true;
+          e.x += (e.vx != null ? e.vx : WAVE_V) * dt; if (e.vy) e.y += e.vy * dt;
+          e.life -= dt; if (e.life <= 0) e.dead = true;
           for (const q of S.racers) {
             if (q === e.o || e.hit.includes(q)) continue;
-            if (Math.abs(cyOf(q) - e.y) < 85 && q.x + q.w > e.x - 24 && q.x < e.x + 12) { if (harm(q, 'slow', e.dur || 3.2, e.o, 'baso')) FM.fx.burst(cxOf(q), cyOf(q), ['#a855f7', '#3cb371'], 8, 200, 100, 'note'); e.hit.push(q); }
+            // varsayılan (sağa): eski isabet penceresi; nişanlı dalga: merkezine yakın olanlar
+            const inW = e.aim ? Math.abs(cyOf(q) - e.y) < 85 && Math.abs(cxOf(q) - e.x) < 32 : Math.abs(cyOf(q) - e.y) < 85 && q.x + q.w > e.x - 24 && q.x < e.x + 12;
+            if (inW) { if (harm(q, 'slow', e.dur || 3.2, e.o, 'baso')) FM.fx.burst(cxOf(q), cyOf(q), ['#a855f7', '#3cb371'], 8, 200, 100, 'note'); e.hit.push(q); }
           }
           break;
         }

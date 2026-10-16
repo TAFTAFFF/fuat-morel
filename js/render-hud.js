@@ -1300,20 +1300,29 @@
       }
     }
     ctx.restore();
-    // etiket
-    const sz = 13, h = 21;
-    const label = full ? (ch.ab || 'Özel Güç') : 'GÜÇ %' + Math.floor(pct * 100);
-    const w = tw(ctx, label, sz) + 20;
+    // etiket: dolunca "HAZIR!" nabız atar (TUR5 §3), doluyor iken yüzde
+    const sz = full ? 14 : 13, h = 21;
+    const label = full ? 'HAZIR!' : 'GÜÇ %' + Math.floor(pct * 100);
+    const w = tw(ctx, label, sz) + 22;
     let lx = x - w / 2;
     if (lx < minLeft + 6) lx = minLeft + 6;
     if (full) {
       const pulse = .5 + .5 * Math.sin(H.t * 6.5);
-      pill(ctx, lx, y + 34, w, h, { top: gfx.mix('#ffd84a', '#fff3b0', pulse * .5), bot: '#e08a00', glossCol: 'rgba(255,255,255,.35)' });
-      T(ctx, label, lx + w / 2, y + 34 + h / 2 + .5, sz, '#ffffff', { lw: 3.6 });
-      if (!Lo.touch) keycap(ctx, x + 31, y - 28, 'Q', 18);
+      const ps = 1 + .07 * pulse;
+      ctx.save(); ctx.translate(lx + w / 2, y + 34 + h / 2); ctx.scale(ps, ps);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3 + .3 * pulse;
+      ctx.save(); ctx.scale(1.6, .8); drawSpr(ctx, gfx.glowSprite('#ffc83a', 34), 0, 0); ctx.restore();
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      pill(ctx, -w / 2, -h / 2, w, h, { top: gfx.mix('#ffd84a', '#fff3b0', pulse * .5), bot: '#e08a00', glossCol: 'rgba(255,255,255,.35)' });
+      T(ctx, label, 0, .5, sz, '#ffffff', { lw: 3.8 });
+      ctx.restore();
     } else {
       pill(ctx, lx, y + 34, w, h, {});
       T(ctx, label, lx + w / 2, y + 34 + h / 2 + .5, sz, '#d9c9ff', { lw: 3.2 });
+    }
+    if (!Lo.touch) {   // tuş kapağı her zaman görünür; dolunca nabız atar
+      const ks = full ? 1 + .1 * Math.sin(H.t * 6.5) : 1;
+      ctx.save(); ctx.translate(x + 31, y - 28); ctx.scale(ks, ks); keycap(ctx, 0, 0, 'Q', 18); ctx.restore();
     }
   }
 
@@ -1330,7 +1339,7 @@
   /** aktif etki halkaları; x0/y verilmezse klasik yer (eşya/güç halkalarının altı). Döner: bir şey çizildi mi */
   function drawEffects(ctx, P, x0, y0) {
     let x = x0 == null ? Lo.padL + 20 : x0;
-    const y = y0 == null ? Lo.padT + 42 + 76 : y0;
+    const y = y0 == null ? Lo.padT + (42 + 76) * SLOT_K + 2 : y0;
     let any = false;
     for (const [key, get, col, bool] of EFX) {
       const v = +get(P) || 0;
@@ -1432,7 +1441,7 @@
       half = Math.round(clamp((lim1 - lim0) / 2, 90, 320));
     } else {
       cx = Lo.W / 2;
-      const leftLim = Lo.padL + 196, rightLim = Lo.W - Lo.padR - Lo.reserve - 104;
+      const leftLim = Lo.padL + 182 * SLOT_K + 20, rightLim = Lo.W - Lo.padR - Lo.reserve - 104;
       half = Math.round(clamp(Math.min(cx - leftLim, rightLim - cx), 90, 250));
     }
     const x0 = cx - half, x1 = cx + half, y = Lo.padT + 30;
@@ -2338,8 +2347,12 @@
       if (Lo.compact) drawCompactHUD(ctx, P, rk);
       else {
         if (!ghost) {
-          if (mode === 'pure') { ctx.save(); ctx.translate(-88, 0); drawPower(ctx, P, Lo.padL + 88); ctx.restore(); }   // Saf Parkur: eşya yuvası yok
+          // klavye düzeni: yuvalar SLOT_K kat büyük (E / Q tuş kapaklı, boşken bile etiketli)
+          ctx.save();
+          ctx.translate(Lo.padL, Lo.padT); ctx.scale(SLOT_K, SLOT_K); ctx.translate(-Lo.padL, -Lo.padT);
+          if (mode === 'pure') { ctx.translate(-88, 0); drawPower(ctx, P, Lo.padL + 88); }   // Saf Parkur: eşya yuvası yok
           else { const pillR = drawItemSlot(ctx, P); drawPower(ctx, P, pillR); }
+          ctx.restore();
           drawEffects(ctx, P);
         }
         drawProgress(ctx, rk);
@@ -2354,9 +2367,10 @@
         if (mb1 > mb0) cy0 = mb1 + 14;
       }
       drawCenter(ctx, P, cy0);
-      if (S.mode === 'race') { drawMeteorWarn(ctx); drawElimBand(ctx); }
+      if (S.mode === 'race') { drawOffscreen(ctx, P); drawMeteorWarn(ctx); drawElimBand(ctx); }
       if (S.mode === 'count') drawCountdown(ctx);
       else drawGo(ctx);
+      if (PICK.phase && !ghost) drawPickup(ctx, P);
       if (S.mode === 'race' && P.dead > 0 && !P.finished && !P.out && !ghost) drawRespawn(ctx, P);
       if (S.mode === 'race' && P.finished && !ghost) drawFinish(ctx, P);
       if ((S.mode === 'race' || S.mode === 'end') && (P.out || ghost)) drawSpectate(ctx, P);
@@ -2866,6 +2880,40 @@
     if (G.list) drawPodList(ctx, G, rk, pt, res);
     // 11) konfeti (önde)
     drawPodParts(ctx, true);
+    // 12) ağ yarışı: sonraki tur / final geri sayımı (herkeste aynı: FM.netgame.autoLeft())
+    drawPodAuto(ctx, G, pt, res);
+  }
+  function podAutoLeft() {
+    const S = FM.S, NG = FM.netgame;
+    if (!S.netRole || !NG || typeof NG.autoLeft !== 'function') return null;
+    try { const v = NG.autoLeft(); return typeof v === 'number' && isFinite(v) && v >= 0 ? v : null; } catch (e) { return null; }
+  }
+  const PA = { n: -1, t: -9 };
+  function drawPodAuto(ctx, G, pt, res) {
+    const left = podAutoLeft();
+    if (left == null || pt < .9) return;
+    const n = Math.ceil(left);
+    if (n !== PA.n) { PA.n = n; PA.t = H.t; }
+    const e = H.t - PA.t, pop = e < .3 ? 1 + .22 * (1 - ease.outBack(clamp(e / .3, 0, 1), 2.2)) : 1;
+    const tm = G.tm, ps = G.ps;
+    const last = !!(res && res.last);
+    const txt = last ? 'FİNAL EKRANI' : 'SONRAKİ TUR';
+    const sz = 14 * tm, h = 28 * tm, rad = 15 * tm;
+    const w = tw(ctx, txt, sz) + 24 + rad * 2 + 10;
+    const x = G.cx + 20 * ps, y = 126 * tm;
+    const urgent = n <= 2;
+    ctx.save();
+    ctx.globalAlpha = clamp((pt - .9) / .3, 0, 1);
+    pill(ctx, x - w / 2, y - h / 2, w, h, { top: 'rgba(30,20,60,.94)', bot: 'rgba(14,9,32,.94)' });
+    // sayı rozeti (solda), her saniye "pop"
+    const bx = x - w / 2 + 6 + rad;
+    ctx.save(); ctx.translate(bx, y); ctx.scale(pop, pop);
+    ctx.fillStyle = OUT; circ(ctx, 0, 0, rad); ctx.fill();
+    ctx.fillStyle = lg(ctx, 0, -rad, 0, rad, urgent ? [0, '#ffb0b0', 1, '#c21f3a'] : [0, '#fff3b0', 1, '#e08a00']); circ(ctx, 0, 0, rad - 2); ctx.fill();
+    T(ctx, String(n), 0, 1, rad * 1.15, '#ffffff', { lw: 3.4, shadow: false });
+    ctx.restore();
+    T(ctx, txt, bx + rad + 8, y + 1, sz, '#ffffff', { align: 'left', lw: 3.4 });
+    ctx.restore();
   }
   /** Kürsü listesi (4..N): sıra, portre, ad, ölçüt (altın / elendi / koptu), tur puanı. Kürsünün sağında, sonuç panelinin solunda. */
   function drawPodList(ctx, G, rk, pt, res) {
@@ -2938,6 +2986,7 @@
   R.updaters.push(function (dt) {
     H.t += dt;
     podUpdate(dt);
+    if (PICK.phase) PICK.t += dt;
   });
   FM.on('ui:podium', () => { pod.lastPT = -1; podSerial++; });
   FM.on('race:start', () => { H.roundKey = ''; EV.elim = null; EV.meteor = -9; });

@@ -48,14 +48,15 @@
     const p = v => (v < 10 ? '0' : '') + v;
     return p(h) + ':' + p(m) + ':' + p(s);
   }
-  /** Oynama süresi: 12 sa 30 dk · 45 dk · 1 dk'dan az. Veri yoksa tire. */
+  /** Oynama süresi: "12 sa 30 dk" (FM.meta.fmtDur ile aynı biçim). Veri yoksa tire. */
   function fmtPlay(sec) {
-    if (sec == null || !isFinite(+sec) || +sec < 0) return '—';
+    if (sec == null || sec === '' || !isFinite(+sec) || +sec < 0) return '—';
+    try { if (FM.meta && typeof FM.meta.fmtDur === 'function') return FM.meta.fmtDur(+sec); } catch (e) { /* yedek */ }
     sec = Math.floor(+sec);
     const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
     if (h > 0) return h + ' sa' + (m ? ' ' + m + ' dk' : '');
     if (m > 0) return m + ' dk';
-    return sec > 0 ? '1 dk\'dan az' : '0 dk';
+    return sec + ' sn';
   }
   /** "az önce" · "5 dk önce" · "2 sa önce" · "3 gün önce" (ms zaman damgasından) */
   function fmtAgo(ms) {
@@ -332,7 +333,7 @@
   function dailyReady() { const d = daily(); return !!(d && d.ready); }
   function upgrades(ch) { const v = mcall('upgrades', ch); return Array.isArray(v) ? v.filter(Boolean) : null; }
   function abLevel(ch) { const v = mcall('mods', ch); return Math.max(1, (v && +v.abLv) || 1); }
-  function trophies(id) { const t = sv().trophies || {}; return typeof t[id] === 'number' ? t[id] : ((FM.CH[id] && FM.CH[id].tr) || 0); }
+  function trophies(id) { const t = sv().trophies || {}; return typeof t[id] === 'number' ? t[id] : 0; }
   const COS = FM.COSMETICS || { skins: [], trails: [], plates: [] };
   const cosList = type => COS[type] || [];
   const cosItem = (type, id) => cosList(type).find(x => x.id === id) || null;
@@ -1294,6 +1295,21 @@
         (fsOK() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran</span><button class="btn sm b-blue" data-act="full">' + (fs ? 'KAPAT' : 'AÇ') + '</button></div>' : '') +
         toggleRow('shake', 'Ekran sarsıntısı', 'shake') +
       '</div>';
+    // oyun hissi: dokunmatik düzen + titreşim + nişan yardımı
+    const canVib = touchMode || (typeof navigator !== 'undefined' && !!navigator.vibrate);
+    const ctl = '<div class="set-card"><h4>' + svg('pad2') + 'KONTROLLER</h4>' +
+        (touchMode ? segRow('btnSize', 'Düğme boyutu', 'hand', [['S', 'Küçük'], ['M', 'Orta'], ['L', 'Büyük']]) +
+          toggleRow('lefty', 'Solak düzen', 'hand', 'tgl', 'Açınca ZIPLA/KAY sağa, EŞYA/GÜÇ sola geçer.') : '') +
+        (canVib ? toggleRow('haptic', 'Titreşim', 'wind') : '') +
+        toggleRow('aimAssist', 'Nişan yardımı', 'aim', 'tgl', 'Yönlü atışlarda yönünü en yakın hedefe hafifçe çeker.') +
+      '</div>';
+    const perm = notifPerm(), nOn = !!setting('notify') && perm === 'granted';
+    const notif = '<div class="set-card"><h4>' + svg('bell') + 'BİLDİRİMLER</h4>' +
+        '<div class="srow"><span class="s-ic">' + svg('bell') + '</span><span class="s-l">Arkadaş bildirimleri</span>' +
+          '<button class="tgl ' + (nOn ? 'on' : '') + '" data-act="tglnotify" role="switch" aria-checked="' + nOn + '" aria-label="Bildirimler"><i></i><span class="tg-on">AÇIK</span><span class="tg-off">KAPALI</span></button></div>' +
+        '<p class="set-tip">Arkadaşın çevrimiçi olunca ya da lobi kurunca haber verilir. <b>Bildirimler oyun açıkken ya da arka plandayken gelir.</b>' +
+          (perm === 'denied' ? ' <span class="tip-bad">Tarayıcı bildirim iznini kapatmış: adres çubuğundaki kilit simgesinden izin ver.</span>' : perm === 'none' ? ' <span class="tip-bad">Bu tarayıcı bildirimleri desteklemiyor.</span>' : '') + '</p>' +
+      '</div>';
     const prof = '<div class="set-card"><h4>' + svg('user') + 'PROFİL</h4>' +
         '<div class="srow"><span class="s-ic">' + svg('user') + '</span><span class="s-l">Takma ad</span><b class="s-nick">' + esc(myNick()) + '</b><button class="btn sm b-purple" data-act="nick">DEĞİŞTİR</button></div>' +
       '</div>';
@@ -1301,12 +1317,12 @@
         '<p class="set-tip">İlerlemen bu cihazda otomatik kaydedilir. Başka cihaza geçerken kodla taşı.</p>' +
         '<div class="srow sv-row"><button class="btn sm b-blue" data-act="svexp">' + svg('share') + '<span>KODUMU AL</span></button><button class="btn sm b-green" data-act="svimp">' + svg('down') + '<span>KOD GİR</span></button></div>' +
       '</div>';
-    // telefonda en önemli ayarlar (kalite, tam ekran) üstte; klavye kısayolları yalnızca klavyeli cihazda
-    const left = prof + save + pwaCard() + (touchMode ? view + sound : sound + view) +
+    // telefonda en önemli ayarlar (kontroller, kalite, tam ekran) üstte; klavye kısayolları yalnızca klavyeli cihazda
+    const left = (touchMode ? ctl : '') + prof + notif + save + pwaCard() + (touchMode ? view + sound : sound + view) +
       '<div class="set-card danger"><h4>' + svg('reset') + 'İLERLEME</h4><div class="srow"><span class="s-l s-wide">Tüm ilerlemeni sil ve baştan başla.</span><button class="btn sm b-red" data-act="reset">SIFIRLA</button></div></div>';
     const right = touchMode
       ? '<div class="set-card ctl-card"><h4>' + svg('hand') + 'DOKUNMATİK</h4>' + touchList() + '</div>'
-      : '<div class="set-card ctl-card"><h4>' + svg('keyboard') + 'KLAVYE</h4>' + keysList() + '<h4 class="h-touch">' + svg('hand') + 'DOKUNMATİK</h4>' + touchList() + '</div>';
+      : '<div class="set-card ctl-card"><h4>' + svg('keyboard') + 'KLAVYE</h4>' + keysList() + '<h4 class="h-touch">' + svg('hand') + 'DOKUNMATİK</h4>' + touchList() + '</div>' + ctl;
     return panel('AYARLAR', '<div class="set-wrap"><div class="set-col scroll" data-sk="set-l">' + left + '</div><div class="set-col scroll" data-sk="set-r">' + right + '</div></div>', 'pnl-set', 'rb-steel');
   }
 

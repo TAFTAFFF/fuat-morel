@@ -1,4 +1,6 @@
-// Kullanım: node dev/net-test.js [aracı: 0 | 1 | 2 | all | cerceve]   (0 EMQX, 1 Mosquitto, 2 HiveMQ; varsayılan all; cerceve = yalnız çevrimdışı)
+// Kullanım: node dev/net-test.js [aracı: 0 | 1 | 2 | all | cerceve | yerel]   (0 EMQX, 1 Mosquitto, 2 HiveMQ; varsayılan all; cerceve = yalnız çevrimdışı)
+//   yerel = dev/broker.js ile bu süreçte yerel aracı başlatır (herkese açık aracıya ulaşılamayan ortamlar); ya da NET_BROKER=ws://.../mqtt
+//   verilirse tüm istemciler (?brokerUrl=) o aracıya bağlanır. Yerel aracıyla oda testlerine ek olarak VARLIK testleri de koşar.
 // Ortam: NET_TEST_DUMP=1 → başarısız adımda istemci durumları + net.log() kuyruğu; NET_TEST_OUT=dosya.json → ölçümleri yaz.
 // js/core.js + js/net.js'i her sahte oyuncu için ayrı bir vm bağlamında yükler (Node 24 global WebSocket) ve GERÇEK
 // herkese açık MQTT aracısına karşı oda akışını uçtan uca dener: kurma, katılma, lobi eşitlemesi, ayarlar, hazır,
@@ -13,6 +15,7 @@ const coreSrc = fs.readFileSync(path.join(root, 'js', 'core.js'), 'utf8');
 const netSrc = fs.readFileSync(path.join(root, 'js', 'net.js'), 'utf8');
 if (typeof WebSocket === 'undefined') { console.error('Bu test Node 22+ (global WebSocket) gerektirir.'); process.exit(2); }
 
+let BURL = process.env.NET_BROKER || null;   // yerel/özel aracı (tüm aracı adreslerinin yerine)
 const EVTS = ['net:status', 'net:lobby', 'net:players', 'net:start', 'net:end', 'net:next', 'net:toLobby', 'net:event', 'net:host', 'net:error', 'net:kicked', 'net:emoji'];
 const clients = [];
 function client(name, opts) {
@@ -22,7 +25,7 @@ function client(name, opts) {
     console, Math, Date, JSON, setTimeout, clearTimeout, setInterval, clearInterval, performance, crypto: globalThis.crypto,
     TextEncoder, TextDecoder, WebSocket, URL, URLSearchParams,
     localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    location: { search: '', href: 'https://ornek.github.io/fuat-morel/index.html?dev=1#x' },
+    location: { search: BURL ? '?brokerUrl=' + encodeURIComponent(BURL) : '', href: 'https://ornek.github.io/fuat-morel/index.html?dev=1#x' },
     navigator: { maxTouchPoints: 0, onLine: true }, history: { replaceState() { }, state: null },
     document: { hidden: false, addEventListener() { } }, addEventListener() { }
   };
@@ -390,8 +393,10 @@ function frameTest() {
 }
 
 (async () => {
-  const arg = process.argv[2] || 'all';
-  const list = arg === 'all' ? [0, 1, 2] : arg === 'cerceve' ? [] : [+arg];
+  const arg = process.argv[2] || (BURL ? 'yerel' : 'all');
+  let broker = null;
+  if (arg === 'yerel' && !BURL) { broker = await require('./broker.js').start({ port: 0, delay: +(process.env.NET_DELAY || 0) }); BURL = broker.url; console.log('Yerel aracı: ' + BURL); }
+  const list = arg === 'yerel' ? [1] : arg === 'all' ? [0, 1, 2] : arg === 'cerceve' ? [] : [+arg];
   const out = [];
   console.log('=== Çevrimdışı ===');
   const frameFail = frameTest();
@@ -403,5 +408,6 @@ function frameTest() {
   const outFile = process.env.NET_TEST_OUT;
   if (outFile) try { fs.writeFileSync(outFile, JSON.stringify(out, null, 1)); } catch (e) { }
   await sleep(500);
+  if (broker) await broker.close();
   process.exit(fails ? 1 : 0);
 })();

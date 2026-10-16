@@ -23,6 +23,18 @@
     { n: 'HiveMQ', url: 'wss://broker.hivemq.com:8884/mqtt', win: 40, res: 3, stMs: 100 }
   ];
   const PREF = [1, 0, 2];          // oda kurarken deneme sırası ve yedekleme sırası
+  // Geliştirici/test: ?brokerUrl=ws://127.0.0.1:PORT/mqtt → TÜM aracılar bu adrese gider (yerel test aracısı dev/broker.js).
+  // Yalnızca parametre açıkça verilince; ?dev=1 yoksa yalnız yerel ağ adresleri kabul edilir (yabancı bir linkle oyun başka aracıya yönlenmesin).
+  const OVR = (function () {
+    try {
+      const u = FM.params && FM.params.brokerUrl; if (typeof u !== 'string' || !u || u.length > 300) return null;
+      const x = new URL(u); if (x.protocol !== 'ws:' && x.protocol !== 'wss:') return null;
+      const h = x.hostname.replace(/^\[|\]$/g, '');
+      const local = h === 'localhost' || h === '::1' || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+      return (FM.DEV || local) ? x.href : null;
+    } catch (e) { return null; }
+  })();
+  if (OVR) for (const b of BROKERS) { b.url = OVR; b.n = 'Yerel'; b.win = 40; b.res = 3; b.stMs = 100; }
   const ROOT = 'fuatmorel/v1/';
   const MAXP = 10;                 // odadaki en fazla insan oyuncu
   const KEEP = 20;                 // MQTT keepalive (sn)

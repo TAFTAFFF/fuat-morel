@@ -439,6 +439,65 @@
     if (groundHaz && q.sled > 0) return;
     die(q, assistOf(q), cause);
   }
+  /* Affedici tehlike kutuları (görselden küçük). underHazard (kayarken ayağa kalkma denetimi) tam kutuyu kullanmaya devam eder. */
+  const SAW_FORGIVE = 7, BOULDER_FORGIVE = 6;
+  const spikeBox = s => ({ x: s.x + 8, y: s.y + 11, w: s.w - 16, h: s.h - 11 });
+  const crushBox = k => ({ x: k.x + 4, y: k.y, w: k.w - 8, h: k.h - 3 });
+  // özel güç dolumu: %100'e ulaştığı an 'charge:full' (yerel oyuncunun sesi/titreşimi için; demoda yok)
+  function addCharge(r, v) {
+    const was = r.charge;
+    r.charge = Math.min(100, r.charge + v);
+    if (was < 100 && r.charge >= 100 && S.mode !== 'demo') FM.emit('charge:full', { r });
+  }
+  // kusursuz iniş/zıplama: kısa hız ödülü (yarışçı başına en sık ~1 sn'de bir)
+  function perfect(r, kind) {
+    r.perfT = PERF_T; r.perfCd = 1;
+    if (near(r)) FM.fx.sparks(cxOf(r), r.y + r.h, 8, '#fff3a0', 260);
+    FM.emit('perfect', { r, kind });
+  }
+  /* Rüzgâr arkası: bir rakibin hemen arkasında (40-160 px, aynı yükseklik) DRAFT_T sn koşan yarışçının r.draft'ı 0→1 dolar
+     (fizikte hız × 1 + DRAFT_K·draft). Uzak yarışçılar için yalnızca görsel (çizim r.draft'a bakar). */
+  function updateDraft(r, dt) {
+    let ok = false;
+    if (S.mode === 'race' && r.dead <= 0 && !r.finished && !r.out && r.vx > RUN * .6) {
+      const feet = r.y + r.h;
+      for (const q of S.racers) {
+        if (q === r || q.dead > 0 || q.out || q.finished) continue;
+        const dx = q.x - r.x;
+        if (dx >= DRAFT_MIN && dx <= DRAFT_MAX && Math.abs(q.y + q.h - feet) < 34) { ok = true; break; }
+      }
+    }
+    r.draftT = ok ? (r.draftT || 0) + dt : 0;
+    r.draft = r.draftT >= DRAFT_T ? Math.min(1, (r.draft || 0) + dt * 2.5) : Math.max(0, (r.draft || 0) - dt * 2);
+  }
+  /* Kıl payı: yerel oyuncu bir tehlikeye/mermiye birkaç px kala değmeden geçerse (0.25 sn sonra hâlâ hayattaysa) 'nearmiss'.
+     Kayarak altından geçilmesi tasarlanmış ezici/testere makinesi sayılmaz. */
+  function nearMissNote(r, cause) {
+    if (r !== S.player || r.ctrl !== 'local' || S.mode !== 'race' || r.nmCd > 0 || r.nmPend) return;
+    if (r.dead > 0 || r.inv > 0 || r.shield > 0 || r.dash > 0 || r.frozen > 0 || r.sled > 0 || r.finished) return;
+    r.nmPend = { c: cause, t: .25 };
+  }
+  function nearMiss(r, dt, hb) {
+    r.nmCd = Math.max(0, (r.nmCd || 0) - dt);
+    if (r.nmPend) {
+      if (r.dead > 0) r.nmPend = null;
+      else if ((r.nmPend.t -= dt) <= 0) { FM.emit('nearmiss', { r, cause: r.nmPend.c }); r.nmPend = null; r.nmCd = NM_CD; }
+      return;
+    }
+    if (r.nmCd > 0 || r.dead > 0 || r.inv > 0 || r.shield > 0 || r.dash > 0 || r.frozen > 0 || r.sled > 0) return;
+    const L = S.L, M = 7, ex = { x: hb.x - M, y: hb.y - M, w: hb.w + 2 * M, h: hb.h + 2 * M };
+    const circ = (x, y, rad) => { const nx = clamp(x, hb.x, hb.x + hb.w), ny = clamp(y, hb.y, hb.y + hb.h); return (nx - x) ** 2 + (ny - y) ** 2 < rad * rad; };
+    let c = null;
+    for (const s of L.spikes) if (s.x < ex.x + ex.w && s.x + s.w > ex.x && ov(ex, spikeBox(s))) { c = 'spikes'; break; }
+    if (!c && !r.slide) for (const k of L.crush) if (ov(ex, crushBox(k))) { c = 'crush'; break; }
+    if (!c && !r.slide) for (const s of L.saws) if (Math.abs(s.px - hb.x) < 120 && circ(s.px, s.py, s.r - SAW_FORGIVE + M)) { c = 'saw'; break; }
+    if (!c) for (const b of L.boulders) if (b.st === 2 && circ(b.bx, b.by, b.r - BOULDER_FORGIVE + M)) { c = 'boulder'; break; }
+    if (!c) for (const e of S.ents) {
+      if (e.type === 'saw' && (e.o !== r || e.b > 0) && circ(e.x, e.y, e.r + M)) { c = 'saw'; break; }
+      if (e.type === 'mis' && e.o !== r && e.age > e.warn && circ(e.x, e.y, 34)) { c = 'mis'; break; }
+    }
+    if (c) nearMissNote(r, c);
+  }
 
   /* =================== FİZİK =================== */
   function physics(r, dt) {
@@ -654,6 +713,7 @@
       const nx = clamp(b.bx, hb.x, hb.x + hb.w), ny = clamp(b.by, hb.y, hb.y + hb.h);
       if ((nx - b.bx) ** 2 + (ny - b.by) ** 2 < (b.r - BOULDER_FORGIVE) ** 2) envHit(r, true, 'boulder');
     }
+    if (r === S.player && r.ctrl === 'local') nearMiss(r, dt, hb);
     // ışınlanma kapısı (uzay): havadaki A'ya giren yerdeki B'den çıkar
     if (r.portCd <= 0 && r.dead <= 0) for (let i = 0; i < L.portals.length; i++) {
       const p = L.portals[i];
@@ -693,7 +753,7 @@
     for (const b of L.boxes) {
       if (b.cd[r.idx] > 0) b.cd[r.idx] -= dt;
       else if (ov(r, b)) {
-        b.cd[r.idx] = S.gameMode === 'chaos' ? 1.5 : 3.5; r.charge = Math.min(100, r.charge + 18);
+        b.cd[r.idx] = S.gameMode === 'chaos' ? 1.5 : 3.5; addCharge(r, 18);
         const got = !r.item;
         if (got) { r.item = rollItem(r); if (r.bot) r.ai.itemT = .5 + Math.random() * 2; }
         if (near(r)) FM.fx.burst(b.x + 16, b.y + 16, ['#ff4d4d', '#ffffff', '#ffd23f'], 12, 200, 400, 'star', 4);

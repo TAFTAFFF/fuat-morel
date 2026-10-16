@@ -3144,3 +3144,16 @@ a.btn { text-decoration: none; }
 .tc-cancel span { font: clamp(16px, 4.6vh, 26px)/1 var(--fh); }
 .tc-cancel b { font: clamp(9px, 2.2vh, 12px)/1 var(--fh); letter-spacing: .05em; }
 .tc-cancel.hot { background: #ff4d5e; border-color: #fff; transform: scale(1.15); }
+
+/* Fun Run 4 sadeliği (oyuncu geri bildirimi): düğmeler daha küçük ve saydam, ZIPLA/KAY yazısız (yalnız ok), etiketler gizli */
+.tc { --jz: calc(clamp(56px, 16.5vh, 96px) * var(--bs)); --sz2: calc(clamp(52px, 15vh, 88px) * var(--bs)); --iz: calc(clamp(60px, 17.5vh, 100px) * var(--bs)); --pz: calc(clamp(52px, 15vh, 88px) * var(--bs)); }
+.tb-jump, .tb-slide { --tb: rgba(100, 180, 245, .42); --tbd: rgba(150, 210, 255, .65); --rim: rgba(255, 255, 255, .7); }
+.tb-jump b, .tb-slide b, .tb-item b.tb-lb, .tb-power b.tb-lb { display: none; }
+.tb-jump .tb-in, .tb-slide .tb-in { background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, .26), rgba(255, 255, 255, .04) 60%), var(--tb); border-width: max(2px, .45vh); box-shadow: 0 .5vh 1.2vh rgba(0, 0, 0, .22); }
+.tb-jump .tb-ico, .tb-slide .tb-ico { width: 52%; height: 52%; filter: drop-shadow(0 .25vh 0 rgba(20, 60, 110, .55)); }
+.tb-item .tb-in, .tb-power .tb-in { box-shadow: 0 .5vh 1.2vh rgba(0, 0, 0, .25); }
+.tb-item:not(.has) .tb-in, .tb-power:not(.full) .tb-in { opacity: .7; }
+/* nişan alırken parmağı düğmenin ortasına geri getirmek = İPTAL */
+.tbtn.cancel .tb-in { background: rgba(255, 77, 94, .88) !important; }
+.tbtn.cancel::after { content: '✕ İPTAL'; position: absolute; inset: 0; display: grid; place-items: center; font: clamp(11px, 2.6vh, 15px)/1 var(--fh); color: #fff; pointer-events: none; text-shadow: 0 1px 0 #600; z-index: 3; }
+.tbtn.cancel .tb-in > * { opacity: 0; }

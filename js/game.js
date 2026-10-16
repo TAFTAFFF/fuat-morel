@@ -1388,7 +1388,7 @@
   game.updateAim = function () {
     trackAim();
     const I = FM.input, P = S.player, kind = I && I.aim;
-    if ((kind !== 'item' && kind !== 'ab') || !P || P.ghost || P.out || !S.L || !(S.mode === 'race' || S.mode === 'count')) { S.aim = null; asC = null; return null; }
+    if ((kind !== 'item' && kind !== 'ab') || I.cancel || !P || P.ghost || P.out || !S.L || !(S.mode === 'race' || S.mode === 'count')) { S.aim = null; asC = null; return null; }   // I.cancel: arayüzde İPTAL seçili → önizleme yok
     const ck = kind + ':' + (kind === 'item' ? P.item : P.id), h = humanAim(+I.ax || 0, +I.ay || 0), ax = h.ax, ay = h.ay;
     let a;
     if (asC && asC.k === ck && Math.abs(asC.ax - ax) < .015 && Math.abs(asC.ay - ay) < .015 && S.T - asC.t < .1 && S.T >= asC.t) a = asC.a;

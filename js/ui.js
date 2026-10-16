@@ -1419,6 +1419,7 @@
         (fsOK() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran</span><button class="btn sm b-blue" data-act="full">' + (fs ? 'KAPAT' : 'AÇ') + '</button></div>'
           : iosTab() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran (iPhone)</span><button class="btn sm b-gold" data-act="iosfull">NASIL?</button></div>' : '') +
         toggleRow('shake', 'Ekran sarsıntısı', 'shake') +
+        toggleRow('fps', 'FPS göstergesi', 'sparkle') +
       '</div>';
     // oyun hissi: dokunmatik düzen + titreşim + nişan yardımı
     const canVib = touchMode || (typeof navigator !== 'undefined' && !!navigator.vibrate);
@@ -2326,7 +2327,7 @@
   function aimRelease(pid) {
     const k = AIM.tc, el = AIM.el, set = k && TC[k];
     if (set) { set.delete(pid); if (!set.size && el) el.classList.remove('down'); }
-    const cancel = AIM.cancel;
+    const cancel = AIM.cancel || AIM.back;
     aimEnd(!cancel);
     if (cancel) { FM.haptic('tap'); sfx('back'); }
   }
@@ -2336,7 +2337,7 @@
     const c = cancelEl(); if (!c) return;
     if (!on) { c.classList.remove('on', 'hot'); AIM.cancel = false; return; }
     const b = AIM.el && AIM.el.getBoundingClientRect(), host = Ls.race.getBoundingClientRect(); if (!b) return;
-    const sz = Math.max(58, b.width * .78), cx = b.left + b.width / 2 - host.left, top = Math.max(8, b.top - host.top - sz * 2.35);
+    const sz = Math.max(58, b.width * .8), cx = b.left + b.width / 2 - host.left, top = Math.max(8, b.top - host.top - sz * 1.55);
     c.style.width = c.style.height = sz + 'px';
     c.style.left = (cx - sz / 2) + 'px'; c.style.top = top + 'px';
     c.classList.add('on'); c.classList.remove('hot'); AIM.cancel = false;
@@ -2371,14 +2372,19 @@
   function aimTrack(e) {
     const I = FM.input; if (!I || !AIM.el) return;
     const hot = cancelHit(e);
-    if (hot !== !!AIM.cancel) { AIM.cancel = hot; const c = cancelEl(); if (c) c.classList.toggle('hot', hot); if (hot) FM.haptic('aim'); }
+    if (hot !== !!AIM.cancel) { AIM.cancel = hot; I.cancel = hot || !!AIM.back; const c = cancelEl(); if (c) c.classList.toggle('hot', hot); if (hot) FM.haptic('aim'); }
     const dx = e.clientX - AIM.x0, dy = e.clientY - AIM.y0, d = Math.sqrt(dx * dx + dy * dy);
     const el = AIM.el;
     if (d < AIM_DEAD) {
       if (!AIM.dz) { AIM.dz = true; el.classList.add('dz'); el.classList.remove('armed'); }
       AIM.ax = 0; AIM.ay = 0; I.ax = 0; I.ay = 0;
+      // nişan alıp parmağı düğmenin ORTASINA geri getirmek = vazgeç (bırakınca kullanılmaz); hiç sürüklemeden dokunmak = normal atış
+      if (AIM.left && !AIM.back) { AIM.back = true; I.cancel = true; el.classList.add('cancel'); FM.haptic('aim'); }
       return;
     }
+    if (AIM.back) { AIM.back = false; el.classList.remove('cancel'); }
+    I.cancel = !!AIM.cancel;
+    AIM.left = true;
     if (AIM.dz) { AIM.dz = false; el.classList.remove('dz'); el.classList.add('armed'); FM.haptic('aim'); }
     AIM.ax = Math.round(dx / d * 100) / 100; AIM.ay = Math.round(dy / d * 100) / 100;
     I.ax = AIM.ax; I.ay = AIM.ay;
@@ -2394,9 +2400,11 @@
       else { I.ax = 0; I.ay = 0; }
       I.aim = null;
     }
+    if (AIM.el) AIM.el.classList.remove('cancel');
     aimVis(false);
     aimListen(false);
     cancelShow(false);
+    AIM.left = false; AIM.back = false; if (FM.input) FM.input.cancel = false;
     AIM.k = null; AIM.id = -1; AIM.el = null; AIM.ax = 0; AIM.ay = 0; AIM.tc = null;
   }
   function tcDown(e) {

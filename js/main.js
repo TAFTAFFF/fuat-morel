@@ -123,7 +123,7 @@
     // --- yatay: oyuncu ekranda SABİT konumda (kilitli; ara değerlenmiş konum → akıcı). Yalnızca hıza bağlı ileri bakış payı
     // yavaşça değişir: zıplama/kayma hız kesince oyuncu ekranda ileri-geri kaymaz (eskiden gecikmeli izleme bunu yapıyordu).
     // ileri bakış normal koşu hızına göre: normal hızda 0 (oyuncu sabit yerde), hız/ped/rüzgâr arkasında biraz ileriyi gösterir
-    const laT = cl((t.vx - C.RUN) * (touch ? .1 : .12), -24, touch ? 30 : 40);
+    const laT = 0;   // Fun Run 4: kamera koşucuya tam kilitli (karakter ve harita birlikte hareket eder; ileri bakış kaydırması yok)
     cam.la = snap ? laT : cam.la + (laT - cam.la) * ease(2.5);
     const base = touch ? VW * .33 + safeL * (V.dpr || 1) / (V.S || 1) : VW * .32;   // Fun Run 4: koşucu soldan ~%33
     const tx = Math.max(0, t.x - base + cam.la);
@@ -305,8 +305,29 @@
 
   /* ---------- ana döngü (sabit adımlı fizik) ---------- */
   let last = performance.now(), acc = 0, loopErrs = 0;
+  /* Kare temposu: 90/120 Hz ekranlarda çizim 60 FPS'e sabitlenir (düzenli kare aralığı = daha akıcı görünür, yük yarıya iner,
+     telefon ısınmaz). Simülasyon ve ara değerleme her karede sürer. 60 Hz ekranlarda etkisiz. */
+  let ivAvg = 16.7, lastDraw = 0;
+  const fpsM = { n: 0, t: 0, v: 0 };
+  function paceOK(now) {
+    if (ivAvg < 12 && now - lastDraw < 14.5) return false;
+    lastDraw = now; return true;
+  }
+  /** Ayarlar › FPS göstergesi: sol üstte ölçülen çizim hızı ve çözünürlük (oyuncular akıcılığı bildirebilsin) */
+  function drawFps(now) {
+    fpsM.n++;
+    if (now - fpsM.t >= 500) { fpsM.v = Math.round(fpsM.n * 1000 / (now - fpsM.t)); fpsM.n = 0; fpsM.t = now; }
+    if (!settings().fps) return;
+    ctx.setTransform(V.S, 0, 0, V.S, 0, 0);
+    ctx.font = '600 12px ' + (FM.FONT_B || 'sans-serif'); ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    const txt = fpsM.v + ' FPS · ' + (V.dpr || 1).toFixed(2) + 'x';
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(4, V.VH - 22, ctx.measureText(txt).width + 10, 18);
+    ctx.fillStyle = fpsM.v >= 55 ? '#7dff9a' : fpsM.v >= 40 ? '#ffd23f' : '#ff6b6b'; ctx.fillText(txt, 9, V.VH - 19);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
   function loop(now) {
     try {
+      ivAvg += ((now - last) - ivAvg) * .05;
       let dt = (now - last) / 1000; last = now;
       if (dt > .1) dt = .1; if (dt < 0) dt = 0;
       if (touchNow() !== !!V.mobile) resize(false);           // ilk dokunuşta dokunmatik düzene geçildi: telefon kamerası
@@ -324,7 +345,7 @@
       ipApply(S.paused && !mpLive() ? 0 : acc / C.STEP);
       try {
         if (S.L && (!S.paused || mpLive())) updateCamera(dt);
-        if (shouldRender(now)) render();
+        if (shouldRender(now) && paceOK(now)) { render(); drawFps(now); }
       } finally { ipRestore(); }
     } catch (e) {
       if (loopErrs++ < 10) console.error(e);

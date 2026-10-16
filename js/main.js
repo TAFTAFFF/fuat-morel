@@ -149,6 +149,8 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     if (!S.L) { ctx.fillStyle = '#2a1a4a'; ctx.fillRect(0, 0, cv.width, cv.height); return; }
+    // yönlü atış önizlemesi: çizilen her karede (duraklatılmış/geliştirici karesi dahil) yerel oyuncunun nişanı → FM.S.aim
+    if (FM.game && typeof FM.game.updateAim === 'function') { try { FM.game.updateAim(); } catch (e) { S.aim = null; if (!call.errs) call.errs = 0; if (call.errs++ < 20) console.error(e); } }
     // 1) arka plan (ekran koordinatı, ölçek S)
     ctx.setTransform(V.S, 0, 0, V.S, 0, 0);
     call(R.drawBackground, ctx);
@@ -280,10 +282,9 @@
   // nişanı bitir: fire = true → bırakma darbesi (use/ab), false → iptal (odak kaybı, yarış dışı)
   function endAim(fire) {
     const k = I.aim;
-    aimKeys.clear(); aimDirs.clear();
-    if (!k) return;
-    if (fire) { setAimDir(); if (k === 'item') I.use = true; else I.ab = true; }
+    if (k && fire) { setAimDir(); if (k === 'item') I.use = true; else I.ab = true; }
     else { I.ax = 0; I.ay = 0; }
+    aimKeys.clear(); aimDirs.clear();
     I.aim = null; lastDir = null;
   }
   const aimable = kind => !!(FM.game && typeof FM.game.aimable === 'function' && FM.game.aimable(kind));
@@ -335,7 +336,8 @@
   cv.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
   // çok oyunculu yarışta odak/görünürlük kaybı duraklatma menüsü açmaz (yarış zaten durmaz)
-  window.addEventListener('blur', () => { I.jh = I.dh = false; if (S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { toggle: false, force: true }); });
+  // odak kaybı: basılı tuşların keyup'ı gelmez → tutma ve nişan durumu sıfırlanır (nişan ATILMADAN iptal)
+  window.addEventListener('blur', () => { I.jh = I.dh = false; endAim(false); if (S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { toggle: false, force: true }); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { force: true }); last = performance.now(); dirty = true; });
   if (document.fonts && document.fonts.addEventListener) { try { document.fonts.addEventListener('loadingdone', () => { dirty = true; }); } catch (e) { } }
 

@@ -1345,7 +1345,7 @@
     ctx.globalAlpha = 1;
   }
 
-  const DYN_SC = 1.22, MIS_SC = 1.12, TRAP_SC = 1.12;
+  const DYN_SC = 1.22, MIS_SC = 1.12, TRAP_SC = 1.4;   // kapan büyük ve okunur (oyuncu geri bildirimi: 'kapan gözükmüyor')
   function dynTip(e, v) {
     const age = num(e.age, 0), fuse = Math.max(.1, num(e.fuse, 1));
     const u = clamp(1 - age / fuse, .06, 1);

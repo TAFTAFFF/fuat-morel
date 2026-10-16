@@ -33,6 +33,10 @@ Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 - ✅ "Akıcılık Fun Run 4 gibi değil" → çizim ara değerlemesi, çevik koşu adımı, kısa vuruş donması, daha hızlı düşüş (1.22×), kilitli kamera
 - ✅ "Atılan şey havada kalıyor, düşmeli, zemine sabitlenmeli" → ağ/tuzak yere düşüp oturur, sıvıda söner; buz dalgası, mürekkep cephesi, Nuss süzülüşü düzeltildi
 - ✅ "Kaymadan geçiyorsun, bazı yerlerde zıplamak çözüm değil" → dev/obstacles.js denetleyicisi: 93 ihlal → 0 (testere makineleri ayakta geçilmiyor, imkânsız çukur/duvar yok)
+- 🔨 "Kapan gözükmüyor" → kapan %25 büyük + üstünde zıplayan kırmızı ⚠ (çimin önünde)
+- 🔨 "İnsanlar ne yapacağını anlamıyor" → ipucu sistemi (ZIPLA/ÇİFT/KAY/TIRMAN işareti + tuş nabzı), motor FM.S.hint
+- 🔨 "Lav da dahil hiçbir yere düşüp ölme olmasın" (Fun Run 4 gibi) → motor ajanı
+- 🔨 **BÜYÜK GÜNCELLEME / App Store**: docs/APP-STORE-PLANI.md — Türk tiplemeleri (ilk parti: Almancı Dayı, Terlikli Teyze, Simitçi Martı), futbol renkleri formaları, ekonomi/sezon bileti, öğretici giriş, sunucu planı
 - Not: Fable'ı az kullan (kullanıcı: çok token yiyor) → küçük işleri ana ajan yapar, Fable yalnızca gerçek çizim işlerinde ve kısa görevle
 - Not: "Karakterler güzel, eline sağlık" → karakter tasarımlarının ana hatları korunur.
 

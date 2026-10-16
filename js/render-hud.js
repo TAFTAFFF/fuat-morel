@@ -3028,7 +3028,24 @@
     g.moveTo(x, y + d * s); g.lineTo(x + s * .9, y); g.lineTo(x + s * .36, y); g.lineTo(x + s * .36, y - d * s * .9);
     g.lineTo(x - s * .36, y - d * s * .9); g.lineTo(x - s * .36, y); g.lineTo(x - s * .9, y); g.closePath();
   }
+  /* Yerdeki kapan/ağ çim ve ön plan arkasında kalıp gözden kaçıyordu: kurulu olanların üstünde (ön planın da üstünde)
+     zıplayan kırmızı uyarı üçgeni. Sahibi sensen gösterme (kendi tuzağın sana zarar vermez). */
+  function drawTrapWarn(ctx, S) {
+    const P = S.player, cam = S.cam, VW = FM.view.VW, t = performance.now() / 1000;
+    for (const e of S.ents) {
+      if (!e || (e.type !== 'trap' && e.type !== 'net') || e.fly || e.o === P || !((e.age || 0) > (e.type === 'trap' ? .5 : .6))) continue;
+      const w = e.w || 34, x = e.x + w / 2 - cam.x, y = e.y - cam.y - (e.type === 'net' ? 14 : 22) + Math.sin(t * 6 + e.x * .01) * 3;
+      if (x < -30 || x > VW + 30) continue;
+      ctx.save(); ctx.translate(x, y);
+      ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(11, 8); ctx.lineTo(-11, 8); ctx.closePath();
+      ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = '#2a0610'; ctx.stroke();
+      ctx.fillStyle = '#ff3b4f'; ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillRect(-1.5, -5, 3, 7); ctx.fillRect(-1.5, 4, 3, 2.5);
+      ctx.restore();
+    }
+  }
   function drawHint(ctx, S, P) {
+    try { if (S.mode === 'race' || S.mode === 'demo') drawTrapWarn(ctx, S); } catch (e) { /* yok say */ }
     const st = FM.save && FM.save.settings;
     const H = S.hint;
     if (!H || !P || P.dead > 0 || P.frozen > 0 || S.mode !== 'race' || (st && st.hints === false)) return;

@@ -22,7 +22,7 @@
   const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
   const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
   const num = (v, d) => (typeof v === 'number' && isFinite(v)) ? v : d;
-  const MAXP = 900;
+  const MAXP = 420;   // ekran dolmasın: aynı anda en çok bu kadar parçacık (eskiden 900)
   let FXT = 0;                 // efekt saati (yalnızca kare güncellemesinde ilerler)
 
   /* =====================================================================
@@ -181,7 +181,7 @@
     L.push(o); return o;
   }
   /** Kozmetik/süs üretimi için bütçe: parçacık sayısı yüksekse süsleri azalt */
-  const budget = () => S.parts.length < 620;
+  const budget = () => S.parts.length < 280;
 
   /* =====================================================================
      PARÇACIK SPRITE'LARI (renk başına önbellek)

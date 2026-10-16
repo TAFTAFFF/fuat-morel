@@ -2272,6 +2272,7 @@
       '<div class="tbtn tb-power" data-tc="power" role="button" aria-label="Özel güç"><span class="tb-ring"></span><span class="tb-in"><span class="tb-pp"></span><b class="tb-lb">GÜÇ</b></span>' + aimMark + '</div>' +
       '<div class="tbtn tb-jump" data-tc="jump" role="button" aria-label="Zıpla"><span class="tb-in">' + svg('up', 'tb-ico') + '<b>ZIPLA</b></span></div>' +
       '<div class="tc-hint" aria-hidden="true"><span class="th-t">Basılı tut, sürükle, bırak!</span></div>' +
+      '<div class="tc-cancel" aria-hidden="true"><span>✕</span><b>İPTAL</b></div>' +
     '</div>' +
     '<button class="rbtn b-orange emo-btn" data-act="emotog" aria-label="Emoji gönder" title="Emoji gönder">' + svg('smile') + '</button>' +
     '<div class="emo emo-race">' + ['👍', '😂', '😎', '😡', '🔥', '💀', '👋', 'GG'].map(e => '<button class="emo-b" data-act="emo" data-e="' + e + '">' + e + '</button>').join('') + '</div>' +
@@ -2325,7 +2326,25 @@
   function aimRelease(pid) {
     const k = AIM.tc, el = AIM.el, set = k && TC[k];
     if (set) { set.delete(pid); if (!set.size && el) el.classList.remove('down'); }
-    aimEnd(true);
+    const cancel = AIM.cancel;
+    aimEnd(!cancel);
+    if (cancel) { FM.haptic('tap'); sfx('back'); }
+  }
+  /* İPTAL bölgesi: nişan alırken düğmenin yukarısında belirir; parmak orada kalkarsa eşya/güç kullanılmaz (elde kalır). */
+  function cancelEl() { return $('.tc-cancel', Ls.race); }
+  function cancelShow(on) {
+    const c = cancelEl(); if (!c) return;
+    if (!on) { c.classList.remove('on', 'hot'); AIM.cancel = false; return; }
+    const b = AIM.el && AIM.el.getBoundingClientRect(), host = Ls.race.getBoundingClientRect(); if (!b) return;
+    const sz = Math.max(58, b.width * .78), cx = b.left + b.width / 2 - host.left, top = Math.max(8, b.top - host.top - sz * 2.35);
+    c.style.width = c.style.height = sz + 'px';
+    c.style.left = (cx - sz / 2) + 'px'; c.style.top = top + 'px';
+    c.classList.add('on'); c.classList.remove('hot'); AIM.cancel = false;
+  }
+  function cancelHit(e) {
+    const c = cancelEl(); if (!c || !c.classList.contains('on')) return false;
+    const r = c.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), rad = r.width * .62;
+    return dx * dx + dy * dy < rad * rad;
   }
   function aimable(kind) {
     try { return !!(FM.game && typeof FM.game.aimable === 'function' && FM.game.aimable(kind)); } catch (e) { return false; }
@@ -2340,6 +2359,7 @@
     AIM.k = kind; AIM.id = e.pointerId; AIM.x0 = e.clientX; AIM.y0 = e.clientY; AIM.el = el; AIM.ax = 0; AIM.ay = 0; AIM.dz = true; AIM.tc = el.getAttribute('data-tc');
     try { el.setPointerCapture(e.pointerId); } catch (x) { /* yakalama yok: pencere dinleyicileri yine izler */ }
     aimListen(true);
+    cancelShow(true);
     I.aim = kind; I.ax = 0; I.ay = 0;
     el.classList.add('aiming', 'dz'); el.classList.remove('armed');
     el.style.setProperty('--len', '0px');
@@ -2350,6 +2370,8 @@
   function aimMove(e) { if (AIM.k && e.pointerId === AIM.id && e.currentTarget === AIM.el) aimTrack(e); }
   function aimTrack(e) {
     const I = FM.input; if (!I || !AIM.el) return;
+    const hot = cancelHit(e);
+    if (hot !== !!AIM.cancel) { AIM.cancel = hot; const c = cancelEl(); if (c) c.classList.toggle('hot', hot); if (hot) FM.haptic('aim'); }
     const dx = e.clientX - AIM.x0, dy = e.clientY - AIM.y0, d = Math.sqrt(dx * dx + dy * dy);
     const el = AIM.el;
     if (d < AIM_DEAD) {
@@ -2374,6 +2396,7 @@
     }
     aimVis(false);
     aimListen(false);
+    cancelShow(false);
     AIM.k = null; AIM.id = -1; AIM.el = null; AIM.ax = 0; AIM.ay = 0; AIM.tc = null;
   }
   function tcDown(e) {

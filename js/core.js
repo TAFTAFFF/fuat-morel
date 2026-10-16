@@ -272,7 +272,7 @@ window.FM = window.FM || {};
   // Parçacık: {k, x, y, vx, vy, life, max, c, s, g, rot, vr, drag, add}
   // k: 'dot' | 'puff' | 'spark' | 'conf' | 'glow' | 'star' | 'note' | 'heart' | 'spade' | 'ice' | 'leaf'
   FM.fx = {
-    p(o) { const S = FM.S; if (S.parts.length > 900) S.parts.splice(0, S.parts.length - 900); o.max = o.max || o.life; S.parts.push(o); return o; },
+    p(o) { const S = FM.S; if (S.parts.length > 420) S.parts.splice(0, S.parts.length - 420); o.max = o.max || o.life; S.parts.push(o); return o; },
     burst(x, y, cols, n, sp = 220, grav = 500, k = 'dot', size = 4) {
       for (let i = 0; i < n; i++) {
         const a = Math.random() * 6.283, v = Math.random() * sp;

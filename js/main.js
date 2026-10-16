@@ -101,7 +101,7 @@
   const cam = { t: null, gy: null, la: 0, glide: false, off: 0, force: false };
   /* Kamera ayarları (5. tur, docs/TUR5.md §4): zemin telefonda ekranın üstten ~%71'inde, masaüstünde ~%68'inde
      ("harita üstte kalıyor" şikâyeti); telefonda görünen dünya yüksekliği 400 (karakterler biraz büyük). */
-  const CAM = { VH_TOUCH: 460, KF_TOUCH: .71, KF_DESK: .68 };   // VH_TOUCH 460: 400 çok yakın, 520 çok uzak geldi (oyuncu geri bildirimi)
+  const CAM = { VH_TOUCH: 460, KF_TOUCH: .66, KF_DESK: .66 };   // Fun Run 4 kadrajı: zemin üstten ~%65   // VH_TOUCH 460: 400 çok yakın, 520 çok uzak geldi (oyuncu geri bildirimi)
   FM.CAM = CAM;
   function camTarget() {
     if (S.mode === 'demo') { // demoda öndekini izle
@@ -125,7 +125,7 @@
     // ileri bakış normal koşu hızına göre: normal hızda 0 (oyuncu sabit yerde), hız/ped/rüzgâr arkasında biraz ileriyi gösterir
     const laT = cl((t.vx - C.RUN) * (touch ? .1 : .12), -24, touch ? 30 : 40);
     cam.la = snap ? laT : cam.la + (laT - cam.la) * ease(2.5);
-    const base = touch ? VW * .29 + safeL * (V.dpr || 1) / (V.S || 1) : VW * .30;
+    const base = touch ? VW * .33 + safeL * (V.dpr || 1) / (V.S || 1) : VW * .32;   // Fun Run 4: koşucu soldan ~%33
     const tx = Math.max(0, t.x - base + cam.la);
     // --- dikey
     const feet = t.y + t.h, dead = t.dead > 0;

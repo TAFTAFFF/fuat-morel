@@ -3136,3 +3136,11 @@ a.btn { text-decoration: none; }
 
 /* lobi: doğrudan (WebRTC) bağlı oyuncu rozeti */
 .p2p { display: inline-block; margin-right: .35rem; padding: .1rem .4rem; border-radius: .5rem; font: .95rem/1.2 var(--fh); letter-spacing: .03em; color: #0b2a12; background: #5ee07a; box-shadow: 0 0 .6rem rgba(94, 224, 122, .55); vertical-align: middle; }
+
+/* nişan İPTAL bölgesi: nişan alırken düğmenin yukarısında; parmak burada kalkarsa kullanılmaz */
+.tc-cancel { position: absolute; display: none; flex-direction: column; align-items: center; justify-content: center; gap: .1rem; border-radius: 50%; pointer-events: none; z-index: 7;
+  background: rgba(30, 10, 40, .55); border: .3vh solid rgba(255, 255, 255, .7); color: #fff; box-shadow: 0 .4vh 1.2vh rgba(0, 0, 0, .45); transition: transform .12s, background .12s; }
+.tc-cancel.on { display: flex; animation: popIn .18s ease-out both; }
+.tc-cancel span { font: clamp(16px, 4.6vh, 26px)/1 var(--fh); }
+.tc-cancel b { font: clamp(9px, 2.2vh, 12px)/1 var(--fh); letter-spacing: .05em; }
+.tc-cancel.hot { background: #ff4d5e; border-color: #fff; transform: scale(1.15); }

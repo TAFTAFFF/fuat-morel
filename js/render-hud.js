@@ -3019,4 +3019,25 @@
       document.fonts.addEventListener('loadingdone', () => { twCache.clear(); hcache.clear(); iconCache.clear(); urlCache.clear(); });
     }
   } catch (e) { }
+  /* Buzu kır: yerel oyuncu donmuşken ortada "BUZU KIR!" + kaç basış kaldığı (game.js ICE_TAPS = 4; ice:crack olayı) */
+  {
+    const base = R.drawHUD;
+    let crackT = 0;
+    FM.on('ice:crack', d => { if (d && d.r === FM.S.player) crackT = .18; });
+    R.drawHUD = function (ctx) {
+      base.call(this, ctx);
+      try {
+        const S = FM.S, P = S.player, V = FM.view;
+        if (!P || !(P.frozen > 0) || P.dead > 0 || S.mode !== 'race' || !ctx || !FM.gfx) return;
+        const need = 4, left = Math.max(0, need - (P.iceHits | 0)), t = performance.now() / 1000;
+        crackT = Math.max(0, crackT - 1 / 60);
+        const k = 1 + Math.sin(t * 14) * .04 + crackT * .6, x = V.VW / 2, y = V.VH * .3;
+        ctx.save(); ctx.globalAlpha = 1;
+        ctx.translate(x, y); ctx.scale(k, k);
+        FM.gfx.text(ctx, 'BUZU KIR!', 0, 0, 34, '#dff6ff', { stroke: '#0b3a5a', lw: 7 });
+        FM.gfx.text(ctx, (FM.isTouch ? 'Hızlıca dokun' : 'Hızlıca bas') + ' · ' + left, 0, 30, 17, '#ffffff', { stroke: '#0b3a5a', lw: 4 });
+        ctx.restore();
+      } catch (e) { /* yok say */ }
+    };
+  }
 })(window.FM);

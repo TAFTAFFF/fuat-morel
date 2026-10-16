@@ -42,6 +42,7 @@
   // Fun Run gibi: zıplamak ve kaymak hız keser (boşuna zıplamak/kaymak cezalı; kusursuz zıplama muaf)
   const JUMP_KEEP = .92, DJ_KEEP = .85, AIR_MUL = .9, SLIDE_MUL = .8;
   const SPAWN_T = .5;              // yeniden doğunca yerinde hazırlık süresi
+  const ICE_TAPS = 4;              // donmuşken bu kadar basışla buz kırılır
   const SAFE_AHEAD = 260, SAFE_BACK = 80;   // güvenli nokta: önünde ~260 px tehlike olmamalı (doğan oyuncunun tepki payı)
   const PERF_WIN = .08, PERF_T = .7, PERF_MUL = 1.1;   // kusursuz iniş/zıplama penceresi ve hız ödülü
   const DRAFT_MIN = 40, DRAFT_MAX = 160, DRAFT_T = .6, DRAFT_K = .07;   // rüzgâr arkası
@@ -527,6 +528,21 @@
   function physics(r, dt) {
     const c = r.ctl, L = S.L;
     r.inv = Math.max(0, r.inv - dt); r.stun = Math.max(0, r.stun - dt); r.frozen = Math.max(0, r.frozen - dt); r.netted = Math.max(0, r.netted - dt);
+    // buzu kır: donmuşken her basış (zıpla/kay/eşya/güç) buzu çatlatır, ICE_TAPS basışta kırılır (Fun Run gibi). Botlar da hızlı basar.
+    if (r.frozen > 0) {
+      if (r.bot && !isRemote(r) && Math.random() < dt * 5) c.jp = true;
+      if (c.jp || c.dp || c.use || c.ab) {
+        c.jp = c.dp = c.use = c.ab = false; r.jbuf = 0;
+        r.iceHits = (r.iceHits | 0) + 1;
+        FM.emit('ice:crack', { r, n: r.iceHits, need: ICE_TAPS });
+        if (near(r)) FM.fx.burst(cxOf(r), cyOf(r), ['#bfefff', '#ffffff'], 5, 140, 300, 'ice');
+        if (r.iceHits >= ICE_TAPS) {
+          r.frozen = 0; r.iceHits = 0;
+          if (near(r)) { FM.fx.burst(cxOf(r), cyOf(r), ['#bfefff', '#ffffff', '#7fd8ff'], 16, 260, 400, 'ice'); FM.fx.ring(cxOf(r), cyOf(r), 46, '#bfefff', .35, 6); }
+          FM.emit('ice:break', { r });
+        }
+      }
+    } else r.iceHits = 0;
     r.slowT = Math.max(0, r.slowT - dt); r.pull = Math.max(0, r.pull - dt); r.inked = Math.max(0, r.inked - dt); r.padT = Math.max(0, r.padT - dt);
     r.ccImm = Math.max(0, (r.ccImm || 0) - dt);
     r.portCd = Math.max(0, (r.portCd || 0) - dt); r.ventCd = Math.max(0, (r.ventCd || 0) - dt); r.bounceT = Math.max(0, (r.bounceT || 0) - dt);
@@ -824,7 +840,7 @@
     if (S.gameMode === 'coins' && S.mode === 'race') {
       if (!net) { r.coins += FM.COINS_FINISH; FM.emit('coins:bonus', { r, n: FM.COINS_FINISH }); }
       FM.fx.toast(`${r.name} bitirdi!  +${FM.COINS_FINISH} altın`, r === S.player ? '#ffe14d' : '#ffffff');
-    } else if (S.mode !== 'demo') FM.fx.toast(`${r.name} bitirdi!  #${r.place}`, r === S.player ? '#ffe14d' : '#ffffff');
+    } else if (S.mode !== 'demo' && (r === S.player || r.place === 1)) FM.fx.toast(`${r.name} bitirdi!  #${r.place}`, r === S.player ? '#ffe14d' : '#ffffff');
     if (near(r)) FM.fx.confetti(L.end + 40, L.finY - 200, r === S.player ? 70 : 25);
     // ilk bitirenden sonra diğerlerine 12 sn; kalabalık yarışta kişi başı +1.5 sn (10 kişide 21), kaosta +4 (Altın Avı'nda süre sayacı belirler)
     if (S.finishedN === 1 && !S.limitT) S.endTimer = 12 + Math.max(0, S.racers.length - 4) * 1.5 + (S.gameMode === 'chaos' ? 4 : 0);
@@ -1052,7 +1068,7 @@
     const out = [], own = !isRemote(r);
     const cx = p.x, cy = p.y, fy = p.fy != null ? p.fy : cy + RH / 2, k = abK(r);
     const d = AIM_ABS[r.id] ? dirOf(p.ax, p.ay) : null;
-    if (S.mode !== 'demo') FM.fx.toast(`${r.name}: ${FM.CH[r.id].ab}!`, FM.CH[r.id].col2);
+    if (S.mode !== 'demo' && r === S.player) FM.fx.toast(`${FM.CH[r.id].ab}!`, FM.CH[r.id].col2);   // yalnızca kendi gücün: ekran dolmasın
     switch (r.id) {
       case 'TAFTAF': {
         if (own) {

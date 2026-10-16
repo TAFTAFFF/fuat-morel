@@ -883,12 +883,16 @@
       if (sample < o.off || sample - o.off > 1500) o.off = sample; else o.off += (sample - o.off) * 0.01;
       // tepe izleyen (hızlı yükselen, yavaş inen) tahminler: tampon boşalıp öngörüye düşmeyelim
       const ex = Math.max(0, sample - o.off); o.jit += (ex - o.jit) * (ex > o.jit ? 0.25 : 0.03);
+      o.jitA = o.jitA == null ? ex : o.jitA + (ex - o.jitA) * 0.1;
       const dst = m.t - o.lastSt;
-      if (dst > 0 && dst < 1000) { const g = Math.min(500, Math.max(30, dst)); o.iv += (g - o.iv) * (g > o.iv ? 0.25 : 0.03); }
+      if (dst > 0 && dst < 1000) { const g = Math.min(500, Math.max(30, dst)); o.iv += (g - o.iv) * (g > o.iv ? 0.25 : 0.03); o.ivA = o.ivA == null ? g : o.ivA + (g - o.ivA) * 0.1; }
       o.lastSt = m.t;
-      // ara değerleme gecikmesi = gönderim aralığı + titreme + pay; doğrudan bağlantıda (20 Hz, düşük titreme) taban 55 ms, aracıda 80 ms
-      const target = Math.min(450, Math.max(o.dcT && t - o.dcT < 1500 ? DLY_MIN_DC : DLY_MIN, o.iv + o.jit + 10));
-      o.dly += (target - o.dly) * (o.n < 12 ? 0.3 : 0.05); o.n++;   // ilk mesajlarda hızlı otur, sonra yumuşak izle
+      // ara değerleme gecikmesi. Aracı yolunda tepe izleyen tahmin (aralık + titreme + pay, taban 80 ms; aracı gecikmesi oynak).
+      // Doğrudan bağlantıda ortalama aralık + 1.5 × ortalama titreme (taban 55 ms): seyrek geç paket kısa doğrusal öngörüyle (≤ 90 ms) örtülür.
+      const dc = via || (o.dcT && t - o.dcT < 1500);
+      const target = dc ? Math.min(450, Math.max(DLY_MIN_DC, (o.ivA || o.iv) + 1.5 * (o.jitA || 0) + 5)) : Math.min(450, Math.max(DLY_MIN, o.iv + o.jit + 10));
+      // ilk mesajlarda hızlı otur; sonra yükselişi hızlı (tampon boşalmasın: doğrudan → aracı geçişi), inişi yumuşak izle
+      o.dly += (target - o.dly) * (o.n < 12 ? 0.3 : (target > o.dly ? 0.2 : 0.05)); o.n++;
     }
     if (via) o.dcT = t;
     const lt = m.t + o.off;
@@ -942,7 +946,7 @@
     const t = now(), dc = rtcOpenPeers(t), needMq = rtcNeedMqtt(t);
     if (!connected() && !dc.length) { R.pend = null; return; }
     const m = { t: Math.round(p.t * 10) / 10, s: p.s }; if (p.b) m.b = p.b;
-    if (dc.length && R.pendDc !== p) {
+    if (dc.length && R.pendDc !== p) {                       // aynı anlık görüntü (aracı bütçesi beklenirken) kanala ikinci kez gitmesin
       R.pendDc = p;
       const ds = JSON.stringify(Object.assign({ k: 's' }, m));
       for (const X of dc) rtcSendTo(X, X.st, ds);
@@ -1115,7 +1119,8 @@
   const RTC_DEAD_MS = 8000;        // bu kadar ses yoksa kapat ve yeniden dene
   const RTC_PING_MS = 700;         // kanal pingi (rtt + canlılık)
   const RTC_RETRY = [2000, 8000, 30000, 90000];
-  const DC_ST_MS = 50;             // doğrudan durum aralığı (~20 Hz; aracı bütçesi yok)
+  // doğrudan durum aralığı (aracı bütçesi yok): ≤3 eş ~30 Hz, ≤6 eş ~20 Hz, daha kalabalık ~15 Hz (telefonun yükleme hızını koru)
+  const dcStMs = n => (n <= 3 ? 33 : n <= 6 ? 50 : 66);
   const MQ_SAFE_MS = 1000;         // herkes doğrudanken aracıya yedek durum aralığı
   const DLY_MIN = 80, DLY_MIN_DC = 55;   // ara değerleme gecikmesi tabanı (aracı / doğrudan)
   const PEERS = {};                // pid → bağlantı {pid, sn, role, id, pc, st, ev, open, t0, lastRx, pingT, rtt}
@@ -1127,7 +1132,7 @@
     for (const pid in PEERS) { const X = PEERS[pid]; if (rtcFresh(X, t)) out.push(X); }
     return out;
   }
-  function rtcAnyOpen() { const t = now(); for (const pid in PEERS) if (rtcFresh(PEERS[pid], t)) return !RS.block; return false; }
+  function rtcAnyOpen() { const t = now(); let n = 0; for (const pid in PEERS) if (rtcFresh(PEERS[pid], t)) n++; return RS.block ? 0 : n; }
   // aracıdan normal hızda durum gerekir mi? (doğrudan bağlı OLMAYAN canlı bir oda üyesi varsa ya da odada başka kimse yoksa)
   function rtcNeedMqtt(t) {
     if (!RTC_OK || RS.block || R.phase !== 'in' || !R.lob) return true;
@@ -1884,9 +1889,9 @@
       const dc = rtcAnyOpen();
       if (!connected() && !dc) return false;
       R.pend = { t: now(), s, b: isObj(bots) ? bots : null };
-      const el = now() - R.lastState, iv = dc ? DC_ST_MS : bk().stMs;   // doğrudan bağlantıda ~20 Hz, aracıda ~10 Hz (EMQX 6.7)
+      const el = now() - R.lastState, iv = dc ? dcStMs(dc) : bk().stMs;   // doğrudan bağlantıda 15-30 Hz, aracıda ~10 Hz (EMQX 6.7)
       if (R.stTimer) return true;                     // zaten planlı: o anda en güncel durum gider
-      if (el >= iv - 4) flushState();
+      if (el >= iv - (dc ? 8 : 4)) flushState();
       else R.stTimer = setTimeout(flushState, iv - el);
       return true;
     }, 'sendState', false),

@@ -1666,8 +1666,10 @@
     const lob = ncall('lobby') || null, pl = ncall('players') || [], stt = ncall('status') || {};
     return { lob, pl: Array.isArray(pl) ? pl.filter(Boolean) : [], stt };
   }
-  function pingHtml(ms) {
-    const lv = ms == null ? 0 : ms < 140 ? 3 : ms < 300 ? 2 : 1;
+  /** Ping çubukları: sen ↔ o oyuncu gidiş-dönüş (doğrudan bağlantıda gerçek eşler arası süre). link 'p2p' → DOĞRUDAN rozeti */
+  function pingHtml(ms, link) {
+    const lv = ms == null ? 0 : ms <= 80 ? 3 : ms <= 160 ? 2 : 1;
+    if (link === 'p2p') return '<span class="p2p" title="Doğrudan bağlantı (sunucusuz)">DOĞRUDAN</span>' + pingHtml(ms);
     return '<span class="png l' + lv + '"><i></i><i></i><i></i>' + (ms != null ? '<em>' + Math.round(ms / 10) * 10 + '</em>' : '') + '</span>';
   }
   function renderLobby() {
@@ -1718,7 +1720,7 @@
         '<span class="pc-pt">' + pt(ch, 48, { skin: p.skin }) + (p.host ? '<i class="pc-crown">' + svg('crown', 'gold') + '</i>' : '') + '</span>' +
         '<span class="pc-m"><b class="pc-n"><span>' + esc(p.nick || ch) + '</span>' + (p.me ? '<em class="you">SEN</em>' : '') + '</b>' +
           '<span class="pc-c">' + esc(ch) + (p.waiting ? ' · izliyor' : '') + (dim ? ' · bağlantı yok' : '') + '</span></span>' +
-        '<span class="pc-r">' + right + pingHtml(p.ping) + '</span>' +
+        '<span class="pc-r">' + right + pingHtml(p.ping, p.me ? null : p.link) + '</span>' +
         (em && t - em.t < 3200 ? '<span class="pc-emo">' + esc(em.e) + '</span>' : '') +
       '</div>';
     });

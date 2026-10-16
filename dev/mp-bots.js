@@ -7,6 +7,10 @@
 //   node dev/mp-bots.js lobi [--yerel]
 //       → TUR5 lobi akışı: herkes HAZIR → 5 sn geri sayım (mp:countdown herkeste) → yarış; hazırı geri alma iptali; turlar arası
 //         otomatik geçiş + üyede autoLeft(); final sonrası herkes LOBİYE (aynı oda); yarış ortasında yenileyen üyenin aynı yarışçıya dönmesi.
+//   node dev/mp-bots.js p2p [--yerel]
+//       → TUR6 doğrudan bağlantı ağı (sahte WebRTC, dev/net-rtcfake.js): 4 oyuncu tam örgü (6 bağlantı, sıralı kurulum), herkes doğrudanken
+//         aracı durumu ~1 Hz'e iner, sonra WebRTC'siz bir oyuncu gelince herkes aracıyı normal hızda kullanır; sonuçlar herkeste aynı,
+//         her olay her alıcıda TAM BİR KEZ (iki yoldan gelen tekrar atılır), konsol hatası yok.
 //   --yerel: dev/broker.js ile bu süreçte yerel aracı başlatır (ya da NET_BROKER=ws://.../mqtt). Herkese açık aracıya ulaşılamayan ortamlar için.
 //       → var olan odaya (ör. tarayıcıdaki oyun) N hayalet katılır ve otomatik pilotla oynar (ev sahibi lobiye dönünce / süre dolunca biter).
 // Her hayalet GERÇEK istemcidir: core+gfx+net+level+game+meta+netgame (çizim yok) ayrı bir vm bağlamında, kendi pid'i ve kaydıyla;
@@ -50,6 +54,8 @@ function ghost(nick, opts) {
     matchMedia: () => ({ matches: false, addEventListener() { } }), innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1,
     addEventListener() { }, removeEventListener() { }, requestAnimationFrame() { return 0; },
     document: { hidden: false, getElementById: () => stubEl(), createElement: () => stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [], addEventListener() { }, body: stubEl(), fonts: null } };
+  // opts.rtc: sahte WebRTC (dev/net-rtcfake.js; aynı süreçteki hayaletler arasında doğrudan bağlantı), {fail: true} → bağlantısı açılmaz
+  if (opts.rtc) sb.RTCPeerConnection = require('./net-rtcfake.js').makeRTC(opts.rtc.net || null, { fail: !!opts.rtc.fail });
   sb.window = sb; vm.createContext(sb);
   for (const [f, s] of SRC) vm.runInContext(s, sb, { filename: f + '.js' });
   const FM = sb.FM;
@@ -131,6 +137,7 @@ if (require.main === module) {
         return finish(errs ? 1 : 0);
       }
       if (cmd === 'lobi') { const bad = await lobbyFlow(all); return finish(bad ? 1 : 0); }
+      if (cmd === 'p2p') { const bad = await p2pFlow(all); return finish(bad ? 1 : 0); }
       // --- host: tamamen node içinde maç ---
       const n = Math.max(2, Math.min(10, +(A[1] || 4))), mode = A[2] || 'classic', theme = A[3] || 'random', rounds = +(A[4] || 1), fill = +(A[5] || 4);
       const broker = A[6] != null ? +A[6] : undefined;
@@ -426,5 +433,66 @@ async function lobbyFlow(all) {
   const caught = all.reduce((a, g) => a.concat(g.net.log().filter(l => l.indexOf('HATA') >= 0)), []);
   if (!errs.length && !caught.length) pass('konsol hatası yok'); else { fail(errs.length + caught.length + ' hata'); for (const e of errs.concat(caught).slice(0, 8)) console.log('      ' + String(e).slice(0, 300)); }
   console.log(`\nSonuç: ${bad ? bad + ' kaldı' : 'hepsi geçti'} (${el()})`);
+  return bad;
+}
+
+/* =================== TUR6: doğrudan bağlantı ağı (node dev/mp-bots.js p2p --yerel) =================== */
+async function p2pFlow(all) {
+  let bad = 0; const t00 = Date.now();
+  const pass = m => console.log('  ✓ ' + m), fail = m => { bad++; console.log('  ✗ ' + m); };
+  const step = async (name, fn) => { try { await fn(); } catch (e) { fail(name + ' — ' + (e && e.message)); } };
+  const mk = (n, o) => { const g = ghost(n, Object.assign({ quiet: true }, o || {})); all.push(g); g.ng.autopilot = true; return g; };
+  const net = { lat: 12, jit: 8, loss: 0.02, setup: 150 };
+  const H = mk('Ev', { char: 'Kral', rtc: { net } }), G = [H, mk('Ayşe', { rtc: {} }), mk('Barış', { rtc: {} }), mk('Cem', { rtc: {} })];
+  H.net.createRoom({ cfg: { mode: 'classic', map: 'random', rounds: 1, bots: true, fill: 6 } });
+  await waitFor(() => H.net.inRoom(), 20000, 'oda');
+  const code = H.net.code();
+  for (const g of G.slice(1)) { g.net.joinRoom(code); await sleep(200); }
+  await waitFor(() => G.every(g => g.net.inRoom()) && H.net.players().length === 4, 20000, 'herkes odada');
+  console.log('oda ' + code + ' — 4 oyuncu, sahte WebRTC (gecikme ' + net.lat + ' ms, kayıp %' + net.loss * 100 + ')');
+  const links = g => g.net.players().filter(p => !p.me).map(p => p.link);
+  await step('tam örgü', async () => {
+    const t0 = Date.now();
+    await waitFor(() => G.every(g => links(g).length === 3 && links(g).every(l => l === 'p2p')), 25000, '6 bağlantının hepsi p2p');
+    const st = G.map(g => g.net._dbg.rtc.stats());
+    pass(`4 oyuncu tam örgü (6 doğrudan bağlantı) ${((Date.now() - t0) / 1000).toFixed(1)} sn içinde kuruldu; açılan ${st.map(x => x.opened).join('/')}, başarısız ${st.map(x => x.failed).join('/')}, sinyal gönderilen ${st.map(x => x.sigOut).join('/')}`);
+  });
+  const rate = async ms => { const a = G.map(g => g.net._dbg.rtc.stats()); await sleep(ms); return G.map((g, i) => { const b = g.net._dbg.rtc.stats(); return { dc: (b.stDc - a[i].stDc) / ms * 1000, mq: (b.stMq - a[i].stMq) / ms * 1000 }; }); };
+  let late = null;
+  await step('herkes doğrudan: aracı durumu ~1 Hz', async () => {
+    for (const g of G) g.net.setReady(true);
+    await waitFor(() => G.every(g => g.ng.state().phase === 'race'), 15000, 'yarış');
+    await waitFor(() => H.FM.S.mode === 'race' && H.FM.S.raceT > 3, 15000, 'yarış ilerledi');
+    const r = await rate(4000);
+    // alıcı başına: 3 gönderenden toplam
+    const okR = r.every(x => x.dc >= 3 * 12 && x.mq <= 3 * 1.5);
+    const dly = G[1].net.links().map(l => l.dly);
+    if (okR) pass('yarışta durum doğrudan (alıcı başına 3 gönderenden ' + r.map(x => Math.round(x.dc)).join('/') + ' msg/sn), aracıdan yalnız ' + r.map(x => x.mq.toFixed(1)).join('/') + ' msg/sn yedek; ara değerleme ' + dly.join('/') + ' ms');
+    else fail('oranlar: ' + JSON.stringify(r));
+  });
+  await step('WebRTC\'siz oyuncu gelince aracı normal hızda', async () => {
+    late = mk('Eski', { rtc: null });                                  // RTCPeerConnection yok (eski tarayıcı / uygulama içi tarayıcı)
+    late.net.joinRoom(code);
+    await waitFor(() => late.net.inRoom() && late.ng.state().phase === 'race', 20000, 'geç gelen izliyor');
+    await sleep(2500);
+    const r = await rate(3000);
+    const lk = H.net.players().find(p => p.pid === late.net.pid());
+    const seen = G.map(g => late.net.sample(g.net.pid())).filter(x => x && !x._stale).length;
+    if (r.every(x => x.mq >= 3 * 6) && lk && lk.link === 'mqtt' && seen >= 3) pass('WebRTC\'siz oyuncu odada → herkes aracıya da normal hızda yayınlıyor (' + r.map(x => Math.round(x.mq)).join('/') + ' msg/sn), o oyuncu diğer ' + seen + ' yarışçıyı canlı görüyor; aradakiler yine doğrudan');
+    else fail('karma oda: ' + JSON.stringify({ r, lk: lk && lk.link, seen }));
+  });
+  await step('sonuç + olaylar', async () => {
+    await waitFor(() => G.concat([late]).every(g => g.count('mp:end') >= 1), 150000, 'tur sonu');
+    const sigs = G.concat([late]).map(g => endSig(g.last('mp:end').d));
+    if (sigs.every(x => x === sigs[0])) pass('tur sonucu 5 istemcide aynı'); else fail('sonuçlar farklı: ' + sigs.join(' | '));
+    // her alıcı her gönderenin her eşya olayını TAM BİR KEZ uyguladı mı (doğrudan + aracı yedeği tekrar atıldı mı)
+    const sent = G.map(g => g.ng.debug().stats.sent.it || 0), recv = G.map(g => g.ng.debug().stats.recv.it || 0), dup = G.map(g => g.net._dbg.rtc.stats().evDup);
+    const exp = G.map((g, i) => sent.reduce((a, v, j) => a + (j === i ? 0 : v), 0));
+    if (recv.every((v, i) => v === exp[i]) && dup.every(d => d > 0)) pass(`olaylar: her alıcı her eşya olayını bir kez aldı (alınan ${recv.join('/')} = beklenen ${exp.join('/')}), iki yoldan gelen tekrarlar atıldı (${dup.join('/')})`);
+    else fail('olay sayıları: ' + JSON.stringify({ sent, recv, exp, dup }));
+  });
+  const errs = all.reduce((a, g) => a.concat(g.errors), []), caught = all.reduce((a, g) => a.concat(g.net.log().filter(l => l.indexOf('HATA') >= 0)), []);
+  if (!errs.length && !caught.length) pass('konsol hatası yok'); else { fail(errs.length + caught.length + ' hata'); for (const e of errs.concat(caught).slice(0, 8)) console.log('      ' + String(e).slice(0, 300)); }
+  console.log(`\nSonuç: ${bad ? bad + ' kaldı' : 'hepsi geçti'} (${((Date.now() - t00) / 1000).toFixed(1)} sn)`);
   return bad;
 }

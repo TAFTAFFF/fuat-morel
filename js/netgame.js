@@ -21,7 +21,7 @@
   const NGV = 1;                    // start/end yük sürümü
   const COUNT0 = 3.6;               // geri sayım (game.startRound ile aynı)
   const END_GRACE = 600;            // ms: ev sahibi tur sonu kararından sonra son durumların gelmesini bekler
-  const SEND_MS = 33;               // yerel durumu paketleme aralığı (net.js ~10 Hz'e kısar, en günceli gider)
+  const SEND_MS = 15;               // yerel durumu her karede paketle (net.js kısar: doğrudan ~20 Hz, aracı ~10 Hz; en günceli gider)
   const EMOTE_T = 3;                // emoji balonu süresi (sn)
   const FINAL_AUTO = 10;            // sn: final sıralamasından sonra herkes otomatik lobiye döner (TUR5 §7)
   const AUTO_MAX = 10;              // sn: turlar arası otomatik geçiş en fazla (kürsüden ~6 sn sonra sonraki tur)

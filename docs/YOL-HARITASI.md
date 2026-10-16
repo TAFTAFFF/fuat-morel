@@ -25,6 +25,12 @@ Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 - ✅ "Düğmeleri de ölçekli küçült, zıplama tuşu çok büyük" → dokunmatik düğmeler ~%25 küçük
 - ✅ "Safari üst çubuğu çok büyük, tam ekran seçeneği koy" → iPhone'da TAM EKRAN rehberi (Ana Ekrana Ekle) + kayıt taşıma
 - ✅ "Oda kurunca link paylaşmak gerekmesin, odalar herkese görünsün; kim oyuna girdi/kim oda kurdu anlık küçük bildirim" → ARKADAŞLARLA'da AÇIK ODALAR + KATIL, menüde "n açık oda", "X oyuna girdi!" / "X oda kurdu!" bildirimi (yarışta küçük)
+- ✅ "Harita göz yoruyor, hasar veren cisimler belirgin olsun, zıplama/kayma görünsün" → sakin arka planlar, ortak kırmızı tehlike dili, yumuşak mürekkep
+- ✅ "Haritaya biraz daha yakın olalım" → telefon görüşü 460
+- ✅ "Atarken daha mantıklı olsun" + "sürüklerken testere elimde kaldı" → yukarı = ileri-yukarı kavis, parmak düğmeden taşsa da atış kaybolmaz, kendi testeren/dinamitin sana zarar vermez
+- ✅ "Zıplarken ve kayarken hız yavaşlamalı" → zıplama %8 (+havada %10), kayma %20 hız keser
+- ✅ "Çok ping var" → WebRTC doğrudan bağlantı (STUN; olmazsa MQTT yedeği), en hızlı aracı seçimi, daha az ara değerleme gecikmesi, lobide DOĞRUDAN rozeti
+- Not: Fable'ı az kullan (kullanıcı: çok token yiyor) → küçük işleri ana ajan yapar, Fable yalnızca gerçek çizim işlerinde ve kısa görevle
 - Not: "Karakterler güzel, eline sağlık" → karakter tasarımlarının ana hatları korunur.
 
 ## Ana ajanın fikirleri

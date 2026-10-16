@@ -3133,3 +3133,6 @@ a.btn { text-decoration: none; }
 .note.n-mini { padding: .35rem .8rem .35rem .4rem; gap: .5rem; }
 .note.n-mini .n-ic { width: 2.8rem; height: 2.8rem; }
 .note.n-mini .n-tx b { font-size: 1.4rem; }
+
+/* lobi: doğrudan (WebRTC) bağlı oyuncu rozeti */
+.p2p { display: inline-block; margin-right: .35rem; padding: .1rem .4rem; border-radius: .5rem; font: .95rem/1.2 var(--fh); letter-spacing: .03em; color: #0b2a12; background: #5ee07a; box-shadow: 0 0 .6rem rgba(94, 224, 122, .55); vertical-align: middle; }

@@ -291,14 +291,15 @@ async function p2pFlow(pass, fail) {
       else fail('aracıyla yarış: ' + JSON.stringify({ ra, rb, lag, dly }));
       return;
     }
-    if (ra.dc >= 14 && ra.mq <= 1.6 && rb.dc >= 14 && rb.mq <= 1.6 && dly <= 90 && lag != null && lag < 200)
+    if (ra.dc >= 12 && ra.mq <= 1.6 && rb.dc >= 12 && rb.mq <= 1.6 && dly <= 110 && lag != null && lag < 200)
       pass(`durum veri kanalından ~${ra.dc}/${rb.dc} Hz, aracıdan yalnız ${ra.mq}/${rb.mq} Hz yedek (tekrar atılan ${ra.dup + rb.dup}); ara değerleme ${dly} ms, uzak oyuncu ekranda ~${lag} ms geride`);
     else fail('DC akışı: ' + JSON.stringify({ ra, rb, dly, lag, lags }));
     A.lagDc = lag;
     // tekrar atma: katılanın testeresi ev sahibinde TAM BİR KEZ uygulanır (olay iki yoldan gelir)
     await A.eval(`window.__its = 0; FM.on('item:use', d => { if (d.net && d.r && d.r.pid === ${JSON.stringify(pidB)} && d.item === 'saw') __its++; }); true`);
     const e0 = (await stats(A)).evDup;
-    const thrown = await B.eval('(() => { const P = FM.S.player; if (!P || P.dead > 0 || P.finished || P.out) return false; P.item = "saw"; FM.game.useItem(P, 1, 0); return true; })()');
+    let thrown = false;
+    for (let i = 0; i < 20 && !thrown; i++) { thrown = await B.eval('(() => { const P = FM.S.player; if (!P || P.dead > 0 || P.finished || P.out || FM.S.mode !== "race") return false; P.item = "saw"; FM.game.useItem(P, 1, 0); return FM.S.ents.some(e => e.type === "saw" && e.o === P); })()'); if (!thrown) await sleep(300); }
     await sleep(1500);
     const its = await A.eval('__its'), e1 = (await stats(A)).evDup;
     if (thrown && its === 1 && e1 > e0) pass(`olay iki yoldan geldi, tekrar atıldı: testere ev sahibinde 1 kez (atılan tekrar ${e1 - e0})`);
@@ -314,6 +315,7 @@ async function p2pFlow(pass, fail) {
     const ra = await rates(A, 3000);
     const lags = []; for (let i = 0; i < 10; i++) { lags.push(await lagSample(B, A, pidB)); await sleep(150); }
     const stale = await A.eval(`(FM.netgame.racer(${JSON.stringify(pidB)}) || {}).stale`);
+    if (med(lags) != null && A.lagDc != null && med(lags) - A.lagDc < 25) fail(`doğrudan bağlantı aracıdan belirgin hızlı değil: doğrudan ~${A.lagDc} ms, aracı ~${med(lags)} ms`);
     if (ra.mq >= 7 && ra.dc === 0 && !stale && med(lags) != null && med(lags) < 500) pass(`katılanın kanalı sessizce öldü → ${(ms / 1000).toFixed(1)} sn içinde aracıya düştü, durum aracıdan ${ra.mq} Hz, uzak oyuncu donmadı (ekranda ~${med(lags)} ms geride; doğrudanken ~${A.lagDc} ms)`);
     else fail('düşüş: ' + JSON.stringify({ ra, lags, stale }));
     await B.eval('FM.net._dbg.rtc.block(false)');

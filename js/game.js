@@ -290,11 +290,21 @@
   }
 
   /* =================== FİZİK YARDIMCILARI =================== */
-  function solidAt(px, py) { for (const s of S.L.solids) if (px >= s.x && px < s.x + s.w && py >= s.y && py < s.y + s.h) return true; return false; }
-  function boxFree(x, y, w, h) { for (const s of S.L.solids) if (x < s.x + s.w && x + w > s.x && y < s.y + s.h && y + h > s.y) return false; return true; }
-  function groundWithin(px, py, d) { for (const s of S.L.solids) if (px >= s.x && px <= s.x + s.w && s.y >= py - 4 && s.y < py + d) return true; return false; }
-  function groundY(px, py) { let b = null; for (const s of S.L.solids) if (px >= s.x && px <= s.x + s.w && s.y >= py - 8 && (b === null || s.y < b)) b = s.y; return b; }
-  game.solidAt = solidAt; game.groundY = groundY;
+  /* Eğimli zemin (level.js sözleşmesi): katının üst kenarı (x, y) → (x + w, y2); y2 yoksa düz. topAt(s, x) yüzey yüksekliği. */
+  const topAt = FM.level.topAt, slopeOf = FM.level.slopeOf;
+  const inSolid = (s, px, py) => px >= s.x && px < s.x + s.w && py < s.y + s.h && py >= (s.y2 == null ? s.y : topAt(s, px));
+  // kutu katıyla kesişiyor mu (x aralığındaki en yüksek yüzey noktasına göre; doğrusal üst kenarda uçlardan biri)
+  function boxHits(s, x, y, w, h) {
+    if (!(x < s.x + s.w && x + w > s.x && y < s.y + s.h)) return false;
+    const t = s.y2 == null ? s.y : Math.min(topAt(s, Math.max(x, s.x)), topAt(s, Math.min(x + w, s.x + s.w)));
+    return y + h > t;
+  }
+  function solidAt(px, py) { for (const s of S.L.solids) if (inSolid(s, px, py)) return true; return false; }
+  function boxFree(x, y, w, h) { for (const s of S.L.solids) if (boxHits(s, x, y, w, h)) return false; return true; }
+  function groundWithin(px, py, d) { for (const s of S.L.solids) { if (px < s.x || px > s.x + s.w) continue; const t = topAt(s, px); if (t >= py - 4 && t < py + d) return true; } return false; }
+  // px'te, py − 8'in altındaki en üst yüzey (eğimli zeminde yüzeyin o noktadaki yüksekliği) | null
+  function groundY(px, py) { let b = null; for (const s of S.L.solids) { if (px < s.x || px > s.x + s.w) continue; const t = topAt(s, px); if (t >= py - 8 && (b === null || t < b)) b = t; } return b; }
+  game.solidAt = solidAt; game.groundY = groundY; game.topAt = topAt; game.boxFree = boxFree;
   const inLowG = x => { for (const z of S.L.lowg) if (x >= z.x && x <= z.x + z.w) return true; return false; };
   game.inLowG = inLowG;
   /* Yuvarlanan kaya: seviye saati t'de durum (saf fonksiyon → yapay zekâ ileriyi hesaplar; ağda herkeste aynı).
@@ -363,7 +373,7 @@
       const dx = Math.max(r.x, r.safe.x) + 40;
       let best = null;
       for (const s of S.L.solids) if (!s.float && s.w >= 220 && s.x > dx && (!best || s.x < best.x)) best = s;
-      if (best) { r.safe.x = best.x + 90; r.safe.y = best.y; lp.sx = r.safe.x; lp.n = 0; FM.emit('rescue', { r }); }
+      if (best) { r.safe.x = best.x + 90; r.safe.y = topAt(best, best.x + 90); lp.sx = r.safe.x; lp.n = 0; r.respX = null; FM.emit('rescue', { r }); }
     }
     const icon = (cause && FM.ITEMS[cause] && FM.ITEMS[cause].ic) || DEATH_ICON[cause] || '💥';
     if (near(r)) {
@@ -575,6 +585,8 @@
     if (r.draft > 0) mult *= 1 + DRAFT_K * r.draft;     // rüzgâr arkası
     if (r.slide && r.onGround && r.sled <= 0 && !r.onIce) mult *= SLIDE_MUL;          // kayış hız keser (buzda ve kızakta değil)
     if (r.airJ && !r.onGround && r.fly <= 0 && r.dash <= 0) mult *= AIR_MUL;           // zıplayan havada daha yavaş
+    // yokuş: çıkış biraz yavaş, iniş biraz hızlı; yokuş aşağı KAYMAK hızlı (eğlenceli). r.slope = dy/dx (+ iniş)
+    if (r.onGround && r.slope) mult *= 1 + clamp(r.slope, -.75, .75) * (r.slide ? .5 : .2);
     if (r.dash > 0) mult = DASH_V * (r.dashX == null ? 1 : r.dashX);   // yönlü atılımda yatay pay
     if (r.bot) mult *= 1 + .035 * Math.sin(S.T * .55 + r.idx * 2.1);   // ortalaması 0: yalnızca görsel ayrışma
     if (r.spawnT > 0) { r.spawnT = (c.jp || c.dp) ? 0 : r.spawnT - dt; }   // hazırlık: zıplarsa/kayarsa hemen koşar
@@ -676,23 +688,48 @@
     // X hareketi
     r.x += r.vx * dt; r.blocked = false;
     if (r.x < 0) { r.x = 0; r.vx = Math.max(0, r.vx); }
+    // yatay çarpışma: yalnızca DİK yüzler (duvar/basamak) engeller. Yokuşun başı ayak hizasındaysa engel değil, yürünür
+    // (dikey yüzey takibi koşucuyu yokuşa oturtur). ≤ 46 px basamağa kendiliğinden çıkılır.
     for (const s of L.solids) {
-      if (r.x < s.x + s.w && r.x + r.w > s.x && r.y + r.h > s.y + 1 && r.y < s.y + s.h - 1) {
-        if (r.vx >= 0 && r.x + r.w - s.x < 40) {
-          const lip = r.y + r.h - s.y;
-          if (lip > 0 && lip <= 46 && !r.climb && boxFree(r.x, s.y - r.h - .5, r.w, r.h)) { r.y = s.y - r.h - .5; continue; }
-          r.x = s.x - r.w; r.blocked = true; if (r.vx > 0) r.vx = 0;
-        } else if (r.vx < 0) { r.x = s.x + s.w; r.vx = 0; }
+      if (!boxHits(s, r.x, r.y + 1, r.w, r.h - 2)) continue;
+      const feet = r.y + r.h;
+      if (r.vx >= 0 && r.x + r.w - s.x < 40) {
+        const face = topAt(s, s.x);
+        if (feet <= face + 1.5) continue;
+        const lip = feet - face;
+        if (lip <= 46 && !r.climb && boxFree(r.x, face - r.h - .5, r.w, r.h)) { r.y = face - r.h - .5; continue; }
+        r.x = s.x - r.w; r.blocked = true; if (r.vx > 0) r.vx = 0;
+      } else if (r.vx < 0 && s.x + s.w - r.x < 40) {
+        if (feet <= topAt(s, s.x + s.w) + 1.5) continue;
+        r.x = s.x + s.w; r.vx = 0;
       }
     }
     if (r.climb) r.blocked = true;
-    // Y hareketi
-    const vyBefore = r.vy;
-    r.y += r.vy * dt; const was = r.onGround; r.onGround = false;
-    for (const s of L.solids) {
-      if (ov(r, s)) {
-        if (r.vy > 0) {
-          r.y = s.y - r.h; r.onGround = true; r.jumps = 0;
+    // Y hareketi — yüzey takibi (eğimli zemin): destek, gövde merkezinin altındaki yüzeydir (yokuşta pürüzsüz çıkış/iniş).
+    // Yerde koşarken (zıplamadan) merkez yüzeyi |vx|·dt + 3 px aşağıdaysa yapışılır: yokuş aşağıda sekme/uçma yok.
+    // Merkez boşluktaysa (kenar) kutunun değdiği kenar destek olur (eski affedici kenar davranışı).
+    // Tavan yalnızca alttan girilince (düz katılar); eğimli zemin bloklarının altına girilemez.
+    const vyBefore = r.vy, feet0 = r.y + r.h, was = r.onGround;
+    r.y += r.vy * dt; r.onGround = false;
+    {
+      const rcx = r.x + r.w / 2, feet = r.y + r.h;
+      if (r.vy >= 0) {
+        const snap = was && vyBefore >= 0 && !r.climb ? Math.abs(r.vx) * dt + 3 : 0;
+        let sup = null, supY = 0, edge = null, edgeY = 0;
+        for (const s of L.solids) {
+          if (!(r.x < s.x + s.w && r.x + r.w > s.x)) continue;
+          if (rcx >= s.x && rcx < s.x + s.w) {
+            const t = s.y2 == null ? s.y : topAt(s, rcx);
+            if (feet0 <= t + 14 && feet + snap >= t && (sup === null || t < supY)) { sup = s; supY = t; }
+          } else {
+            const t = topAt(s, rcx < s.x ? s.x : s.x + s.w);
+            if (feet0 <= t + 1 && feet >= t && (edge === null || t < edgeY)) { edge = s; edgeY = t; }
+          }
+        }
+        const land = sup || edge;
+        if (land) {
+          r.y = (sup ? supY : edgeY) - r.h; r.onGround = true; r.jumps = 0; r.vy = 0;
+          r.slope = sup && sup.y2 != null ? slopeOf(sup) : 0;
           if (!was) {
             r.land = clamp(vyBefore / 1300, .25, 1);
             r.landT = 0; r.landHard = vyBefore > 500; r.airJ = false;   // kusursuz zıplama penceresi inişten sayılır
@@ -705,8 +742,13 @@
             FM.emit('land', { r, hard: vyBefore > 900 });
           }
           r.slam = false; r.slamPerf = false;
-        } else if (r.vy < 0) { r.y = s.y + s.h; if (r.climb) r.climb = false; }
-        r.vy = 0;
+        } else r.slope = 0;
+      } else {
+        r.slope = 0;
+        for (const s of L.solids) {
+          if (s.y2 != null || !ov(r, s) || feet0 - r.h < s.y + s.h - 14) continue;
+          r.y = s.y + s.h; r.vy = 0; if (r.climb) r.climb = false;
+        }
       }
     }
     if (r.onGround || r.climb) r.ph += (r.climb ? CLIMB : Math.abs(r.vx)) * dt * .066;   // koşu adımı hıza göre: Fun Run gibi çevik bacaklar (eskiden ağır çekim gibi)

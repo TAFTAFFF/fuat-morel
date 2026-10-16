@@ -1501,10 +1501,10 @@
     spr(ctx, reticleSprite(), tx, ty, age * (flying ? 5 : 2.2), sc);
     spr(ctx, reticleInnerSprite(), tx, ty, -age * 3.4, sc);
     // "!" uyarısı
-    const bounce = Math.abs(Math.sin(age * 8)) * 6;
-    const as = !flying ? (age < .2 ? easeOutBack(age / .2) : 1) : .8;
-    ctx.globalAlpha = 1;
-    spr(ctx, alertSprite(), tx, t.y - 24 - 30 * (sc - .7) * .4 - bounce, Math.sin(age * 10) * .08, as);
+    const bounce = Math.abs(Math.sin(age * 8)) * 4;
+    const as = (!flying ? (age < .2 ? easeOutBack(age / .2) : 1) : .8) * .85;
+    ctx.globalAlpha = .82;
+    spr(ctx, alertSprite(), tx + 30, ty - 16 - bounce, Math.sin(age * 10) * .08, as);
     resetXf(ctx);
     ctx.globalAlpha = 1;
   }
@@ -2548,6 +2548,393 @@
   };
 
   /* =====================================================================
+     YENİ HARİTA / MOD / ÇOK OYUNCULU EFEKTLERİ
+     meteor (uyarı gölgesi + alevli kaya + iz + çarpma, yanık izi), ışınlanma girdabı, gayzer suyu/buharı,
+     eleme (duman + "ELENDİ!" + yükselen hayalet), düşen altın saçılması, bağlantı kopması.
+     Olay yerine durum değişimini izleyenler (ışınlanma: r.tp, gayzer: v.act, düşen altın: L.coins) uzak yarışçılar
+     için de çalışır (ağdan gelen durumlar olay yaymaz).
+     ===================================================================== */
+  R.meteorFx = true;            // game.js'teki yedek kırmızı parıltı kapanır
+  R.platesLate = true;          // render-chars plakaları drawParticles sonunda (füze/uyarı üstünde) çizilir
+  const swirls = [], ghosts = [], scorches = [];
+  const METEOR_FALL = .55, MET_DX = 330, MET_DY = -820;
+
+  function meteorFall(e) {
+    const mx = Math.max(.1, num(e.max, 1.25)), fall = Math.min(METEOR_FALL, mx * .6);
+    const t = num(e.t, 0);
+    if (t > fall) return null;
+    const f = clamp(1 - t / fall, 0, 1), u = 1 - f;
+    return { f, x: num(e.x, 0) + MET_DX * u, y: num(e.y, 0) - 16 + MET_DY * u };
+  }
+  function meteorRockSprite() {
+    return sp('metRock', 64, 64, 32, 32, g => {
+      const n = 11, pts = [];
+      for (let i = 0; i < n; i++) { const a = i / n * TAU, rr = 18.5 + Math.sin(i * 2.7) * 2.4 + Math.cos(i * 1.3) * 1.6; pts.push(Math.cos(a) * rr, Math.sin(a) * rr); }
+      const path = () => { g.beginPath(); g.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]); g.closePath(); };
+      path(); g.lineJoin = 'round'; g.lineWidth = 3.4; g.strokeStyle = '#1c0c08'; g.stroke();
+      const gr = g.createRadialGradient(-6, -7, 2, 0, 0, 22);
+      gr.addColorStop(0, '#8a5a44'); gr.addColorStop(.5, '#5a3326'); gr.addColorStop(1, '#2e1610');
+      g.fillStyle = gr; g.fill();
+      g.save(); path(); g.clip();
+      // krater lekeleri
+      g.fillStyle = 'rgba(30,12,8,.45)';
+      g.beginPath(); g.arc(6, 5, 5, 0, TAU); g.fill(); g.beginPath(); g.arc(-8, 7, 3.2, 0, TAU); g.fill(); g.beginPath(); g.arc(4, -9, 2.6, 0, TAU); g.fill();
+      // akkor çatlaklar
+      g.lineCap = 'round';
+      const crack = (c, w) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.moveTo(-14, 2); g.lineTo(-5, -1); g.lineTo(0, 6); g.lineTo(9, 3); g.lineTo(15, 9); g.moveTo(-5, -1); g.lineTo(-2, -10); g.lineTo(5, -14); g.moveTo(0, 6); g.lineTo(-3, 15); g.stroke(); };
+      crack('rgba(255,120,30,.55)', 4.2); crack('#ffd25a', 1.6);
+      // sıcak alt kenar (iniş yönü sol-alt)
+      const hg = g.createRadialGradient(-12, 12, 2, -12, 12, 22);
+      hg.addColorStop(0, 'rgba(255,190,80,.75)'); hg.addColorStop(1, 'rgba(255,120,30,0)');
+      g.fillStyle = hg; g.fillRect(-32, -32, 64, 64);
+      g.restore();
+      g.beginPath(); g.ellipse(-6, -9, 5, 2.6, -.6, 0, TAU); g.fillStyle = 'rgba(255,230,200,.35)'; g.fill();
+    });
+  }
+  /* alev izi: orijin kaya merkezi, +x yönünde (geriye doğru) uzanır */
+  function meteorTrailSprite(core) {
+    const L = core ? 150 : 230, W = core ? 26 : 52;
+    return sp('metTrail' + (core ? 'C' : ''), L + W, W + 8, W / 2, W / 2 + 4, g => {
+      const gr = g.createLinearGradient(-W / 2, 0, L, 0);
+      if (core) { gr.addColorStop(0, 'rgba(255,255,235,1)'); gr.addColorStop(.25, 'rgba(255,230,140,.9)'); gr.addColorStop(.7, 'rgba(255,150,50,.35)'); gr.addColorStop(1, 'rgba(255,90,20,0)'); }
+      else { gr.addColorStop(0, 'rgba(255,214,110,.95)'); gr.addColorStop(.2, 'rgba(255,140,40,.85)'); gr.addColorStop(.55, 'rgba(220,60,20,.45)'); gr.addColorStop(1, 'rgba(90,30,30,0)'); }
+      g.beginPath();
+      g.moveTo(0, -W / 2);
+      g.bezierCurveTo(L * .35, -W * .42, L * .7, -W * .12, L, 0);
+      g.bezierCurveTo(L * .7, W * .12, L * .35, W * .42, 0, W / 2);
+      g.arc(0, 0, W / 2, PI / 2, PI * 1.5);
+      g.closePath();
+      g.fillStyle = gr; g.fill();
+    });
+  }
+  function meteorShadowSprite() {
+    return sp('metShadow', 72, 72, 36, 36, g => {
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, 34);
+      gr.addColorStop(0, 'rgba(40,6,4,.62)'); gr.addColorStop(.6, 'rgba(70,10,6,.38)'); gr.addColorStop(1, 'rgba(90,10,6,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 34, 0, TAU); g.fill();
+    });
+  }
+  function meteorBeamSprite() {
+    return sp('metBeam', 40, 420, 20, 420, g => {
+      const gr = g.createLinearGradient(0, -420, 0, 0);
+      gr.addColorStop(0, 'rgba(255,70,40,0)'); gr.addColorStop(.7, 'rgba(255,70,40,.16)'); gr.addColorStop(1, 'rgba(255,90,50,.42)');
+      const hg = g.createLinearGradient(-20, 0, 20, 0);
+      g.fillStyle = gr; g.fillRect(-20, -420, 40, 420);
+      g.globalCompositeOperation = 'destination-in';
+      hg.addColorStop(0, 'rgba(0,0,0,0)'); hg.addColorStop(.5, 'rgba(0,0,0,1)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = hg; g.fillRect(-20, -420, 40, 420);
+      g.globalCompositeOperation = 'source-over';
+    });
+  }
+  function scorchSprite() {
+    return sp('metScorch', 140, 40, 70, 20, g => {
+      g.save(); g.scale(1, .26);
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, 66);
+      gr.addColorStop(0, 'rgba(20,8,6,.8)'); gr.addColorStop(.55, 'rgba(40,16,10,.5)'); gr.addColorStop(1, 'rgba(40,16,10,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 66, 0, TAU); g.fill();
+      g.restore();
+    });
+  }
+  /* yerde: uyarı gölgesi + ışık sütunu + daralan oklar (yarışçıların ALTINDA) */
+  function drawMeteorWarn(ctx, e) {
+    const x = num(e.x, 0), y = num(e.y, 0), rad = num(e.r, 62);
+    if (!inView(x, y - 150, rad + 320)) return;
+    const mx = Math.max(.1, num(e.max, 1.25)), q = clamp(1 - num(e.t, 0) / mx, 0, 1);
+    const pulse = .5 + .5 * Math.sin(FXT * (10 + q * 16));
+    // ışık sütunu (gökten iniş çizgisi)
+    ctx.globalAlpha = (.35 + .45 * q) * (.75 + .25 * pulse);
+    spr(ctx, meteorBeamSprite(), x, y + 2, 0, rad * (1.25 - .55 * q) / 20, 1);
+    // büyüyen gölge
+    ctx.globalAlpha = .45 + .55 * q;
+    spr(ctx, meteorShadowSprite(), x, y + 1, 0, rad * (.35 + .75 * q) / 34, rad * (.35 + .75 * q) / 34 * .3);
+    // tehlike halkası
+    setXf(ctx, x, y + 1, 0, 1, .3);
+    ctx.beginPath(); ctx.arc(0, 0, rad, 0, TAU);
+    ctx.globalAlpha = .55 + .45 * pulse;
+    ctx.lineWidth = 7 + 2 * pulse; ctx.strokeStyle = 'rgba(60,0,0,.55)'; ctx.stroke();
+    ctx.lineWidth = 3.4 + 1.6 * pulse; ctx.strokeStyle = q > .7 ? '#ffd23f' : '#ff3b2a'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, rad * (.25 + .7 * q), 0, TAU);
+    ctx.globalAlpha = .25 + .35 * q; ctx.lineWidth = 2.5; ctx.strokeStyle = '#ff7a4a'; ctx.stroke();
+    // içe kayan oklar
+    const rr = rad * (1.5 - .5 * q);
+    ctx.globalAlpha = .6 + .4 * pulse;
+    for (let i = 0; i < 4; i++) {
+      const a = i * PI / 2 + PI / 4, cx = Math.cos(a) * rr, cy = Math.sin(a) * rr, ux = -Math.cos(a), uy = -Math.sin(a);
+      ctx.beginPath();
+      ctx.moveTo(cx + ux * 12, cy + uy * 12);
+      ctx.lineTo(cx - uy * 9, cy + ux * 9);
+      ctx.lineTo(cx + uy * 9, cy - ux * 9);
+      ctx.closePath();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#3a0000'; ctx.stroke();
+      ctx.fillStyle = '#ff4a2a'; ctx.fill();
+    }
+    resetXf(ctx);
+    ctx.globalAlpha = 1;
+  }
+  /* havada: alevli kaya + iz (yarışçıların ÜSTÜNDE) */
+  function drawMeteorRock(ctx, e) {
+    const m = meteorFall(e);
+    if (!m || !inView(m.x, m.y, 320)) return;
+    const ang = Math.atan2(-MET_DY, -MET_DX);          // gidiş yönü (sol-aşağı)
+    const back = ang + PI, sc = .9 + .2 * m.f, fl = .9 + rnd() * .2;
+    ctx.globalAlpha = .9;
+    spr(ctx, meteorTrailSprite(false), m.x, m.y, back, sc * fl, sc);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = .65;
+    spr(ctx, glowSprite('#ff8a2a'), m.x, m.y, 0, 70 / 32 * sc);
+    ctx.globalAlpha = .9;
+    spr(ctx, meteorTrailSprite(true), m.x, m.y, back, sc * fl, sc * .9);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    spr(ctx, meteorRockSprite(), m.x, m.y, FXT * 7 + num(e.x, 0), sc * 1.05);
+    resetXf(ctx);
+  }
+  function updMeteors(dt) {
+    const L = S.ents || [];
+    for (const e of L) {
+      if (!e || e.type !== 'meteor') continue;
+      const m = meteorFall(e);
+      if (!m || !inView(m.x, m.y, 260)) continue;
+      const v = vis(e);
+      v.acc += dt * 70;
+      while (v.acc >= 1) {
+        v.acc -= 1;
+        const j = rnd();
+        P({ k: 'fball', x: m.x + MET_DX * .02 * j + (rnd() - .5) * 14, y: m.y + MET_DY * .02 * j + (rnd() - .5) * 14, vx: (rnd() - .5) * 60 + 90, vy: -120 - rnd() * 80, life: .35 + rnd() * .3, c: '#ffb347', s: 9 + rnd() * 8, g: -60, drag: 2.5, rot: rnd() * 6, vr: (rnd() - .5) * 3 });
+        if (rnd() < .45) P({ k: 'spark', x: m.x, y: m.y, vx: 160 + rnd() * 220, vy: -320 - rnd() * 380, life: .25 + rnd() * .25, c: '#ffcf6a', s: 2, g: 500, add: true });
+      }
+    }
+    for (let i = scorches.length - 1; i >= 0; i--) { scorches[i].t += dt; if (scorches[i].t > scorches[i].max) scorches.splice(i, 1); }
+  }
+  function drawScorches(ctx) {
+    for (const s of scorches) {
+      if (!inView(s.x, s.y, 160)) continue;
+      const k = s.t / s.max, a = k < .7 ? 1 : 1 - (k - .7) / .3;
+      ctx.globalAlpha = a * .85;
+      spr(ctx, scorchSprite(), s.x, s.y + 1, 0, s.r / 62);
+      // sönen közler
+      if (k < .6) {
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = (1 - k / .6) * (.5 + .3 * Math.sin(FXT * 9 + s.x));
+        spr(ctx, glowSprite('#ff7a2a'), s.x, s.y - 2, 0, s.r * .7 / 32, s.r * .22 / 32);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+    resetXf(ctx);
+    ctx.globalAlpha = 1;
+  }
+  FM.on('meteor', d => {
+    if (!d) return;
+    const x = num(d.x, 0), y = num(d.y, 0);
+    if (!inView(x, y, 300)) return;
+    scorches.push({ x, y, r: 62, t: 0, max: 4 });
+    if (scorches.length > 8) scorches.shift();
+    for (let i = 0; i < 12; i++) {
+      const a = -PI / 2 + (rnd() - .5) * 2.6, sp2 = 300 + rnd() * 520;
+      P({ k: 'dot', x: x + (rnd() - .5) * 30, y: y - 10, vx: Math.cos(a) * sp2, vy: Math.sin(a) * sp2, life: .8 + rnd() * .5, c: i % 3 === 0 ? '#ff8a2a' : (i % 3 === 1 ? '#5a3a2e' : '#3a2620'), s: 3 + rnd() * 3.5, g: 1400, drag: .4 });
+    }
+    for (let i = 0; i < 8; i++) P({ k: 'puff', x: x + (rnd() - .5) * 60, y: y - 8 - rnd() * 14, vx: (rnd() - .5) * 320, vy: -40 - rnd() * 140, life: .9 + rnd() * .5, c: 'rgba(130,100,80,.78)', s: 20 + rnd() * 16, g: -30, drag: 2.4 });
+    if (FM.fx && FM.fx.sparks) FM.fx.sparks(x, y - 12, 16, '#ffb347', 560);
+    if (FM.fx && FM.fx.ring) FM.fx.ring(x, y - 8, 105, '#ff7a2a', .5, 10);
+    P({ k: 'glow', x, y: y - 20, vx: 0, vy: 0, life: .35, c: '#ffc070', s: 150, add: true });
+    const pl = S.player;
+    if (pl && !pl.ghost && Math.abs(rcx(pl) - x) < 520 && Math.abs(rcy(pl) - y) < 400 && FM.fx && FM.fx.shake) FM.fx.shake(.22);
+  });
+
+  /* ---------- ışınlanma girdabı (A: içe çeken mor, B: dışa açılan turkuaz) ---------- */
+  const TPS = new WeakMap();
+  function portalSwirl(x, y, dir, col, sy) {
+    swirls.push({ x, y, dir, col, sy, t: 0, max: dir < 0 ? .5 : .6, rot: rnd() * TAU });
+    if (swirls.length > 10) swirls.shift();
+    if (!budget()) return;
+    for (let i = 0; i < 12; i++) {
+      const a = rnd() * TAU;
+      if (dir < 0) { const rr = 58 + rnd() * 20; P({ k: i % 2 ? 'star' : 'twinkle', x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr * sy, vx: -Math.cos(a) * rr * 3.4, vy: -Math.sin(a) * rr * sy * 3.4, life: .28, c: i % 3 ? col : '#ffffff', s: i % 2 ? 3.2 : 12, rot: a, add: i % 2 === 0 }); }
+      else { const v = 140 + rnd() * 200; P({ k: i % 2 ? 'star' : 'twinkle', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * sy * .8 - 40, life: .45 + rnd() * .2, c: i % 3 ? col : '#ffffff', s: i % 2 ? 3.4 : 13, drag: 2.5, rot: a, add: i % 2 === 0 }); }
+    }
+  }
+  function scanTeleports() {
+    const L = S.L;
+    if (!L || !L.portals || !L.portals.length || !S.racers) return;
+    for (const r of S.racers) {
+      if (!r) continue;
+      const tp = r.tp | 0, dead = r.dead > 0;
+      const st = TPS.get(r);
+      if (!st) { TPS.set(r, { tp, dead }); continue; }
+      if (tp > st.tp && !st.dead && !dead) {
+        const cx = rcx(r), feet = num(r.y, 0) + num(r.h, 42);
+        for (const p of L.portals) {
+          if (Math.abs(p.bx - cx) < 80 && Math.abs(p.by - feet) < 110) {
+            if (inView(p.ax, p.ay, 160)) portalSwirl(p.ax, p.ay, -1, '#c084fc', num(p.h, 38) / num(p.r, 22));
+            if (inView(p.bx, p.by - 40, 160)) portalSwirl(p.bx, p.by - 40, 1, '#5ef0ff', 1.5);
+            break;
+          }
+        }
+      }
+      st.tp = tp; st.dead = dead;
+    }
+  }
+  function drawSwirls(ctx) {
+    if (!swirls.length) return;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (const w of swirls) {
+      if (!inView(w.x, w.y, 140)) continue;
+      const k = clamp(w.t / w.max, 0, 1), e = easeOutCubic(k);
+      const R0 = w.dir < 0 ? lerp(66, 4, e) : lerp(8, 84, e);
+      const a = w.dir < 0 ? Math.min(1, (1 - k) * 2.2) : (1 - k) * (1 - k);
+      ctx.globalAlpha = a * .8;
+      spr(ctx, glowSprite(w.col), w.x, w.y, 0, (w.dir < 0 ? 70 * (1 - k * .6) : 40 + 60 * e) / 32, (w.dir < 0 ? 70 * (1 - k * .6) : 40 + 60 * e) / 32 * w.sy);
+      ctx.globalCompositeOperation = 'source-over';
+      setXf(ctx, w.x, w.y, 0, 1, w.sy);
+      for (let arm = 0; arm < 3; arm++) {
+        ctx.beginPath();
+        for (let s = 0; s <= 14; s++) {
+          const u = s / 14, ang = w.rot + arm * TAU / 3 + u * 2.6 * w.dir, rr = R0 * (.2 + .8 * u);
+          const px = Math.cos(ang) * rr, py = Math.sin(ang) * rr;
+          if (s) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+        }
+        ctx.globalAlpha = a * .35; ctx.lineWidth = 9; ctx.strokeStyle = INK; ctx.stroke();
+        ctx.globalAlpha = a * .85; ctx.lineWidth = 6; ctx.strokeStyle = w.col; ctx.stroke();
+        ctx.globalAlpha = a; ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      }
+      resetXf(ctx);
+      ctx.globalCompositeOperation = 'lighter';
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+  function updSwirls(dt) {
+    for (let i = swirls.length - 1; i >= 0; i--) { const w = swirls[i]; w.t += dt; w.rot += dt * 11 * w.dir; if (w.t >= w.max) swirls.splice(i, 1); }
+  }
+
+  /* ---------- gayzer: fışkırma öncesi kabarcık, fışkırmada su + buhar ---------- */
+  const VST = new WeakMap();
+  const WCOLS = ['#ffffff', '#d6f4ff', '#8fd8ff', '#bfe9ff'];
+  function scanVents(dt) {
+    const L = S.L;
+    if (!L || !L.vents || !L.vents.length) return;
+    for (const v of L.vents) {
+      if (!v || v.kind !== 'burst') continue;
+      const w = num(v.w, 64), cx = num(v.x, 0) + w / 2, y = num(v.y, 0), h = num(v.h, 300);
+      if (!inView(cx, y - h / 2, h / 2 + 200)) continue;
+      let st = VST.get(v);
+      if (!st) { st = { act: !!v.act, a: 0, b: 0 }; VST.set(v, st); }
+      if (v.act && !st.act) {
+        for (let i = 0; i < 24; i++) P({ k: 'dot', x: cx + (rnd() - .5) * w * .7, y: y - 6, vx: (rnd() - .5) * 340, vy: -650 - rnd() * 520, life: .9 + rnd() * .5, c: WCOLS[i % 4], s: 2.6 + rnd() * 2.6, g: 1500, drag: .2 });
+        for (let i = 0; i < 8; i++) P({ k: 'puff', x: cx + (rnd() - .5) * w, y: y - 10, vx: (rnd() - .5) * 260, vy: -60 - rnd() * 120, life: .7 + rnd() * .4, c: 'rgba(240,250,255,.85)', s: 18 + rnd() * 14, g: -40, drag: 2.2 });
+        if (FM.fx && FM.fx.ring) FM.fx.ring(cx, y - 8, 70, '#bfe9ff', .4, 7);
+      }
+      st.act = !!v.act;
+      if (!budget()) continue;
+      if (v.act) {
+        st.a += dt * 30;
+        while (st.a >= 1) { st.a -= 1; P({ k: 'dot', x: cx + (rnd() - .5) * w * .5, y: y - 6, vx: (rnd() - .5) * 120, vy: -Math.sqrt(2 * 1500 * h) * (.8 + rnd() * .25), life: 1.1 + rnd() * .3, c: WCOLS[(rnd() * 4) | 0], s: 2.2 + rnd() * 2.4, g: 1500, drag: .15 }); }
+        st.b += dt * 11;
+        while (st.b >= 1) { st.b -= 1; P({ k: 'puff', x: cx + (rnd() - .5) * w * .8, y: y - h * (.5 + rnd() * .45), vx: (rnd() - .5) * 90, vy: -30 - rnd() * 70, life: .7 + rnd() * .4, c: 'rgba(235,248,255,.7)', s: 16 + rnd() * 16, g: -30, drag: 1.5 }); }
+      } else if (num(v.k, 0) > 0) {
+        st.a += dt * (6 + v.k * 26);
+        while (st.a >= 1) { st.a -= 1; P({ k: 'dot', x: cx + (rnd() - .5) * w * .6, y: y - 3, vx: (rnd() - .5) * 70, vy: -110 - rnd() * 200 * v.k, life: .3 + rnd() * .2, c: '#e8f8ff', s: 1.8 + rnd() * 1.8, g: 900 }); }
+        st.b += dt * 5 * v.k;
+        while (st.b >= 1) { st.b -= 1; P({ k: 'puff', x: cx + (rnd() - .5) * w * .5, y: y - 8, vx: (rnd() - .5) * 40, vy: -40 - rnd() * 40, life: .5 + rnd() * .3, c: 'rgba(240,250,255,.6)', s: 10 + rnd() * 8, g: -40, drag: 1.5 }); }
+      } else { st.a = 0; st.b = 0; }
+    }
+  }
+
+  /* ---------- eleme: duman + "ELENDİ!" + yükselen hayalet ---------- */
+  FM.on('eliminated', d => {
+    const r = d && d.r;
+    if (!r || !isFinite(r.x) || !isFinite(r.y)) return;
+    const x = rcx(r), y = rcy(r);
+    if (!inView(x, y, 220)) return;
+    for (let i = 0; i < 7; i++) P({ k: 'puff', x: x + (rnd() - .5) * 26, y: y + (rnd() - .5) * 20, vx: (rnd() - .5) * 320, vy: -40 - rnd() * 120, life: .7 + rnd() * .4, c: i % 2 ? 'rgba(110,98,128,.62)' : 'rgba(200,192,214,.6)', s: 14 + rnd() * 12, g: -50, drag: 2.6 });
+    if (FM.fx && FM.fx.sparks) FM.fx.sparks(x, y, 14, '#ff5a6e', 440);
+    P({ k: 'glow', x, y, vx: 0, vy: 0, life: .3, c: '#ff5a6e', s: 110, add: true });
+    P({ k: 'text', x, y: num(r.y, y) - 78, vx: 0, vy: -26, life: 1.7, c: '#ff4d5e', s: 26, g: 0, str: 'ELENDİ!' });
+    ghosts.push({ x, y: num(r.y, y) + num(r.h, 42) - 18, id: r.id, skin: r.skin, t: 0, max: 1.9, ph: rnd() * TAU });
+    if (ghosts.length > 6) ghosts.shift();
+  });
+  function drawGhosts(ctx) {
+    if (!ghosts.length || typeof R.portrait !== 'function') return;
+    for (const g of ghosts) {
+      const k = clamp(g.t / g.max, 0, 1);
+      const yy = g.y - 18 - 110 * easeOutCubic(k), xx = g.x + Math.sin(g.t * 4.5 + g.ph) * 9;
+      if (!inView(xx, yy, 80)) continue;
+      const a = (k < .12 ? k / .12 : 1) * (1 - k);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = a * .55;
+      spr(ctx, glowSprite('#e8e0ff'), xx, yy, 0, 44 / 32);
+      ctx.globalCompositeOperation = 'source-over';
+      let c = null;
+      try { c = R.portrait(g.id, 72, { skin: g.skin, ring: false }); } catch (e) { c = null; }
+      if (c) {
+        ctx.globalAlpha = a * .8;
+        setXf(ctx, xx, yy, Math.sin(g.t * 3 + g.ph) * .12, 1, 1);
+        ctx.drawImage(c, -24, -24, 48, 48);
+        // dalgalı hayalet kuyruğu
+        ctx.beginPath(); ctx.moveTo(-15, 14);
+        for (let i = 0; i <= 6; i++) ctx.lineTo(-15 + i * 5, 26 + (i % 2 ? -5 : 3) + Math.sin(g.t * 9 + i) * 2);
+        ctx.lineTo(15, 14); ctx.closePath();
+        ctx.globalAlpha = a * .45; ctx.fillStyle = '#efeaff'; ctx.fill();
+      }
+    }
+    resetXf(ctx);
+    ctx.globalAlpha = 1;
+  }
+  function updGhosts(dt) { for (let i = ghosts.length - 1; i >= 0; i--) { ghosts[i].t += dt; if (ghosts[i].t >= ghosts[i].max) ghosts.splice(i, 1); } }
+
+  /* ---------- Altın Avı: düşen altın saçılması (yerel olay + ağdan gelen dropCoins) ---------- */
+  let coinL = null, coinN = 0;
+  function scanDrops() {
+    const L = S.L;
+    if (!L || !L.coins) { coinL = null; return; }
+    const n = L.coins.length;
+    if (L !== coinL) { coinL = L; coinN = n; return; }
+    if (n <= coinN) { coinN = n; return; }
+    let gx = 0, gy = 0, gv = 0, gk = null;
+    const flush = () => {
+      if (!gv || !inView(gx, gy, 180)) return;
+      for (let i = 0; i < 10; i++) { const a = rnd() * TAU, v = 90 + rnd() * 200; P({ k: i % 2 ? 'star' : 'twinkle', x: gx, y: gy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, life: .45 + rnd() * .3, c: i % 3 ? '#ffd23f' : '#ffffff', s: i % 2 ? 3 : 12, g: 300, drag: 1.5, rot: a, add: i % 2 === 0 }); }
+      if (FM.fx && FM.fx.ring) FM.fx.ring(gx, gy, 46, '#ffd23f', .35, 5);
+      P({ k: 'text', x: gx, y: gy - 34, vx: 0, vy: -46, life: 1.2, c: '#ffb020', s: 20, g: 0, str: '-' + gv });
+    };
+    for (let i = coinN; i < n; i++) {
+      const co = L.coins[i];
+      if (!co || !co.drop) continue;
+      const key = String(co.id || '').split(':')[0];
+      if (key !== gk) { flush(); gk = key; gx = num(co.x, 0); gy = num(co.y, 0); gv = 0; }
+      gv += num(co.v, 1);
+    }
+    flush();
+    coinN = n;
+  }
+  FM.on('coins:bonus', d => {
+    const r = d && d.r;
+    if (!r || !inView(rcx(r), rcy(r), 160)) return;
+    P({ k: 'text', x: rcx(r), y: num(r.y, 0) - 40, vx: 0, vy: -40, life: 1.5, c: '#ffd23f', s: 24, g: 0, str: '+' + (num(d.n, 15) | 0) });
+    for (let i = 0; i < 14; i++) { const a = -PI / 2 + (rnd() - .5) * 2.2, v = 180 + rnd() * 260; P({ k: 'star', x: rcx(r), y: rcy(r), vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .6 + rnd() * .3, c: i % 2 ? '#ffd23f' : '#fff6c0', s: 3.6, g: 500, drag: 1, rot: a }); }
+  });
+  /* ---------- eleme kapısı: oyuncu geçince yeşil parıltı ---------- */
+  FM.on('gate', d => {
+    const r = d && d.r, L = S.L;
+    if (!r || r !== S.player || !L || !L.gates) return;
+    const g = L.gates[d.n | 0];
+    if (!g || !inView(g.x, g.y - 60, 120)) return;
+    if (FM.fx && FM.fx.ring) FM.fx.ring(g.x, g.y - 60, 70, '#3ddc84', .4, 7);
+    for (let i = 0; i < 10; i++) { const a = rnd() * TAU, v = 120 + rnd() * 160; P({ k: 'star', x: g.x, y: g.y - 60, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5, c: i % 2 ? '#3ddc84' : '#e6ffe8', s: 3.2, g: 200, drag: 1.5, rot: a }); }
+  });
+  /* ---------- çok oyunculu: bağlantı koptu ---------- */
+  FM.on('mp:drop', d => {
+    const r = d && d.r;
+    if (!r || !(S.mode === 'race' || S.mode === 'count')) return;
+    const x = rcx(r), y = rcy(r);
+    if (!inView(x, y, 120)) return;
+    for (let i = 0; i < 7; i++) P({ k: 'puff', x: x + (rnd() - .5) * 20, y: y + (rnd() - .5) * 20, vx: (rnd() - .5) * 160, vy: -30 - rnd() * 80, life: .8 + rnd() * .4, c: 'rgba(170,160,190,.8)', s: 14 + rnd() * 10, g: -30, drag: 2.2 });
+    P({ k: 'text', x, y: num(r.y, y) - 36, vx: 0, vy: -24, life: 1.9, c: '#d9d2ea', s: 15, g: 0, str: 'BAĞLANTI KOPTU' });
+  });
+  FM.on('race:start', () => { swirls.length = 0; ghosts.length = 0; scorches.length = 0; coinL = null; });
+
+  /* =====================================================================
      ANA ÇİZİM GİRİŞLERİ
      ===================================================================== */
   R.drawEnts = function (ctx) {
@@ -2560,6 +2947,8 @@
       for (const e of L) if (e && e.type === 'trap') drawTrap(ctx, e);
       drawSnaps(ctx);
       for (const e of L) if (e && e.type === 'saw') drawSaw(ctx, e);
+      drawScorches(ctx);
+      for (const e of L) if (e && e.type === 'meteor') drawMeteorWarn(ctx, e);
     } finally {
       resetXf(ctx);
       ctx.restore();
@@ -2568,7 +2957,7 @@
   };
 
   R.drawParticles = function (ctx) {
-    if (!S.L) return;
+    if (!S.L) { if (typeof R.drawPlates === 'function') R.drawPlates(ctx); return; }
     ctx.save();
     grabXf(ctx, true);
     try {
@@ -2590,11 +2979,14 @@
           case 'mis': drawMis(ctx, e); break;
           case 'bolt': drawBoltCloud(ctx, e); break;
           case 'flash': drawFlash(ctx, e); break;
+          case 'meteor': drawMeteorRock(ctx, e); break;
         }
       }
       resetXf(ctx);
       drawRings(ctx);
+      drawSwirls(ctx);
       drawParticleList(ctx);
+      drawGhosts(ctx);
       // arayüz benzeri katman: nişangâhlar en üstte
       for (const e of L) {
         if (!e) continue;
@@ -2604,6 +2996,9 @@
       drawTextParticles(ctx);
     } finally {
       resetXf(ctx);
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+      // isim plakaları + emoji balonları en üstte (füze, "!" uyarısı ve parçacıklar plakaların altında kalır)
+      if (typeof R.drawPlates === 'function') { try { R.drawPlates(ctx); } catch (e) { /* plaka hatası efektleri engellemesin */ } }
       ctx.restore();
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
@@ -2618,10 +3013,13 @@
     FXT += dt;
     updParts(dt);
     updRings(dt);
+    updSwirls(dt);
+    updGhosts(dt);
     if (S.L) {
       updEnts(dt);
       updTrails(dt);
       updSnaps(dt);
+      try { updMeteors(dt); scanTeleports(); scanVents(dt); scanDrops(); } catch (e) { /* yeni efektler oyunu durdurmasın */ }
     }
     updScreen(dt);
   });

@@ -1627,9 +1627,10 @@
   try { if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => { plateVer++; }); } catch (e) { /* yok say */ }
   let measureCtx = null;
   const TWC = new Map();   // ad genişliği önbelleği (her karede yazı ölçümü yapılmasın)
-  function plateSprite(name, style, big) {
+  function plateSprite(name, style, big, col) {
     const fs = big ? 12.5 : 10.5;
-    const key = 'fmplate|' + name + '|' + style + '|' + (big ? 1 : 0) + '|' + plateVer;
+    col = col || '';
+    const key = 'fmplate|' + name + '|' + style + '|' + (big ? 1 : 0) + '|' + plateVer + '|' + col;
     let tw = TWC.get(key);
     if (tw == null) {
       if (!measureCtx) measureCtx = mkCanvas(4, 4).getContext('2d');
@@ -1639,7 +1640,8 @@
       TWC.set(key, tw);
     }
     const icon = style === 'clan' ? fs * 0.95 : 0;
-    const ph = fs + 7, pw = tw + 15 + icon;
+    const dot = col ? fs * 0.78 + 3 : 0;          // oyuncu rengi noktası (sol uçta)
+    const ph = fs + 7, pw = tw + 15 + icon + dot;
     const pad = 7, top = style === 'fire' ? 7 : 0;
     const W = pw + pad * 2, H = ph + pad * 2 + top;
     const spr = FM.gfx.sprite(key, W, H, W / 2, H - pad, g => {
@@ -1658,7 +1660,7 @@
         g.fillStyle = gr; g.fill();
         g.lineWidth = 1.4; g.strokeStyle = '#c0182e'; g.stroke();
         g.beginPath(); rrect(g, x + 2, y + 2, pw - 4, ph - 4, r - 2); g.lineWidth = 0.6; g.strokeStyle = 'rgba(255,90,100,0.4)'; g.stroke();
-        g.beginPath(); spadePath(g, x + 7.5 + icon * 0.3, y + ph / 2 - 0.4, icon * 0.42); g.fillStyle = '#e0243a'; g.fill();
+        g.beginPath(); spadePath(g, x + 7.5 + dot + icon * 0.3, y + ph / 2 - 0.4, icon * 0.42); g.fillStyle = '#e0243a'; g.fill();
         tstroke = '#000000'; tlw = 2.4;
       } else if (style === 'neon') {
         pill(); g.lineWidth = 6; g.strokeStyle = 'rgba(255,59,212,0.28)'; g.stroke();
@@ -1686,11 +1688,20 @@
         g.save(); pill(); g.clip(); g.beginPath(); ell(g, 0, y + ph * 0.16, pw * 0.46, ph * 0.28); g.fillStyle = 'rgba(255,255,255,0.32)'; g.fill(); g.restore();
         tstroke = '#5a0a00'; tlw = 2.8;
       } else {
-        pill(); g.fillStyle = big ? 'rgba(20,10,40,0.72)' : 'rgba(16,8,32,0.6)'; g.fill();
-        g.lineWidth = 1; g.strokeStyle = big ? 'rgba(255,225,120,0.7)' : 'rgba(255,255,255,0.22)'; g.stroke();
+        pill(); g.fillStyle = big ? 'rgba(20,10,40,0.74)' : 'rgba(16,8,32,0.64)'; g.fill();
+        if (col && !big) { g.lineWidth = 1.5; g.strokeStyle = rgba(col, 0.85); g.stroke(); }
+        else { g.lineWidth = 1; g.strokeStyle = big ? 'rgba(255,225,120,0.7)' : 'rgba(255,255,255,0.22)'; g.stroke(); }
+      }
+      if (col) {
+        // oyuncu rengi: koyu halkalı parlak nokta (aynı karakteri seçen oyuncular ayırt edilsin; ayak halkasıyla aynı renk)
+        const dr = fs * 0.39, dx = x + ph / 2 + 0.5, dy = y + ph / 2;
+        g.beginPath(); g.arc(dx, dy, dr, 0, TAU); g.lineWidth = 2.2; g.strokeStyle = 'rgba(10,4,22,0.9)'; g.stroke();
+        const gr = g.createRadialGradient(dx - dr * 0.35, dy - dr * 0.4, 0.3, dx, dy, dr);
+        gr.addColorStop(0, mix(col, '#ffffff', 0.55)); gr.addColorStop(0.6, col); gr.addColorStop(1, mix(col, '#000000', 0.25));
+        g.fillStyle = gr; g.fill();
       }
       g.font = fs + 'px ' + FM.FONT_H; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
-      const tx = icon * 0.5 + 0.2, ty = y + ph / 2 + 0.6;
+      const tx = icon * 0.5 + dot * 0.5 + 0.2, ty = y + ph / 2 + 0.6;
       g.lineWidth = tlw; g.strokeStyle = tstroke; g.strokeText(name, tx, ty);
       g.fillStyle = tcol; g.fillText(name, tx, ty);
     });
@@ -1712,9 +1723,10 @@
     const k = clamp(1 - h / 260, 0.25, 1);
     const s = shadowSprite();
     const ws = (r.slide ? 1.45 : 1) * (0.55 + 0.45 * k) * (r.id === 'LUL' ? 1.12 : 1), hs = 0.6 + 0.4 * k;
-    ctx.globalAlpha = 0.2 + 0.8 * k;
+    ctx.globalAlpha = (0.2 + 0.8 * k) * (r.stale ? 0.5 : 1);
     ctx.drawImage(s.c, cx - s.ox * ws, gy - s.oy * hs, s.w * ws, s.h * hs);
     ctx.globalAlpha = 1;
+    if (TAGS && h < 160) drawFootRing(ctx, r, gy, clamp(1 - h / 160, 0, 1));
   }
   function drawSpeedFx(ctx, r, a, fx, fy, onBack) {
     const t = a.t;
@@ -1957,7 +1969,7 @@
     }
     // karakter
     ctx.save();
-    if (blinkHide) ctx.globalAlpha = 0.32;
+    if (blinkHide || r.stale) ctx.globalAlpha = (blinkHide ? 0.32 : 1) * (r.stale ? 0.45 : 1);
     ctx.translate(fx + shake, fy);
     ctx.scale(face * SC, SC);
     drawFig(ctx, id, skin, racerM, p, a.t, true);
@@ -1972,7 +1984,110 @@
     if (r.pull > 0) drawMagnet(ctx, r, a, fx, fy - 26);
   }
   const PLATE_STYLES = { basic: 1, gold: 1, clan: 1, neon: 1, fire: 1 };
-  function racerPlate(r, isPlayer) { return plateSprite(String(r.name || r.id || ''), PLATE_STYLES[r.plate] ? r.plate : 'basic', isPlayer); }
+  function racerPlate(r, isPlayer) {
+    return plateSprite(String(r.nick || r.name || r.id || '').slice(0, 18), PLATE_STYLES[r.plate] ? r.plate : 'basic', isPlayer, TAGS ? racerColor(r) : '');
+  }
+
+  /* =====================================================================
+     ÇOK OYUNCULU İŞARETLERİ — oyuncu rengi (plaka noktası + ayak halkası), emoji balonu,
+     zayıf bağlantı simgesi, izleyici oku
+     ===================================================================== */
+  /** 10 ayrık oyuncu rengi (ilk 6'sı render-hud RCOL ile aynı sırada; r.idx sırasıyla; ağda idx herkeste aynı → herkes aynı rengi görür). HUD da kullanabilir. */
+  const PCOLS = ['#ffd23f', '#ff5a6e', '#4fb3ff', '#5ee07a', '#c084fc', '#ff9f43', '#22d3e6', '#ff6ec7', '#a3e635', '#f2f2f7'];
+  function racerColor(r) {
+    let i = r && typeof r.idx === 'number' && isFinite(r.idx) ? r.idx | 0 : -1;
+    if (i < 0 && FM.S && FM.S.racers) i = FM.S.racers.indexOf(r);
+    return PCOLS[max(0, i) % PCOLS.length];
+  }
+  R.PLAYER_COLORS = PCOLS;
+  R.racerColor = racerColor;
+  /** Renk etiketleri: ağ yarışında ya da 4'ten fazla yarışçıda (aynı karakter tekrar edebilir). 4 kişilik tek oyunculu görünüm aynen kalır. */
+  let TAGS = false;
+  function tagsOn() { const S = FM.S; return !!(S && S.mode !== 'demo' && (S.netRole || (S.racers && S.racers.length > 4))); }
+  function footRingSprite(col) {
+    return FM.gfx.sprite('fmc|fring|' + col, 64, 26, 32, 13, g => {
+      g.save(); g.scale(1, 0.34);
+      g.beginPath(); g.arc(0, 0, 25, 0, TAU); g.lineWidth = 7; g.strokeStyle = 'rgba(8,4,20,0.55)'; g.stroke();
+      const gr = g.createRadialGradient(0, 0, 10, 0, 0, 27); gr.addColorStop(0, rgba(col, 0)); gr.addColorStop(0.75, rgba(col, 0.22)); gr.addColorStop(1, rgba(col, 0));
+      g.fillStyle = gr; g.fill();
+      g.beginPath(); g.arc(0, 0, 25, 0, TAU); g.lineWidth = 3.6; g.strokeStyle = col; g.stroke();
+      g.beginPath(); g.arc(0, 0, 25, PI * 1.1, PI * 1.9); g.lineWidth = 1.4; g.strokeStyle = mix(col, '#ffffff', 0.6); g.stroke();
+      g.restore();
+    });
+  }
+  function drawFootRing(ctx, r, gy, k) {
+    const s = footRingSprite(racerColor(r)), cx = r.x + r.w / 2;
+    const ws = (0.75 + 0.25 * k) * (r.slide ? 1.25 : 1);
+    ctx.globalAlpha = (0.35 + 0.6 * k) * (r.stale ? 0.5 : 1);
+    ctx.drawImage(s.c, cx - s.ox * ws, gy - s.oy * ws, s.w * ws, s.h * ws);
+    ctx.globalAlpha = 1;
+  }
+  /* Emoji balonu: kendi küçük LRU önbelleği (ağdan keyfi kısa metin gelebilir; gfx.sprite önbelleği sınırsız) */
+  const EMO = new Map();
+  const EMO_FONT = '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
+  function emoSprite(str) {
+    const k = FM.gfx.rs(), key = str + '|' + k + '|' + plateVer;
+    let s = EMO.get(key);
+    if (s) { EMO.delete(key); EMO.set(key, s); return s; }
+    const txt = /^[\x20-\x7e]+$/.test(str);                 // "GG" gibi düz yazı → başlık yazı tipi
+    if (!measureCtx) measureCtx = mkCanvas(4, 4).getContext('2d');
+    const fsz = txt ? 17 : 21;
+    measureCtx.font = fsz + 'px ' + (txt ? FM.FONT_H : EMO_FONT);
+    const tw = Math.ceil(measureCtx.measureText(str).width);
+    const bw = max(38, tw + 18), bh = 34, tail = 8, pad = 4;
+    const W = bw + pad * 2, H = bh + tail + pad * 2;
+    const c = mkCanvas(W * k, H * k), g = c.getContext('2d');
+    g.scale(k, k); g.translate(W / 2, H - pad);              // orijin: kuyruğun ucu
+    const x = -bw / 2, y = -tail - bh;
+    const path = () => {
+      g.beginPath();
+      const rr = 13;
+      g.moveTo(x + rr, y); g.lineTo(x + bw - rr, y); g.quadraticCurveTo(x + bw, y, x + bw, y + rr);
+      g.lineTo(x + bw, y + bh - rr); g.quadraticCurveTo(x + bw, y + bh, x + bw - rr, y + bh);
+      g.lineTo(5, y + bh); g.quadraticCurveTo(1, -tail * 0.4, -1, 0); g.quadraticCurveTo(-3, y + bh + tail * 0.35, -7, y + bh);
+      g.lineTo(x + rr, y + bh); g.quadraticCurveTo(x, y + bh, x, y + bh - rr);
+      g.lineTo(x, y + rr); g.quadraticCurveTo(x, y, x + rr, y); g.closePath();
+    };
+    path(); g.lineJoin = 'round'; g.lineWidth = 4; g.strokeStyle = '#1a0d2a'; g.stroke();
+    const gr = g.createLinearGradient(0, y, 0, y + bh); gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#e4ddf2');
+    g.fillStyle = gr; g.fill();
+    g.save(); path(); g.clip(); g.beginPath(); ell(g, 0, y + 5, bw * 0.42, 5); g.fillStyle = 'rgba(255,255,255,0.9)'; g.fill(); g.restore();
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const ty = y + bh / 2 + 1;
+    if (txt) {
+      g.font = fsz + 'px ' + FM.FONT_H; g.lineJoin = 'round';
+      g.lineWidth = 4; g.strokeStyle = '#5a2a00'; g.strokeText(str, 0, ty + 0.5);
+      const tg = g.createLinearGradient(0, ty - 9, 0, ty + 9); tg.addColorStop(0, '#fff3a0'); tg.addColorStop(0.5, '#ffc21f'); tg.addColorStop(1, '#ff7a12');
+      g.fillStyle = tg; g.fillText(str, 0, ty + 0.5);
+    } else {
+      g.font = fsz + 'px ' + EMO_FONT; g.fillStyle = '#1a0d2a'; g.fillText(str, 0, ty + 1);
+    }
+    s = { c, w: W, h: H, ox: W / 2, oy: H - pad, bh: bh + tail };
+    EMO.set(key, s);
+    if (EMO.size > 40) { const old = EMO.keys().next().value; freeCanvas(EMO.get(old).c); EMO.delete(old); }
+    return s;
+  }
+  /** Zayıf bağlantı (r.stale): kırmızı çizgili wifi simgesi */
+  function weakSprite() {
+    return FM.gfx.sprite('fmc|weak', 22, 20, 11, 10, g => {
+      g.beginPath(); g.arc(0, 0, 9, 0, TAU); g.fillStyle = 'rgba(20,10,40,0.82)'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = 'rgba(255,255,255,0.35)'; g.stroke();
+      g.lineCap = 'round'; g.strokeStyle = '#e8e4f2';
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(0, 4.2, 2.2 + i * 2.6, -PI * 0.78, -PI * 0.22); g.lineWidth = 1.6; g.stroke(); }
+      g.beginPath(); g.arc(0, 4.2, 1.1, 0, TAU); g.fillStyle = '#e8e4f2'; g.fill();
+      g.beginPath(); g.moveTo(-5.5, -5.5); g.lineTo(5.5, 5.5); g.lineWidth = 2.4; g.strokeStyle = '#ff4d5e'; g.stroke();
+    });
+  }
+  /** İzleyici oku (camgöbeği, göz simgeli): elenmiş/geç katılan oyuncunun kamerasının izlediği yarışçı */
+  function specArrowSprite() {
+    return FM.gfx.sprite('fmc|sparrow', 24, 22, 12, 19, g => {
+      const path = g2 => { g2.moveTo(-8.4, -14); g2.quadraticCurveTo(0, -16, 8.4, -14); g2.quadraticCurveTo(9.6, -13, 8.6, -11.6); g2.lineTo(1.6, -1.4); g2.quadraticCurveTo(0, 0.6, -1.6, -1.4); g2.lineTo(-8.6, -11.6); g2.quadraticCurveTo(-9.6, -13, -8.4, -14); g2.closePath(); };
+      g.beginPath(); path(g); g.lineJoin = 'round'; g.lineWidth = 4; g.strokeStyle = '#06303a'; g.stroke();
+      const gr = g.createLinearGradient(0, -15, 0, 0); gr.addColorStop(0, '#d8fbff'); gr.addColorStop(0.45, '#3fe0f0'); gr.addColorStop(1, '#0f8fb0');
+      g.fillStyle = gr; g.fill();
+      g.beginPath(); ell(g, 0, -10.6, 4.2, 2.4); g.fillStyle = '#ffffff'; g.fill();
+      g.beginPath(); g.arc(0, -10.6, 1.4, 0, TAU); g.fillStyle = '#06303a'; g.fill();
+    });
+  }
   /** Plakalar çakışınca kısaltılan bot plakasının yerine çizilen küçük renkli işaret (karakterin ana rengi). */
   const MARK_COL = { TAFTAF: '#b46cff', Caner: '#ff3b4e', LUL: '#4f8dff', ertan: '#36d0e0', Kral: '#ffc93a', Nuss: '#eef3ff', baso: '#3cc878' };
   function markSprite(col) {
@@ -2011,8 +2126,8 @@
       const w = (s.w - 12) * ps, h = (s.ph || 18) * ps + 1;
       let y = a.plY, cmp = 0;
       if (isP) {
-        PLACED.push({ x: a.plX, y, w, h });
-        PLACED.push({ x: a.plX, y: y - h, w: 18 * ps, h: 22 * ps + 5, arrow: true });   // ok + zıplama payı (dar)
+        PLACED.push({ x: a.plX, y, w, h, pl: true });
+        PLACED.push({ x: a.plX, y: y - h, w: 18 * ps, h: 22 * ps + 5, arrow: true, pl: true });   // ok + zıplama payı (dar)
       } else {
         // histerezis: kısaltılmış plaka geri açılmak için biraz daha geniş boşluk ister
         const wt = (a.plC || 0) > 0.5 ? w + 10 * ps : w;
@@ -2045,7 +2160,7 @@
     const x = a.plX;
     if (pass === 0) {
       if (c <= 0.01) return;
-      const ms = markSprite(MARK_COL[r.id] || '#ffffff'), z = ps * (0.75 + 0.25 * c);
+      const ms = markSprite(TAGS ? racerColor(r) : (MARK_COL[r.id] || '#ffffff')), z = ps * (0.75 + 0.25 * c);
       ctx.globalAlpha = al * c;
       ctx.drawImage(ms.c, x - ms.ox * z, a.plY - 1 - ms.oy * z, ms.w * z, ms.h * z);
       ctx.globalAlpha = 1;
@@ -2058,12 +2173,52 @@
     ctx.globalAlpha = al * (1 - c);
     ctx.drawImage(s.c, x - s.ox * z, y - s.oy * z, s.w * z, s.h * z);
     if (isPlayer) {
-      const ar = arrowSprite(), b = abs(sin(a.t * 4.2)) * 4;
+      const ar = FOCUS_SPEC ? specArrowSprite() : arrowSprite(), b = abs(sin(a.t * 4.2)) * 4;
       const tipY = y - ((s.ph || 20) + 2) * ps - b;
       ctx.drawImage(ar.c, x - ar.ox * ps, tipY - ar.oy * ps, ar.w * ps, ar.h * ps);
     }
+    if (r.stale && c < 0.5) {
+      const ws = weakSprite(), wz = ps * 0.95;
+      ctx.globalAlpha = 0.65 + 0.35 * sin(a.t * 6);
+      ctx.drawImage(ws.c, x + (s.w / 2 - 6) * z + 2 * ps - ws.ox * wz, y - (s.ph || 18) * z * 0.5 - ws.oy * wz, ws.w * wz, ws.h * wz);
+    }
     ctx.globalAlpha = 1;
   }
+  /** Emoji balonu (pass 2): plakanın (oyuncuda okun) üstünde; t 3 → 0 (açılışta zıplar, sonda solar) */
+  function drawEmote(ctx, r, isPlayer) {
+    const e = r.emote, a = anim(r);
+    if (!e || typeof e.id !== 'string' || !e.id || a.plY == null) return;
+    const t = typeof e.t === 'number' && isFinite(e.t) ? e.t : 0;
+    if (t <= 0) return;
+    const ps = plateScale(), c = isPlayer ? 0 : (a.plC || 0);
+    const s = racerPlate(r, isPlayer);
+    let y = a.plY + (a.plO || 0) * (1 - c) - ((s.ph || 18) * ps) * (1 - c) - 2;
+    if (isPlayer) y -= 22 * ps + 7;               // okun üstü
+    const age = max(0, 3 - t), pop = age < 0.28 ? easeBack(age / 0.28) : 1;
+    const es = emoSprite(e.id.slice(0, 8)), z0 = ps * (isPlayer ? 0.95 : 0.85), z = z0 * max(0.05, pop);
+    // kalabalıkta balonlar üst üste binmesin: oyuncu önce yerleşir; diğerleri yana/yukarı kayar (yumuşak geçişli)
+    const bw = (es.w - 8) * z0, bh = es.bh * z0;
+    let ox = 0, oy = 0, hit = true;
+    for (let j = 0; j < EM_TRY.length && hit; j++) {
+      ox = EM_TRY[j][0] * bw; oy = EM_TRY[j][1] * bh;
+      hit = false;
+      const cx = a.plX + ox, by = y + oy;
+      for (const q of EMP) if (abs(q.x - cx) < (q.w + bw) / 2 && by - bh < q.y && q.y - q.h < by) { hit = true; break; }
+    }
+    if (hit && !isPlayer) return;                 // aşırı kalabalık: yer yoksa bu karede çizme (oyuncunun plakası örtülmesin)
+    if (hit) { ox = 0; oy = 0; }
+    EMP.push({ x: a.plX + ox, y: y + oy, w: bw, h: bh });
+    const snap = a.emT == null || a.emT !== e;
+    a.emT = e;
+    a.emX = snap ? ox : lerp(a.emX || 0, ox, 0.25); a.emY = snap ? oy : lerp(a.emY || 0, oy, 0.25);
+    const by = y + a.emY + sin(a.t * 3.2) * 1.5;
+    ctx.globalAlpha = clamp(t / 0.35, 0, 1) * (r.stale ? 0.6 : 1) * (hit ? 0.8 : 1);
+    ctx.drawImage(es.c, a.plX + a.emX - es.ox * z, by - es.oy * z, es.w * z, es.h * z);
+    ctx.globalAlpha = 1;
+  }
+  const EMP = [];
+  const EM_TRY = [[0, 0], [0.92, 0], [-0.92, 0], [0, -0.95], [0.92, -0.95], [-0.92, -0.95], [1.84, 0], [-1.84, 0], [1.84, -0.95], [-1.84, -0.95], [0, -1.9], [0.92, -1.9], [-0.92, -1.9]];
+  function easeBack(t) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
   /** Koyu temada (kale) koyu renkli karakterlerin siluet kaybını önleyen sıcak arka ışık gücü (0..1).
       Klasik görünümde elle ayarlı (koyu gövde + koyu dış hat: Caner, ertan, LUL); diğer skin'lerde gövde parlaklığından. */
   const DARK_K = new Map(), DARK_KLASIK = { Caner: 1, ertan: 0.85, LUL: 0.8, baso: 0.4 };
@@ -2088,12 +2243,17 @@
     const x0 = cam.x - 140, x1 = cam.x + (V.VW || 1000) + 140, y0 = cam.y - 200, y1 = cam.y + (V.VH || 540) + 200;
     stampNow();
     const list = LIST; list.length = 0;
+    platesDue = false;
     let pl = null;
     const showPlayer = !!S.player && S.mode !== 'demo';
+    // izleyici kamerası (elenmiş / geç katılan): izlenen yarışçı oyuncu gibi öne alınır, camgöbeği "göz" oku alır
+    const P = S.player, watch = showPlayer && P && (P.ghost || P.out) && S.spec && S.spec !== P && !S.spec.out ? S.spec : null;
+    FOCUS_SPEC = !!watch;
+    TAGS = tagsOn();
     for (const r of S.racers) {
-      if (!r || r.dead > 0) continue;
+      if (!r || r.dead > 0 || r.off) continue;
       if (r.x + r.w < x0 || r.x > x1 || r.y + r.h < y0 || r.y > y1) continue;
-      if (showPlayer && r === S.player) pl = r; else list.push(r);
+      if ((showPlayer && r === P) || r === watch) pl = r; else list.push(r);
     }
     if (pl) list.push(pl);
     if (!list.length) return;
@@ -2110,11 +2270,37 @@
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
     try { layoutPlates(list, pl); } catch (e) { /* yerleşim hatası plakaları engellemesin */ }
-    for (let pass = 0; pass < 2; pass++) {
-      for (const r of list) { try { drawPlate(ctx, r, r === pl, pass); } catch (e) { if (errCount++ < 5) console.error('[render-chars plate]', e); } }
-    }
+    platePl = pl;
+    // plakalar füze/uyarı/parçacıkların ÜSTÜNDE kalsın: render-fx (R.platesLate) drawParticles sonunda R.drawPlates'i çağırır
+    if (R.platesLate) platesDue = true; else drawPlateLayers(ctx);
     ctx.globalAlpha = 1;
     ctx.restore();
+  };
+  let platesDue = false, platePl = null, FOCUS_SPEC = false;
+  function drawPlateLayers(ctx) {
+    const list = LIST, pl = platePl;
+    for (let pass = 0; pass < 2; pass++) {
+      for (const r of list) {
+        try { drawPlate(ctx, r, r === pl, pass); }
+        catch (e) { if (errCount++ < 5) console.error('[render-chars plate]', e); }
+      }
+    }
+    EMP.length = 0;
+    for (const q of PLACED) if (q.pl) EMP.push(q);     // oyuncunun plakası ve oku balonların altında kalmasın
+    for (let i = list.length - 1; i >= 0; i--) {     // oyuncu (listenin sonunda) önce yerleşir
+      const r = list[i];
+      if (!r.emote) continue;
+      try { drawEmote(ctx, r, r === pl); } catch (e) { if (errCount++ < 5) console.error('[render-chars emote]', e); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  /** Yarışçı plakaları + emoji balonları (dünya koordinatı). drawRacers'tan sonra bir kez; render-fx parçacıklardan sonra çağırır. */
+  R.drawPlates = function (ctx) {
+    if (!platesDue) return;
+    platesDue = false;
+    ctx.save();
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    try { drawPlateLayers(ctx); } finally { ctx.restore(); }
   };
 
   /* =====================================================================

@@ -449,6 +449,7 @@
     const s = statusObj(), sig = [s.conn, s.phase, s.room, s.role, s.host, s.broker].join('|');
     if (sig === R.statusSig) return; R.statusSig = sig;
     emit('net:status', s);
+    pSoon();
   }
   function playersList() {
     const L = R.lob; if (!L) return [];
@@ -466,7 +467,7 @@
     const L = R.lob; if (!L) return null;
     return { code: R.code, host: R.hostPid, me: myPid(), isHost: R.role === 'host', st: L.st, cfg: clone(L.cfg) || {}, epoch: L.e, v: L.v, players: playersList(), max: MAXP };
   }
-  function emitLobby() { if (R.phase !== 'in') return; emit('net:lobby', lobbyView()); emitPlayers(true); }
+  function emitLobby() { if (R.phase !== 'in') return; emit('net:lobby', lobbyView()); emitPlayers(true); pSoon(); }
   function emitPlayers(force) {
     if (R.phase !== 'in') return;
     const pl = playersList();
@@ -1281,6 +1282,11 @@
     if (P.replyT || now() - (P.replyAt || -1e9) < 1000 || typeof setTimeout !== 'function') return;
     P.replyT = setTimeout(guard(function () { P.replyT = null; P.replyAt = now(); pBeat(true); }, 'pReply'), 150 + Math.random() * 600);
   }
+  // durum değişti (oda, lobi, yarış): nabzı ~250 ms içinde yolla (1 sn'lik tik de yakalar; en sık 0.9 sn'de bir)
+  function pSoon() {
+    if (!P.on || P.halt || P.soonT || typeof setTimeout !== 'function') return;
+    P.soonT = setTimeout(guard(function () { P.soonT = null; if (pMq() && pBeatSig() !== P.hbSig) pBeat(); }, 'pSoon'), 250);
+  }
   function pGone(pid) { delete P.peers[pid]; P.gone[pid] = now(); }
   function pView(e, t) {
     const c = P.cards[e.pid];
@@ -1688,6 +1694,7 @@
     if (typeof FM.on === 'function') {
       FM.on('save:reset', function () { ensureId(); P.cardDirty = true; });
       FM.on('meta:card', function () { P.cardDirty = true; P.myCardT = -1e9; });
+      for (const ev of ['race:start', 'match:start', 'match:end', 'ui:menu', 'mp:lobby']) FM.on(ev, function () { try { pSoon(); } catch (e) { } });
       // Varlık oyun açılınca başlar (main.js 'boot'; node testleri/hayaletler 'boot' yayınlamaz → presence(true) ile açılır).
       // ?pres=0 kapatır. Geliştirici modunda (dev=1) herkese açık aracılara gereksiz bağlanmamak için yalnız ?brokerUrl= ya da ?pres=1 ile.
       FM.on('boot', guard(function () {

@@ -1389,11 +1389,27 @@
     const x = num(e.x, 0), y = num(e.y, 0), w = num(e.w, 44), h = num(e.h, 76);
     if (!inView(x + w / 2, y + h / 2, 90)) return;
     const v = vis(e), age = num(e.age, 0), life = num(e.life, 10);
+    if (e.fly) {
+      // fırlatılan ağ (yönlü atış): katlanmış direk demeti havada döner, tepe küreleri parlar
+      const cx = x + w / 2, cy = y + h / 2, sp0 = num(v.spin, 0);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .4 + .2 * Math.sin(v.t * 20);
+      spr(ctx, glowSprite('#7be3ff'), cx, cy, 0, 1.1);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      // iki direk, demetin merkezi etrafında (direk orijini tabanı: 47 birim aşağı kaydır)
+      for (const s of [-1, 1]) {
+        const ox = s * 4, c = Math.cos(sp0), sn = Math.sin(sp0);
+        spr(ctx, netPoleSprite(), cx + c * ox + sn * 47, cy + sn * ox - c * 47, sp0 + s * .12, .9, .9);
+      }
+      resetXf(ctx);
+      return;
+    }
     const active = age > .6;
     let a = 1;
     if (life < 1.2) a = .35 + .65 * (Math.sin(life * 26) > -.2 ? 1 : 0);
     const ground = y + h;
-    const rise = clamp(easeOutBack(clamp(age / .38, 0, 1)), 0, 1.15);
+    // yere oturan ağ: iniş anından itibaren yeniden "açılır" (uçarken age tutulduğu için inişte sıfırdan)
+    const rt = v.landT != null ? Math.min(age, v.t - v.landT) : age;
+    const rise = clamp(easeOutBack(clamp(rt / .38, 0, 1)), 0, 1.15);
     // zemin gölgeleri
     ctx.globalAlpha = .28 * a; ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.ellipse(x + 2, ground + 2, 9, 2.6, 0, 0, TAU); ctx.ellipse(x + w - 2, ground + 2, 9, 2.6, 0, 0, TAU); ctx.fill();
@@ -1721,13 +1737,27 @@
     ctx.globalAlpha = 1;
   }
 
+  /* dalganın gidiş açısı: vx/vy (geri de gidebilir, eğik olabilir); yoksa dir; yoksa ileri */
+  function waveAng(e) {
+    const vx = num(e.vx, 0), vy = num(e.vy, 0);
+    if (Math.abs(vx) + Math.abs(vy) > 1) return Math.atan2(vy, vx);
+    return num(e.dir, 1) < 0 ? PI : 0;
+  }
   function drawWave(ctx, e) {
     const x = num(e.x, 0), y = num(e.y, 0);
-    if (!inView(x - 60, y, 160)) return;
+    if (!inView(x, y, 220)) return;
     const v = vis(e), age = num(e.age, 0), life = num(e.life, 0);
     if (!v.max) v.max = Math.max(.2, life + age);
     const fade = Math.min(1, life / .25) * Math.min(1, age / .07);
     if (fade <= 0) return;
+    // dalga +x yönünde çizilir; geri/eğik gidiyorsa ön cephe etrafında döndürülür (aynalama dahil)
+    const ang = waveAng(e);
+    ctx.save();
+    if (ang) { ctx.translate(x, y); ctx.rotate(ang); ctx.translate(-x, -y); }
+    try { drawWaveBody(ctx, e, x, y, age, fade); }
+    finally { ctx.restore(); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
+  }
+  function drawWaveBody(ctx, e, x, y, age, fade) {
     ctx.lineCap = 'round';
     const span = .92;
     // ön dalga yumuşak dolgu
@@ -1991,6 +2021,11 @@
         }
         case 'trap': {
           const age = num(e.age, 0);
+          if (e.fly) { v.spin = num(v.spin, 0) + dt * 11 * (num(e.vx, 0) < 0 ? -1 : 1); v.wasFly = true; break; }
+          if (v.wasFly) {   // yere oturdu: toz + küçük sıçrama
+            v.wasFly = false; v.landT = v.t;
+            if (inView(e.x, e.y, 120) && FM.fx) FM.fx.puff(num(e.x, 0) + num(e.w, 34) / 2, num(e.y, 0) + num(e.h, 12), 5, 'rgba(230,220,205,.8)', 8, 70);
+          }
           if (!v.armed && age > .5) {
             v.armed = true;
             if (inView(e.x, e.y, 120) && FM.fx) {
@@ -2002,6 +2037,15 @@
         }
         case 'net': {
           const age = num(e.age, 0);
+          if (e.fly) {
+            v.spin = num(v.spin, 0) + dt * 9 * (num(e.vx, 0) < 0 ? -1 : 1); v.wasFly = true;
+            if (inView(e.x, e.y, 150) && budget() && rnd() < dt * 14) P({ k: 'spark', x: num(e.x, 0) + num(e.w, 44) / 2 + (rnd() - .5) * 14, y: num(e.y, 0) + num(e.h, 76) / 2 + (rnd() - .5) * 14, vx: (rnd() - .5) * 80, vy: (rnd() - .5) * 80, life: .18 + rnd() * .14, c: '#bff6ff', s: 1.6, g: 200, add: true });
+            break;
+          }
+          if (v.wasFly) {   // yere oturdu: iniş anı (açılma animasyonu buradan başlar) + toz
+            v.wasFly = false; v.landT = v.t;
+            if (inView(e.x, e.y, 150) && FM.fx) FM.fx.puff(num(e.x, 0) + num(e.w, 44) / 2, num(e.y, 0) + num(e.h, 76), 5, 'rgba(220,225,240,.8)', 8, 70);
+          }
           if (age > .6) {
             if (!v.on) {
               v.on = true;
@@ -2139,11 +2183,12 @@
           if (!v.max) v.max = Math.max(.2, num(e.life, 1) + num(e.age, 0));
           if (inView(e.x, e.y, 160) && num(e.life, 0) > .1 && budget()) {
             v.acc += dt * 16;
+            const wa = waveAng(e), wc = Math.cos(wa), ws = Math.sin(wa);   // notalar dalganın gidiş yönünde (geri/eğik dahil)
             while (v.acc >= 1) {
               v.acc -= 1;
               const R0 = 80 + num(e.age, 0) * 40, a = (rnd() - .5) * 1.7;
-              const px = num(e.x, 0) - R0 + Math.cos(a) * R0, py = num(e.y, 0) + Math.sin(a) * R0;
-              P({ k: 'note', x: px, y: py, vx: 300 + rnd() * 200, vy: -(40 + rnd() * 80), life: .55 + rnd() * .3, c: pick(['#a855f7', '#3cb371', '#c084fc', '#6ee7a8']), s: 3.4 + rnd() * 1.6, g: -40, drag: 2.4 });
+              const lx = -R0 + Math.cos(a) * R0, ly = Math.sin(a) * R0, sp2 = 300 + rnd() * 200;
+              P({ k: 'note', x: num(e.x, 0) + lx * wc - ly * ws, y: num(e.y, 0) + lx * ws + ly * wc, vx: sp2 * wc, vy: sp2 * ws - (40 + rnd() * 80), life: .55 + rnd() * .3, c: pick(['#a855f7', '#3cb371', '#c084fc', '#6ee7a8']), s: 3.4 + rnd() * 1.6, g: -40, drag: 2.4 });
             }
           }
           break;

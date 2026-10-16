@@ -133,6 +133,7 @@ async function tur5Flow(pass, fail) {
 
   await step('varlık', async () => {
     await waitFor(async () => (await A.eval('FM.net.online().length')) === 2 && (await B.eval('FM.net.online().length')) === 2, 12000, 'iki tarayıcı birbirini çevrimiçi görür');
+    await waitFor(async () => (await A.eval('FM.net.online().every(x => x.st === "lobby")')) && (await B.eval('FM.net.online().every(x => x.st === "lobby")')), 4000, 'ikisi de "lobide" görünür');
     const oa = await A.eval('FM.net.online().map(x => ({me: x.me, st: x.st, code: x.code, n: x.n}))');
     const pr = await A.eval('FM.net.profiles().find(x => !x.me)');
     const ps = await A.eval('FM.net.presence()');

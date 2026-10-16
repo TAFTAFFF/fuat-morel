@@ -986,7 +986,7 @@
   function explode(x, y, rad, owner, cause) {
     const pad = cause === 'meteor' ? 6 : 14;   // meteor biraz daha affedici
     for (const q of S.racers) {
-      if (cause === 'mis' && q === owner) continue;   // güdümlü füze sahibine zarar vermez
+      if (q === owner && (cause === 'mis' || cause === 'dyn')) continue;   // kendi füzen/dinamitin sana zarar vermez (yukarı/geri atış güvenli)
       const dd = Math.hypot(cxOf(q) - x, cyOf(q) - y);
       if (dd < rad + pad) harm(q, 'kill', 0, owner, cause);
       else if (dd < rad + pad + 40 && q === S.player) nearMissNote(q, cause || 'explode');
@@ -1390,7 +1390,7 @@
           if (moveSaw(e, dt, solidAt)) { if (e.b > 2) e.life = 0; FM.fx.sparks(e.x, e.y, 6, '#ffe9a0', 260); }
           e.life -= dt; if (e.y > C.KILLY) e.life = 0;
           for (const q of S.racers) {
-            if (q === e.o && e.b === 0 && e.age < .7) continue;
+            if (q === e.o) continue;   // kendi testeren sana zarar vermez (yukarı/geri atılıp üstüne düşse de)
             // atılan testere en fazla 2 kişiyi biçer, sonra kırılır (10 kişilik sıkışık grupta katliam olmasın)
             if (circleHit(e, q, e.r - 2) && harm(q, 'kill', 0, e.o, 'saw') && (e.k = (e.k | 0) + 1) >= 2) { e.life = 0; FM.fx.sparks(e.x, e.y, 12, '#ffe9a0', 320); break; }
           }

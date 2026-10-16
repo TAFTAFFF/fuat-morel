@@ -2308,9 +2308,23 @@
      FM.game.aimable(kind) false (ya da yok) → eskisi gibi basınca hemen kullanılır.
      true → basınca FM.input.aim = 'item'|'ab'; parmağın bastığı noktaya göre yönü (ax, ay birim vektör) güncellenir;
      ~18 px'ten az hareket = ölü bölge (0, 0 = varsayılan yön). Bırakınca use/ab = true, aim = null (ax, ay son yönü tutar).
-     İptal (pointercancel) ateş ETMEZ. Bir anda tek nişan; ZIPLA/KAY'a başka parmakla basmak serbest. */
+     Nişan parmağı PENCERE düzeyinde izlenir: parmak düğmeden çıksa, tarayıcı yakalamayı bıraksa (pointerleave /
+     lostpointercapture) ya da sistemi bir hareket kesse (pointercancel) bile atış KAYBOLMAZ — son yönde atılır
+     (önceden düğmeden taşan sürüklemede eşya elde kalıyordu). Bir anda tek nişan; ZIPLA/KAY'a başka parmakla basmak serbest. */
   const AIM_DEAD = 18, AIM_MAX = 110;
-  const AIM = { k: null, id: -1, x0: 0, y0: 0, el: null, ax: 0, ay: 0, dz: true };
+  const AIM = { k: null, id: -1, x0: 0, y0: 0, el: null, ax: 0, ay: 0, dz: true, tc: null };
+  function aimWinMove(e) { if (AIM.k && e.pointerId === AIM.id) aimTrack(e); }
+  function aimWinUp(e) { if (AIM.k && e.pointerId === AIM.id) aimRelease(e.pointerId); }
+  function aimListen(on) {
+    const f = on ? 'addEventListener' : 'removeEventListener';
+    window[f]('pointermove', aimWinMove, true); window[f]('pointerup', aimWinUp, true); window[f]('pointercancel', aimWinUp, true);
+  }
+  /** Nişan parmağı kalktı (nerede olursa olsun): düğmenin basılı durumunu temizle ve son yönde at */
+  function aimRelease(pid) {
+    const k = AIM.tc, el = AIM.el, set = k && TC[k];
+    if (set) { set.delete(pid); if (!set.size && el) el.classList.remove('down'); }
+    aimEnd(true);
+  }
   function aimable(kind) {
     try { return !!(FM.game && typeof FM.game.aimable === 'function' && FM.game.aimable(kind)); } catch (e) { return false; }
   }
@@ -2321,8 +2335,9 @@
   }
   function aimStart(el, kind, e) {
     const I = FM.input; if (!I) return false;
-    AIM.k = kind; AIM.id = e.pointerId; AIM.x0 = e.clientX; AIM.y0 = e.clientY; AIM.el = el; AIM.ax = 0; AIM.ay = 0; AIM.dz = true;
-    try { el.setPointerCapture(e.pointerId); } catch (x) { /* yakalama yok: yine çalışır */ }
+    AIM.k = kind; AIM.id = e.pointerId; AIM.x0 = e.clientX; AIM.y0 = e.clientY; AIM.el = el; AIM.ax = 0; AIM.ay = 0; AIM.dz = true; AIM.tc = el.getAttribute('data-tc');
+    try { el.setPointerCapture(e.pointerId); } catch (x) { /* yakalama yok: pencere dinleyicileri yine izler */ }
+    aimListen(true);
     I.aim = kind; I.ax = 0; I.ay = 0;
     el.classList.add('aiming', 'dz'); el.classList.remove('armed');
     el.style.setProperty('--len', '0px');
@@ -2330,9 +2345,9 @@
     aimHintDone();
     return true;
   }
-  function aimMove(e) {
-    if (!AIM.k || e.pointerId !== AIM.id || e.currentTarget !== AIM.el) return;
-    const I = FM.input; if (!I) return;
+  function aimMove(e) { if (AIM.k && e.pointerId === AIM.id && e.currentTarget === AIM.el) aimTrack(e); }
+  function aimTrack(e) {
+    const I = FM.input; if (!I || !AIM.el) return;
     const dx = e.clientX - AIM.x0, dy = e.clientY - AIM.y0, d = Math.sqrt(dx * dx + dy * dy);
     const el = AIM.el;
     if (d < AIM_DEAD) {
@@ -2356,7 +2371,8 @@
       I.aim = null;
     }
     aimVis(false);
-    AIM.k = null; AIM.id = -1; AIM.el = null; AIM.ax = 0; AIM.ay = 0;
+    aimListen(false);
+    AIM.k = null; AIM.id = -1; AIM.el = null; AIM.ax = 0; AIM.ay = 0; AIM.tc = null;
   }
   function tcDown(e) {
     const el = e.currentTarget, k = el.getAttribute('data-tc'), set = TC[k];
@@ -2385,8 +2401,12 @@
   function tcUp(e) {
     const el = e.currentTarget, k = el.getAttribute('data-tc'), set = TC[k];
     if (!set || !set.has(e.pointerId)) return;
+    if (AIM.k && AIM.el === el && e.pointerId === AIM.id) {
+      // nişan parmağı: düğmeden çıkmak / yakalamanın düşmesi atışı bitirmez (pencere izler); kalkınca ya da iptalde son yönde at
+      if (e.type === 'pointerleave' || e.type === 'lostpointercapture') return;
+      aimRelease(e.pointerId); return;
+    }
     set.delete(e.pointerId);
-    if (AIM.k && AIM.el === el && e.pointerId === AIM.id) aimEnd(e.type === 'pointerup');
     if (set.size) return;
     el.classList.remove('down');
     const I = FM.input; if (!I) return;

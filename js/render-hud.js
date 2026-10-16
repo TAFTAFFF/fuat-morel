@@ -807,8 +807,9 @@
   }
 
   /* yarışçı renkleri (oyuncu her zaman altın) */
-  const RCOL = ['#ffd23f', '#ff5a6e', '#4fb3ff', '#5ee07a', '#c084fc', '#ff9f43'];
-  function racerColor(r) { return RCOL[((r && r.idx) | 0) % RCOL.length]; }
+  // 10 ayrık renk (render-chars R.PLAYER_COLORS ile aynı; plaka noktası/ayak halkası ile HUD portre çerçevesi eşleşir)
+  const RCOL = ['#ffd23f', '#ff5a6e', '#4fb3ff', '#5ee07a', '#c084fc', '#ff9f43', '#22d3e6', '#ff6ec7', '#a3e635', '#f2f2f7'];
+  function racerColor(r) { const P = Array.isArray(R.PLAYER_COLORS) && R.PLAYER_COLORS.length ? R.PLAYER_COLORS : RCOL; return P[((r && r.idx) | 0) % P.length]; }
   R.hudCol = racerColor;
   const THEME_ACC = { forest: '#38b764', candy: '#ff5fa8', snow: '#3d9df5', castle: '#ff7a3d', desert: '#e0912a', space: '#7c5cff', city: '#ff3fa4', tropic: '#14b8a6' };
   const themeAcc = th => (th && THEME_ACC[th.id]) || '#8b5cf6';

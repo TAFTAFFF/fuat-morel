@@ -49,13 +49,13 @@ window.FM = window.FM || {};
   FM.ITEMS = {
     saw:     { ic: '🪚', n: 'Testere',       col: '#a3adbd', d: 'Yerde yuvarlanır, duvardan seker. Değdiği herkesi öldürür — geri sekerse seni de! Nişanla geriye ya da kavisli yukarı fırlat.' },
     dyn:     { ic: '🧨', n: 'Dinamit',       col: '#e23b3b', d: 'Fırlatılır, 1 sn sonra patlar. Nişanla yayını sen seç (ileri, geri, yukarı). Yakındaysan sen de gidersin.' },
-    trap:    { ic: '🪤', n: 'Ayı Tuzağı',    col: '#9aa3b2', d: 'Arkana bırakılır; nişanla kısa mesafeye fırlatılır, yere düşünce kurulur. Basan ölür (sen dahil).' },
+    trap:    { ic: '🪤', n: 'Ayı Tuzağı',    col: '#9aa3b2', d: 'Arkana bırakılır ya da nişanla fırlatılır; yere düşüp oturunca kurulur. Basan ölür (sen dahil). Çukura düşen tuzak kaybolur.' },
     mis:     { ic: '🚀', n: 'Güdümlü Füze',  col: '#ff6b3d', d: 'Lideri (lider sensen ikinciyi) kovalar ve patlar. Geriye nişan alırsan arkandaki en yakın rakibi kovalar.' },
     bolt:    { ic: '🌩️', n: 'Yıldırım',      col: '#ffe14d', d: 'Önündeki rakiplerin (en yakın 4 kişi) üstünde bulut belirir, 1.8 sn sonra çakar. Kalkan ve balon korur.' },
-    ice:     { ic: '❄️', n: 'Kar Fırtınası', col: '#9be7ff', d: 'Diğer herkesi 2.2 sn dondurur, buzda kayarlar.' },
+    ice:     { ic: '❄️', n: 'Kar Fırtınası', col: '#9be7ff', d: 'Kısa bir hazırlıktan sonra etrafına buz dalgası yayar: dalganın ulaştığı herkes 2.2 sn donar.' },
     mag:     { ic: '🧲', n: 'Mıknatıs',      col: '#c084fc', d: 'Öndekileri sana doğru geri çeker.' },
-    net:     { ic: '🕸️', n: 'Elektrik Ağı',  col: '#7be3ff', d: 'Havaya kurulur, yakalananı 1.5 sn tutar. Arkana bırakılır; nişanla ileri ya da yukarı fırlatılır.' },
-    ink:     { ic: '🦑', n: 'Mürekkep',      col: '#3b3b55', d: 'Öndekilerin ekranını 3.5 sn karartır.' },
+    net:     { ic: '🕸️', n: 'Elektrik Ağı',  col: '#7be3ff', d: 'Arkana bırakılır ya da nişanla fırlatılır; yere düşüp zemine dikilir, kurulunca yakalananı 1.5 sn tutar. Üstünden zıplanarak geçilir.' },
+    ink:     { ic: '🦑', n: 'Mürekkep',      col: '#3b3b55', d: 'Önüne mürekkep fışkırtır: cephenin geçtiği öndeki herkesin ekranı 3.5 sn kararır.' },
     speed:   { ic: '👟', n: 'Hız',           col: '#ffb020', d: '3.2 sn çok hızlı koşarsın. Kalkanı iptal eder.' },
     shield:  { ic: '🛡️', n: 'Kalkan',        col: '#5ad1ff', d: '4 sn her şeye karşı korur. Hızı iptal eder.' },
     balloon: { ic: '🎈', n: 'Balon',         col: '#ff5a7a', d: 'Bir saldırıyı emer ve patlar.' }

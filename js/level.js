@@ -10,7 +10,8 @@
                                            bridge=true -> tropik sallanan köprünün yürünen tabanı (L.bridges ile aynı yer)
      spikes    : [{x,y,w,h}]              yer dikenleri (her 36 px bir diken), y = diken tepesi
      crush     : [{x,y,w,h}]              tavandan sarkan ezici. ÖLDÜREN bölge {x,y,w,h}; alt kenarı (y+h) zeminin 26 px üstü
-     saws      : [{cx,cy,r,amp,sp,ph,px,py}] dikey salınan testere makinesi (px,py anlık merkez)
+     saws      : [{cx,cy,off,r,amp,sp,ph,px,py}] testere makinesi (KAYMA engeli): bıçak merkezi py = cy + off + sin·amp
+                                           (zeminden ~58 px yukarıda dar bantta titrer); ray cx'te yukarı uzanır (o da keser). px,py anlık merkez
      boxes     : [{x,y,w,h,cd:[10]}]       eşya kutuları (her yarışçı için ayrı bekleme süresi cd[idx])
      pads      : [{x,y,w}]                 hız pedi (y = zemin üstü)
      mush      : [{x,y,w,sq}]              zıplatan mantar (y = zemin üstü, sq>0 iken ezilme animasyonu)
@@ -109,11 +110,13 @@
         continue;
       }
       let t = pool[I(0, pool.length - 1)];
-      const afterRoute = prev === 'route';
+      const afterRoute = prev === 'route', afterBoulder = prev === 'boulder';
       if (t === prev && t !== 'gap') t = 'flat';
       if (LANDY[prev] && HAZ[t]) t = 'flat';
       // route'un yüksek platformundan inen yarışçı doğrudan çukura/basamağa düşmesin: route'tan sonra hep geniş düz zemin
       if (afterRoute) t = 'flat';
+      // kaya kapısı bölümün sonunda: hemen ardından çukur/duvar gelirse kaya, zıplayan/tırmanan koşucuyu kapıda ezer (kazanılamaz)
+      if (afterBoulder) t = 'flat';
       if (t === 'wall' && gy < 300) t = 'drop';
       if (t === 'chimney' && gy < 330) t = 'drop';
       if (t === 'drop' && gy > 420) t = 'step';
@@ -185,9 +188,11 @@
         }
         case 'saw': {
           const w = R(560, 680), s = ground(w);
-          // amp 36: bıçağın en alt noktası (merkez zeminden 44 px yukarıda) kayan yarışçıya hiç değmez → "kayarsan hep geçersin"
-          // (cy = zemin - 80 ilişkisi korunur: render-world makinenin tabanını cy + 80'e çizer)
-          L.saws.push({ cx: s + w / 2, cy: gy - 80, r: 28, amp: 36, sp: R(1.6, 2.2), ph: rnd() * 6.28, px: s + w / 2, py: gy - 80 });
+          // KAYMA engeli: bıçak merkezi zeminden 58±3 px yukarıda dar bir bantta titrer (off 22, amp 3) → ayakta koşan HER evrede
+          // ölür, kayan HER evrede geçer ve bıçak kayanın başının ÜSTÜNDE görünür (eskiden amp 36 ile döngünün ~%70'inde ayakta
+          // geçiliyordu). Bıçağın üstündeki ray da keser (game.js): üstünden zıplamak cevap değil.
+          // cy = zemin − 80 ilişkisi korunur (render-world tabanı cy + 80'e çizer).
+          L.saws.push({ cx: s + w / 2, cy: gy - 80, off: 22, r: 28, amp: 3, sp: R(1.6, 2.2), ph: rnd() * 6.28, px: s + w / 2, py: gy - 58 });
           break;
         }
         /* ---------- ÇÖL ---------- */

@@ -1,8 +1,12 @@
-// Kullanım: node dev/sim.js [koşu sayısı] [mod] [tema] [yarışçı sayısı]
+// Kullanım: node dev/sim.js [koşu sayısı] [mod] [tema] [yarışçı sayısı] [ilk seed]
 //   mod: classic | elim | coins | pure | chaos (varsayılan classic)
 //   tema: 0..7 ya da id (forest, candy, snow, castle, desert, space, city, tropic), 'all' = sırayla hepsi; verilmezse rastgele (eski 4 tema)
 //   yarışçı sayısı: 2..10 (varsayılan 4)
+//   ilk seed: verilirse harita seed'leri ilk seed + koşu (karşılaştırmalı ölçüm; botlar yine rastgele karar verir)
 // Örnek: node dev/sim.js 8 elim 5 10
+// Ölçümler: bitiş/ölüm/eleme, ölüm nedenleri, yönlü eşya/güç kullanımı, ZAMAN KAYBI (donma/ağ/sersemleme/yavaşlama/ölü bekleme),
+//   EŞYA SONUÇLARI (kullanım → isabet/öldürme/sıvıda kaybolma), HAVADA KALAN nesne (tuzak/ağ yere oturmadan duran = 0 olmalı),
+//   TAKILMA (canlıyken 2 sn'de 60 px'ten az ilerleme), his (kusursuz/kıl payı/rüzgâr arkası).
 // Oyun mantığını (core+level+game+meta) tarayıcısız simüle eder; bitirme/ölüm/eleme/altın istatistiği ve tutarlılık denetimi yazar.
 try { require('os').setPriority(0, require('os').constants.priority.PRIORITY_LOW); } catch (e) { } // düşük öncelik: bilgisayarı yormasın (başlattığı Chrome da devralır)
 const fs = require('fs'), vm = require('vm'), path = require('path');
@@ -20,6 +24,7 @@ const N = +(process.argv[2] || 10);
 const MODE = process.argv[3] && FM.modeById(process.argv[3]) ? process.argv[3] : 'classic';
 const TH = process.argv[4];
 const NR = Math.max(2, Math.min(FM.MAXR, +(process.argv[5] || 4)));
+const SEED0 = process.argv[6] != null && isFinite(+process.argv[6]) ? +process.argv[6] : null;
 const themeFor = run => TH == null || TH === 'random' ? 'random' : TH === 'all' ? run % FM.THEMES.length : (isFinite(+TH) ? +TH : TH);
 let allFin = 0, errors = 0, warns = 0; const deaths = {}; const times = []; let nDeath = 0, nUse = 0, sumT = 0;
 const ev = { portal: 0, vent: 0, tramp: 0, gate: 0, eliminated: 0, meteor: 0, drop: 0, pick: 0, bonus: 0 };
@@ -36,17 +41,53 @@ FM.on('portal', () => ev.portal++); FM.on('vent', () => ev.vent++); FM.on('mush'
 FM.on('gate', () => ev.gate++); FM.on('eliminated', () => ev.eliminated++); FM.on('meteor', () => ev.meteor++);
 FM.on('coins:drop', () => ev.drop++); FM.on('coins:pick', () => ev.pick++); FM.on('coins:bonus', () => ev.bonus++);
 const bad = v => typeof v !== 'number' || !isFinite(v);
+// zaman kaybı ve eşya sonuçları
+const lost = { donma: 0, ag: 0, sersem: 0, yavas: 0, cekilme: 0, olu: 0, hazirlik: 0, takili: 0 };
+const itemOut = {};   // eşya → {kul, isabet, oldur, kayip}
+const io = k => itemOut[k] || (itemOut[k] = { kul: 0, isabet: 0, oldur: 0, kayip: 0 });
+FM.on('item:use', d => { io(d.item).kul++; });
+FM.on('hit', d => { if (d.cause && FM.ITEMS[d.cause]) io(d.cause).isabet++; });
+// öldürme: eşyanın KENDİSİ (varlığı ya da doğrudan etkisi) öldürdüyse; engelde ölüm ayrı sayılır (testere makinesi ≠ atılan testere)
+const envDeath = {};
+FM.on('death', d => {
+  const thrown = d.ent && FM.ITEMS[d.ent.type] ? d.ent.type : d.ent && (d.ent.type === 'flash' || d.ent.type === 'bolt') ? 'bolt' : null;
+  if (thrown) io(thrown).oldur++;
+  else if (!d.ent && (d.cause === 'saw' || !(d.cause && FM.ITEMS[d.cause]))) { const k = d.cause === 'saw' ? 'testere-makinesi' : d.cause; envDeath[k] = (envDeath[k] || 0) + 1; }
+});
+FM.on('fizzle', d => { io(d.type).kayip++; });
+let floating = 0, floatSeen = new WeakSet(), stuckEv = 0;
 for (let run = 0; run < N; run++) {
   try {
-    FM.game.startMatch({ char: FM.ORDER[run % 7], rounds: 1, auto: true, mode: MODE, theme: themeFor(run), n: NR });
+    FM.game.startMatch({ char: FM.ORDER[run % 7], rounds: 1, auto: true, mode: MODE, theme: themeFor(run), n: NR, seed: SEED0 != null ? SEED0 + run : undefined });
     FM.S.countT = .01;
     const S = FM.S, R = S.racers;
     const prog = R.map(r => ({ x: r.x, t: 0 }));
+    const win = R.map(r => ({ x: r.x, t: 0 }));   // takılma penceresi (2 sn)
+    const flyT = new Map();
     let t = 0, stuck = '';
     while (t < 200 && S.mode !== 'end' && S.mode !== 'podium') {
       FM.game.step(FM.C.STEP); t += FM.C.STEP;
       for (const p of S.parts) p.life -= FM.C.STEP; S.parts = S.parts.filter(p => p.life > 0);
       for (const r of R) if (r.draft > feel.draftMax) feel.draftMax = r.draft;
+      const dt = FM.C.STEP;
+      if (S.mode === 'race') for (let i = 0; i < R.length; i++) {
+        const r = R[i];
+        if (r.finished || r.out) continue;
+        if (r.frozen > 0) lost.donma += dt; else if (r.netted > 0) lost.ag += dt; else if (r.stun > 0) lost.sersem += dt;
+        if (r.slowT > 0) lost.yavas += dt; if (r.pull > 0) lost.cekilme += dt; if (r.dead > 0) lost.olu += dt; if (r.spawnT > 0) lost.hazirlik += dt;
+        // takılma: canlı, kontrol kaybı yok, 2 sn'de 60 px'ten az ilerleme (tırmanma dahil sayılır: duvar dibinde dikilmek takılmadır)
+        // (eşya etkisinden — mıknatısla geri çekilme, savrulma — sonraki 1.5 sn takılma sayılmaz: o, eşyanın işidir)
+        const free = r.dead <= 0 && !(r.frozen > 0) && !(r.netted > 0) && !(r.stun > 0) && !(r.spawnT > 0) && !(r.pull > 0) && !(S.raceT - (r.lastHitT == null ? -9 : r.lastHitT) < 1.5);
+        if (!free || r.x > win[i].x + 60) { win[i].x = r.x; win[i].t = t; }
+        else if (t - win[i].t > 2) { lost.takili += dt; if (t - win[i].t < 2 + dt * 1.5) stuckEv++; }
+      }
+      // havada kalan nesne: tuzak/ağ yere oturmuşsa altında katı olmalı; uçuşta 4 sn'den uzun kalmamalı
+      for (const e of S.ents) {
+        if (e.type !== 'trap' && e.type !== 'net') continue;
+        if (e.fly) { const ft = (flyT.get(e) || 0) + dt; flyT.set(e, ft); if (ft > 4 && !floatSeen.has(e)) { floatSeen.add(e); floating++; } continue; }
+        const cx = e.x + e.w / 2, by = e.y + e.h;
+        if (!(FM.game.solidAt(cx, by + 1) && !FM.game.solidAt(cx, by - 2)) && !floatSeen.has(e)) { floatSeen.add(e); floating++; }
+      }
       // tutarlılık: sayısal bozulma / ilerlemeyen yarışçı
       for (let i = 0; i < R.length; i++) {
         const r = R[i];
@@ -74,3 +115,8 @@ console.log('Eşya kullanımı (yön):', sortObj(aimUse));
 console.log('Varlıkla öldürme (yön):', sortObj(aimKill));
 console.log('Güç kullanımı (yön):', sortObj(abUse));
 console.log('His:', JSON.stringify(feel));
+const per = v => (v / Math.max(1, N) / NR).toFixed(2);
+console.log('Zaman kaybı (yarışçı başına sn):', JSON.stringify(Object.fromEntries(Object.entries(lost).map(([k, v]) => [k, +per(v)]))), ' takılma olayı', stuckEv);
+console.log('Eşya sonuçları (kul → isabet/öldür/kayıp):', Object.entries(itemOut).sort().map(([k, o]) => `${k} ${o.kul}→${o.isabet}/${o.oldur}/${o.kayip}`).join('  '));
+console.log('Engel/çevre ölümleri (yarış başına):', Object.entries(envDeath).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / Math.max(1, N)).toFixed(2)}`).join('  '));
+console.log('Havada kalan nesne:', floating, floating ? '  !! tuzak/ağ havada kaldı' : '(0 olmalı)');

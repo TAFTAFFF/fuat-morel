@@ -98,7 +98,7 @@
      Dikey: zemine bağlı ölü bölge. Normal ve çift zıplamada kamera sabit kalır (zemin/çukur görünür kalır);
      oyuncu ekranın üst %16'sına girerse yukarı kayar; son zeminin altına düşerken aşağıyı gösterir;
      sert sınırlar sayesinde oyuncu hızlı düşüşte ya da mantar fırlatmasında ekrandan çıkmaz. */
-  const cam = { t: null, gy: null };
+  const cam = { t: null, gy: null, la: 0, glide: false, off: 0, force: false };
   /* Kamera ayarları (5. tur, docs/TUR5.md §4): zemin telefonda ekranın üstten ~%71'inde, masaüstünde ~%68'inde
      ("harita üstte kalıyor" şikâyeti); telefonda görünen dünya yüksekliği 400 (karakterler biraz büyük). */
   const CAM = { VH_TOUCH: 460, KF_TOUCH: .71, KF_DESK: .68 };   // VH_TOUCH 460: 400 çok yakın, 520 çok uzak geldi (oyuncu geri bildirimi)
@@ -118,13 +118,16 @@
     const t = camTarget(); if (!t || !S.L) return;
     const touch = touchNow(), VW = V.VW, VH = V.VH, cl = FM.clamp;
     if (S.cam.x === 0 && S.cam.y === 0) snap = true;   // yeni tur/demo başında (resetRace kamerayı 0,0'a çeker): kayarak gelme, yerine otur
-    // --- yatay
-    let tx;
-    if (touch) { const sl = safeL * (V.dpr || 1) / (V.S || 1); tx = t.x - (VW * .29 + sl) + cl(t.vx * .12, -40, 70); }
-    else tx = t.x - VW * .30 + cl(t.vx * .15, -50, 110);
-    tx = Math.max(0, tx);
+    const ease = k => 1 - Math.exp(-k * dt);           // kare hızından bağımsız yumuşatma
+    if (cam.t !== t) { cam.t = t; cam.gy = null; if (!snap) cam.force = true; }   // izlenen değişti (demo lideri, izleyici): kayarak geç
+    // --- yatay: oyuncu ekranda SABİT konumda (kilitli; ara değerlenmiş konum → akıcı). Yalnızca hıza bağlı ileri bakış payı
+    // yavaşça değişir: zıplama/kayma hız kesince oyuncu ekranda ileri-geri kaymaz (eskiden gecikmeli izleme bunu yapıyordu).
+    // ileri bakış normal koşu hızına göre: normal hızda 0 (oyuncu sabit yerde), hız/ped/rüzgâr arkasında biraz ileriyi gösterir
+    const laT = cl((t.vx - C.RUN) * (touch ? .1 : .12), -24, touch ? 30 : 40);
+    cam.la = snap ? laT : cam.la + (laT - cam.la) * ease(2.5);
+    const base = touch ? VW * .29 + safeL * (V.dpr || 1) / (V.S || 1) : VW * .30;
+    const tx = Math.max(0, t.x - base + cam.la);
     // --- dikey
-    if (cam.t !== t) { cam.t = t; cam.gy = null; }
     const feet = t.y + t.h, dead = t.dead > 0;
     if (dead) cam.gy = null;
     else if (t.onGround || t.climb) cam.gy = feet;
@@ -137,10 +140,14 @@
     if (!dead) ty = Math.min(ty, t.y - VH * topK);        // üst banda girerse yukarı kay
     const minY = -760, maxY = S.L.liq + 95 - VH;
     ty = cl(ty, minY, maxY);
-    if (snap) { S.cam.x = tx; S.cam.y = ty; return; }
-    S.cam.x += (tx - S.cam.x) * Math.min(1, 7 * dt);
+    if (snap) { S.cam.x = tx; S.cam.y = ty; cam.glide = false; cam.force = false; return; }
+    // büyük sıçrama (yeniden doğma, izlenen değişti): kamera hedefe göre bir FARK ile başlar ve fark sönümlenir (hareketli hedefin
+    // peşinden koşup sonsuza dek gecikmez); fark bitince yeniden kilitlenir
+    if (cam.force || (cam.glide ? Math.abs(tx + cam.off - S.cam.x) > 140 : Math.abs(tx - S.cam.x) > 140)) { cam.glide = true; cam.off = S.cam.x - tx; cam.force = false; }
+    if (cam.glide) { cam.off *= Math.exp(-9 * dt); S.cam.x = tx + cam.off; if (Math.abs(cam.off) < 1) cam.glide = false; }
+    else S.cam.x = tx;
     const rate = fall && t.vy > 300 ? 9 : t.climb ? 6 : ty < S.cam.y ? 7 : 3;
-    S.cam.y += (ty - S.cam.y) * Math.min(1, rate * dt);
+    S.cam.y += (ty - S.cam.y) * ease(rate);
     if (!dead) {
       // sert sınırlar: ayaklar ekranın %86'sının altına, baş üst %6'nın üstüne çıkmasın
       const lo = feet - VH * .86, hi = t.y - VH * hardK;

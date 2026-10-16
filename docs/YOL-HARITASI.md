@@ -3,6 +3,9 @@
 Bu dosya, konuşmalarda istenen ve önerilen her şeyin unutulmaması için tutulur. Her tur bitince durum güncellenir.
 Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 
+**Vizyon (kullanıcı):** "Fun Run 4 oynanışı gibi olup onun kalitelisini istiyoruz ve bizim oyunumuz olsun."
+**Yayın kuralı (kullanıcı onayı, 16.10.2026):** testten geçen düzeltmeler her seferinde sormadan `main`'e (oyunun linkine) gönderilir; kullanıcıya ne değiştiği yazılır.
+
 ## Kullanıcının istekleri
 - ✅ Eşya ve güç belirgin değil, "bence oyundaki her şey" → belirginlik turu (TUR5 §3)
 - ✅ Eşya/gücü yön tuşlarıyla/sürükleyerek atma (Fun Run gibi) → yönlü atış (TUR5 §2)
@@ -17,6 +20,8 @@ Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 - ✅ Arkadaş çevrimiçi olunca bildirim (oyun açıkken/arka plandayken; tamamen kapalıyken push sunucusu olmadan mümkün değil) (TUR5 §8.4)
 - ✅ Mağazayı geliştir (Mağaza 2.0: 82 ürün, şapka/aksesuar, desenli görünümler, kutlama, ölüm efekti, nadirlik, Günün Vitrini, canlı önizleme, plakada takma ad): plakalarda karakter adı ("Kral") değil oyuncunun takma adı; isimlere/takma adlara bağlı olmayan, çok çeşitli ürünler ("sen farklı farklı şeyler yap")
 - 📋 "Dallanıp budaklanan çok yer var, sen düşün geliştir": arkadaşlarla oynama, karakterler, süs, oynanış, özel güçler
+- ✅ "Karakterler Fun Run 4'e göre çok büyük, telefona göre küçült" → telefonda görüş yüksekliği 520 (karakterler ekranın ~%12'si)
+- ✅ "Karakter kalitesi telefonda düşüyor, herkes yüksek çözünürlükte oynasın" → cihazın kendi DPR'si (en çok 3), yüksek DPR'de 2'nin altına inmez
 - Not: "Karakterler güzel, eline sağlık" → karakter tasarımlarının ana hatları korunur.
 
 ## Ana ajanın fikirleri

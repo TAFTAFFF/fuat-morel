@@ -117,6 +117,8 @@
   function isIOS() {
     try { const ua = navigator.userAgent || ''; return /iP(hone|od|ad)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); } catch (e) { return false; }
   }
+  /** iPhone/iPad'de Safari SEKMESİNDE miyiz (ana ekran uygulaması değil)? Orada öğe tam ekranı yok: tek yol Ana Ekrana Ekle. */
+  function iosTab() { return isIOS() && !isStandalone() && !fsOK(); }
   function isStandalone() {
     try { return !!(navigator.standalone || (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches))); } catch (e) { return false; }
   }
@@ -976,7 +978,8 @@
       '<div class="tb-sp"></div>' +
       (!sub && st.screen === 'menu' ? onlinePillHtml() : '') +
       (dr ? '<button class="rbtn b-red tb-gift" data-act="daily" aria-label="Günlük ödül" title="Günlük ödül hazır!">' + svg('gift') + '<i class="dot"></i></button>' : '') +
-      (sub || !fsOK() ? '' : '<button class="rbtn b-steel tb-full" data-act="full" aria-label="Tam ekran" title="Tam ekran">' + svg('full') + '</button>') +
+      (sub ? '' : fsOK() ? '<button class="rbtn b-steel tb-full" data-act="full" aria-label="Tam ekran" title="Tam ekran">' + svg('full') + '</button>'
+        : iosTab() ? '<button class="rbtn b-gold tb-full tb-iosfull" data-act="iosfull" aria-label="Tam ekran" title="Tam ekran">' + svg('full') + '</button>' : '') +
       (st.screen === 'settings' ? '' : '<button class="rbtn b-steel tb-set" data-act="go" data-to="settings" aria-label="Ayarlar" title="Ayarlar">' + svg('gear') + '</button>') +
     '</header>';
   }
@@ -1413,7 +1416,8 @@
         '<div class="srow"><span class="s-ic">' + svg('sparkle') + '</span><span class="s-l">Grafik kalitesi</span><span class="seg">' +
           '<button class="' + (q === 'high' ? 'on' : '') + '" data-act="q" data-v="high">Yüksek</button><button class="' + (q === 'low' ? 'on' : '') + '" data-act="q" data-v="low">Düşük</button></span></div>' +
         (touchMode ? '<p class="set-tip">Telefon ısınır ya da oyun takılırsa <b>Düşük</b> seç.</p>' : '') +
-        (fsOK() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran</span><button class="btn sm b-blue" data-act="full">' + (fs ? 'KAPAT' : 'AÇ') + '</button></div>' : '') +
+        (fsOK() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran</span><button class="btn sm b-blue" data-act="full">' + (fs ? 'KAPAT' : 'AÇ') + '</button></div>'
+          : iosTab() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran (iPhone)</span><button class="btn sm b-gold" data-act="iosfull">NASIL?</button></div>' : '') +
         toggleRow('shake', 'Ekran sarsıntısı', 'shake') +
       '</div>';
     // oyun hissi: dokunmatik düzen + titreşim + nişan yardımı
@@ -3018,6 +3022,40 @@
     updateLobby();
   }
 
+  /* ---------- iPhone tam ekran rehberi: Safari öğe tam ekranına izin vermez; Ana Ekrana Ekle ile açılan uygulama
+     adres çubuğu olmadan tam ekran çalışır. iPhone ana ekran uygulamasının kaydını Safari'den AYRI tutar: kod ile taşınır. ---------- */
+  function openIosFull() {
+    const step = (n, t) => '<li class="ios-st"><span class="ios-n">' + n + '</span><span class="ios-tx">' + t + '</span></li>';
+    openModal('iosfull',
+      '<div class="pnl pnl-sm pnl-ios">' + ribbon('TAM EKRAN OYNA', 'rb-gold') +
+        '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
+        '<div class="ios-body">' +
+          '<p class="ios-lead">iPhone, Safari\'de tam ekrana izin vermiyor. Oyunu <b>ana ekrana ekle</b>, üst çubuk olmadan açılsın:</p>' +
+          '<ol class="ios-steps">' +
+            step(1, '<b>Paylaş</b>\'a dokun <span class="ios-ic">' + svg('share') + '</span>') +
+            step(2, '<b>Ana Ekrana Ekle</b> › <b>Ekle</b>') +
+            step(3, 'Ana ekrandaki <b>Fuat Morel</b> simgesinden aç') +
+          '</ol>' +
+          '<div class="ios-save"><span class="ios-sv-t">' + svg('info') + '<span>İlerlemen Safari\'de kalır: önce <b>kodunu al</b>, uygulamada <b>KOD GİR</b> ile getir.</span></span>' +
+            '<button class="btn sm b-blue" data-act="iosexp">' + svg('share') + '<span>KAYDIMI TAŞI</span></button></div>' +
+        '</div>' +
+      '</div>');
+  }
+  function freshSave() {
+    const s = sv(), stt = s.stats || {};
+    return (s.level | 0) <= 1 && !(stt.races > 0) && !(stt.playSec > 300);
+  }
+  function openIosImport() {
+    openModal('iosimp',
+      '<div class="pnl pnl-sm pnl-ios">' + ribbon('HOŞ GELDİN!', 'rb-green') +
+        '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
+        '<div class="ios-body">' +
+          '<p class="ios-lead">Oyun artık tam ekran. Safari\'de oynadıysan ilerlemen orada kaldı: Safari\'de <b>Ayarlar › KODUMU AL</b> ile aldığın kodu buraya gir.</p>' +
+          '<div class="cf-btns"><button class="btn b-steel" data-act="mclose">YENİ BAŞLA</button><button class="btn b-green cf-ok" data-act="iosimp">' + svg('down') + '<span>KOD GİR</span></button></div>' +
+        '</div>' +
+      '</div>');
+  }
+
   /* ---------- kayıt kodu (Ayarlar): dışa aktar (bulut kısa kod / uzun kod) ve içe aktar (kod → önizleme → onay) ---------- */
   function openExport() {
     openModal('svexp',
@@ -3521,6 +3559,9 @@
     reload: () => { try { location.reload(); } catch (e) { /* yok say */ } },
     iabx: () => { lsSet('fm-iab-x', '1'); syncIab(); },
     pwainst: () => { try { if (FM.pwa && typeof FM.pwa.install === 'function') Promise.resolve(FM.pwa.install()).then(() => refreshSoon()); } catch (e) { /* yok say */ } },
+    iosfull: () => openIosFull(),
+    iosimp: () => { closeModalHard(); showScreen('settings'); openImport(); },
+    iosexp: () => { closeModalHard(); openExport(); },
     svexp: () => openExport(),
     svimp: () => openImport(),
     svcloud: el => svCloud(el),
@@ -3611,9 +3652,14 @@
       setTimeout(() => { if (st.view === 'menu' && st.screen === 'menu' && !st.modal && dailyReady()) openDaily(); }, 800);
     }
     // iPhone'da tarayıcı tam ekranı yok: bir kez "Ana Ekrana Ekle" ipucu
-    if (touchMode && !FM.DEV && isIOS() && !isStandalone() && !lsGet('fm-ios-tip')) {
-      lsSet('fm-ios-tip', '1');
-      setTimeout(() => { if (st.view === 'menu') note({ title: 'Tam ekran oyna!', sub: 'Paylaş › Ana Ekrana Ekle ile aç, adres çubuğu kaybolsun.', icon: svg('full'), cls: 'n-tip', ms: 6500 }); }, 2600);
+    if (touchMode && !FM.DEV && iosTab() && !lsGet('fm-ios-tip2')) {
+      lsSet('fm-ios-tip2', '1');
+      setTimeout(() => { if (st.view === 'menu' && st.screen === 'menu' && !st.modal) openIosFull(); }, 2600);
+    }
+    // ana ekrandaki uygulama ilk kez açıldı: iPhone Safari'nin kaydını ayrı tutar → ilerlemeyi kodla getirmeyi öner
+    if (!FM.DEV && isIOS() && isStandalone() && !lsGet('fm-ios-imp') && freshSave()) {
+      lsSet('fm-ios-imp', '1');
+      setTimeout(() => { if (st.view === 'menu' && st.screen === 'menu' && !st.modal) openIosImport(); }, 1800);
     }
   });
   FM.on('match:start', d => { st.lastMatch = { rounds: (d && d.rounds) || S.ROUNDS || roundsSel() }; st.bestT = {}; });

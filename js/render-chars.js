@@ -2037,25 +2037,32 @@
     let st, o = { speed: spd };
     if (r.netted > 0) st = 'stun';
     else if (r.frozen > 0) st = 'frozen';
-    else if (r.stun > 0) st = 'stun';
+    else if (r.stun > 0) { if (!r.onGround && a.tum > 0) { st = 'tumble'; o.tum = a.tum; } else st = 'stun'; }
     else if (r.dash > 0) st = 'dash';
     else if (r.fly > 0 && id === 'Nuss') { st = 'fly'; o.wph = a.wph; }
     else if (r.slide) st = r.sled > 0 ? 'sled' : 'slide';
     else if (r.climb) st = 'climb';
-    else if (!r.onGround) { st = 'air'; o.flip = a.flip; }
+    else if (!r.onGround) { st = r.slam === true && (r.vy || 0) > 200 ? 'slam' : 'air'; o.flip = a.flip; }
     else if (r.pull > 0 && (r.vx || 0) < -20) st = 'pulled';
     else if (r.finished && abs(r.vx || 0) < 40) st = winPose(r);
     else if (abs(r.vx || 0) > 22) st = 'run';
     else st = 'idle';
     const p = makePose(id, st, r.ph || 0, a.t, r.vy || 0, o);
-    if (st === 'stun' || st === 'frozen') { /* ifade sabit */ }
+    if (st === 'stun' || st === 'frozen' || st === 'tumble') { /* ifade sabit */ }
     else if (r.boost > 0 || r.padT > 0) { if (p.expr === 'n') p.expr = 'f'; }
     else if (r.inv > 0.9 && r.inv < 100 && p.expr === 'n') p.expr = 'o';                     // yeniden doğuşun ilk anı (inv 1.6 sn): şaşkın yüz
     else if (r.finished && r.place === 1 && p.expr === 'n') p.expr = 'h';                     // birinci: mutlu
     if (p.expr === 'n' && a.blinkT > 0) p.expr = 'b';
+    // eşya/güç kullanımı: kol savurması
+    applyThrow(p, a);
+    // ikincil hareket (yay): kafa eğimi gövde eğimini, kafa yüksekliği bob'u gecikmeli izler → kulak/saç/şapka sürüklenir
+    if (st !== 'frozen' && st !== 'tumble' && !(a.flip > 0)) {
+      const dl = clamp(a.sl - p.lean, -0.3, 0.3), db = clamp(a.sb - p.bob, -3.5, 3.5);
+      p.head += dl * 0.85; p.hx -= dl * 2.2; p.hy += db * 0.42;
+    }
+    a.tl = p.lean; a.tb = p.bob;
     // esneme / ezilme
-    if (r.land > 0 && r.onGround && st !== 'slide' && st !== 'sled') { const l = min(1, r.land); p.sy *= 1 - l * 0.2; p.sx *= 1 + l * 0.15; }
-    if (r.jumpT > 0 && !(a.flip > 0) && !r.onGround) { const j = min(1, r.jumpT); p.sy *= 1 + j * 0.16; p.sx *= 1 - j * 0.1; }
+    applySquash(p, r.land || 0, r.jumpT || 0, a.flip > 0 || st === 'tumble' || st === 'slam', !!r.onGround);
     return p;
   }
 
@@ -3083,8 +3090,11 @@
     scale = scale || 1;
     const skin = SKINS[opts.skin] ? opts.skin : 'klasik';
     const t = pose.t != null ? pose.t : (FM.S && FM.S.T) || 0;
-    const p = makePose(id, pose.st || 'idle', pose.ph || 0, t, pose.vy || 0, { sled: pose.sled, expr: pose.expr, flip: pose.flip, speed: pose.speed, wph: pose.wph });
+    const p = makePose(id, pose.st || 'idle', pose.ph || 0, t, pose.vy || 0, { sled: pose.sled, expr: pose.expr, flip: pose.flip, speed: pose.speed, wph: pose.wph, tum: pose.tum });
     if (p.expr === 'n' && opts.blink !== false) { const c = (t + id.length * 0.37) % 3.3; if (c < 0.12) p.expr = 'b'; }
+    // isteğe bağlı: pose.land (iniş ezilmesi 0..1), pose.jumpT (zıplama uzaması 0..1), pose.throw {t: 0..1, a: açı} (atış kolu)
+    if (pose.throw && pose.throw.t > 0) applyThrow(p, { throwT: clamp(pose.throw.t, 0, 1) * THROW_T, throwA: pose.throw.a != null ? pose.throw.a : 2 });
+    applySquash(p, pose.land || 0, pose.jumpT || 0, pose.flip > 0 || p.st === 'tumble' || p.st === 'slam', pose.onGround != null ? !!pose.onGround : (p.st !== 'air' && p.st !== 'slam' && p.st !== 'tumble' && p.st !== 'fly'));
     const m = resMul(ctx, scale);
     const face = opts.face === -1 ? -1 : 1;
     ctx.save();

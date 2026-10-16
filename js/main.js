@@ -251,24 +251,71 @@
     }
   }
 
-  /* ---------- klavye ---------- */
+  /* ---------- klavye ----------
+     Boşluk/↑/W zıpla (basılı = tırman), ↓/S kay/çakıl, E/Shift/J eşya, Q/F/K özel güç, Esc/P duraklat.
+     Yönlü atış (docs/TUR5.md §2.1): yönlü eşya/güçte tuş BASILI tutulunca nişan (FM.input.aim); bu sırada ok tuşları/WASD yön
+     verir (çapraz için iki tuş) ve zıplatmaz/kaydırmaz; bırakınca atılır. Yön tuşu yoksa varsayılan yön. Yönsüzde basınca hemen. */
   const I = FM.input;
   const JUMP_KEYS = ['Space', 'ArrowUp', 'KeyW'], DOWN_KEYS = ['ArrowDown', 'KeyS'];
+  const ITEM_KEYS = ['KeyE', 'ShiftLeft', 'ShiftRight', 'KeyJ'], AB_KEYS = ['KeyQ', 'KeyF', 'KeyK'];
+  const DIR_KEYS = { ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0], ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1] };
+  const aimKeys = new Set(), aimDirs = new Set();   // nişanı tutan tuşlar / nişan sırasında basılan yön tuşları
+  let lastDir = null;                                // son sıfırdan farklı yön {x, y, t} (bırakma anı toleransı için)
+  function dirNow() {
+    let x = 0, y = 0;
+    for (const k of aimDirs) { const d = DIR_KEYS[k]; if (d) { x += d[0]; y += d[1]; } }
+    x = Math.sign(x); y = Math.sign(y);
+    const l = Math.hypot(x, y);
+    return l ? { x: Math.round(x / l * 100) / 100, y: Math.round(y / l * 100) / 100 } : null;
+  }
+  function setAimDir() {
+    const d = dirNow(), now = performance.now();
+    if (d) {
+      // çapraz tuşlar tam aynı anda bırakılmaz: çapraz yön 90 ms içinde tek eksene düştüyse çaprazı koru
+      if (lastDir && lastDir.x && lastDir.y && (!d.x || !d.y) && now - lastDir.t < 90 && aimDirs.size < 2) { I.ax = lastDir.x; I.ay = lastDir.y; return; }
+      lastDir = { x: d.x, y: d.y, t: now }; I.ax = d.x; I.ay = d.y;
+    } else if (lastDir && now - lastDir.t < 150) { I.ax = lastDir.x; I.ay = lastDir.y; }   // yön tuşu atıştan hemen önce bırakıldı
+    else { I.ax = 0; I.ay = 0; }
+  }
+  // nişanı bitir: fire = true → bırakma darbesi (use/ab), false → iptal (odak kaybı, yarış dışı)
+  function endAim(fire) {
+    const k = I.aim;
+    aimKeys.clear(); aimDirs.clear();
+    if (!k) return;
+    if (fire) { setAimDir(); if (k === 'item') I.use = true; else I.ab = true; }
+    else { I.ax = 0; I.ay = 0; }
+    I.aim = null; lastDir = null;
+  }
+  const aimable = kind => !!(FM.game && typeof FM.game.aimable === 'function' && FM.game.aimable(kind));
   window.addEventListener('keydown', e => {
     const c = e.code;
     const inGame = S.mode === 'race' || S.mode === 'count';
     if (inGame && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(c)) e.preventDefault();
     if (e.repeat) return;
-    if (c === 'Escape' || c === 'KeyP') { if (inGame || S.paused) FM.emit('ui:pause', { toggle: true }); return; }
+    if (c === 'Escape' || c === 'KeyP') { if (I.aim) endAim(false); if (inGame || S.paused) FM.emit('ui:pause', { toggle: true }); return; }
     if (!inGame || S.paused) return;
+    const kind = ITEM_KEYS.includes(c) ? 'item' : AB_KEYS.includes(c) ? 'ab' : null;
+    if (kind) {
+      if (I.aim === kind) { aimKeys.add(c); return; }                         // aynı nişanın ikinci tuşu
+      if (I.aim) endAim(true);                                               // diğer nişan sürerken: onu at
+      if (aimable(kind)) { I.aim = kind; aimKeys.add(c); aimDirs.clear(); lastDir = null; I.ax = 0; I.ay = 0; }
+      else if (kind === 'item') I.use = true; else I.ab = true;              // yönsüz: hemen
+      return;
+    }
+    if (I.aim && DIR_KEYS[c]) { aimDirs.add(c); setAimDir(); return; }      // nişan sırasında yön tuşu zıplatmaz/kaydırmaz
     if (JUMP_KEYS.includes(c)) { I.jp = true; I.jh = true; }
     else if (DOWN_KEYS.includes(c)) { I.dp = true; I.dh = true; }
-    else if (c === 'KeyE' || c === 'ShiftLeft' || c === 'ShiftRight' || c === 'KeyJ') I.use = true;
-    else if (c === 'KeyQ' || c === 'KeyF' || c === 'KeyK') I.ab = true;
   });
   window.addEventListener('keyup', e => {
-    if (JUMP_KEYS.includes(e.code)) I.jh = false;
-    else if (DOWN_KEYS.includes(e.code)) I.dh = false;
+    const c = e.code;
+    if (aimDirs.has(c)) { aimDirs.delete(c); setAimDir(); }
+    if (aimKeys.has(c)) {
+      aimKeys.delete(c);
+      if (!aimKeys.size) endAim(!S.paused && (S.mode === 'race' || S.mode === 'count'));   // son nişan tuşu bırakıldı: at
+      return;
+    }
+    if (JUMP_KEYS.includes(c)) I.jh = false;
+    else if (DOWN_KEYS.includes(c)) I.dh = false;
   });
   /* ---------- telefon: tam ekran + yatay kilit, yakınlaştırma/uzun basma engelleri ---------- */
   FM.enterFullscreen = function () {

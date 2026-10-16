@@ -1224,7 +1224,9 @@
     // yeni sesler (mp-audio ajanı: aynı ölçüm, uzun seslerde ortak kaymaya göre düzeltildi)
     portal: 7.5, vent: 5, geyser: 5.5, tramp: 6.5, iceSlide: 8.5, rumble: -8, roll: 3.5, boulderCrash: 0, meteorAlarm: -4,
     meteorWarn: 4, meteorHit: 4.5, gatePass: 5.5, elimSelf: 0.5, elimOther: 10, clock: -3, timeup: -3.5, coinsDrop: 9.5, coinsPick: 7.5,
-    coinsBonus: 4, mpJoin: 7, mpLeave: 6, mpReady: 5.5, mpStart: -3.5, emoji: 8, mpDrop: 5.5
+    coinsBonus: 4, mpJoin: 7, mpLeave: 6, mpReady: 5.5, mpStart: -3.5, emoji: 8, mpDrop: 5.5,
+    // 5. tur (aynı ölçüm: aimStart -48.6, aimRelease -41.3, powerReady -31.9, mpTick -43, friendOn -25.7, itemArrive -31.8, perfect -35.1, nearmiss -39.4 dB RMS)
+    aimStart: 9, aimRelease: 9, powerReady: 5, mpTick: 12, cdCancel: 0, friendOn: -3, itemArrive: 2, perfect: 5, nearmiss: 6
   };
   let trimOn = true;
 

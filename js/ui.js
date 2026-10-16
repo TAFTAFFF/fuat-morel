@@ -2022,7 +2022,7 @@
     return '<div class="pnl pnl-pause">' + ribbon('DURAKLATILDI', 'rb-purple') +
       '<div class="pz-sub">' + svg('flag') + 'TUR ' + (S.round || 1) + ' / ' + (S.ROUNDS || 1) + (th ? ' · ' + esc(th) : '') + '</div>' +
       '<button class="btn b-green btn-big pz-go" data-act="resume">' + svg('play') + '<span>DEVAM</span></button>' +
-      '<div class="pz-set">' + sliderRow('music', 'Müzik', 'music') + sliderRow('sfx', 'Efektler', 'sound') + toggleRow('shake', 'Sarsıntı', 'shake') + '</div>' +
+      '<div class="pz-set">' + sliderRow('music', 'Müzik', 'music') + sliderRow('sfx', 'Efektler', 'sound') + toggleRow('shake', 'Sarsıntı', 'shake') + (touchMode ? toggleRow('haptic', 'Titreşim', 'wind') : '') + '</div>' +
       '<button class="btn b-red pz-quit" data-act="quit">' + svg('home') + '<span class="q-t">MENÜYE DÖN</span></button>' +
     '</div>';
   }

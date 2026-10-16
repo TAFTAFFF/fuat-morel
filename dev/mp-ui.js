@@ -1,10 +1,12 @@
-// Kullanım: node dev/mp-ui.js [çıktı klasörü] [--rounds=1] [--mode=classic]
+// Kullanım: node dev/mp-ui.js [çıktı klasörü] [--rounds=1] [--mode=classic] [--broker=ws://127.0.0.1:1884/mqtt]
 // ARAYÜZ uçtan uca testi: İKİ headless Chrome (--mute-audio), geliştirici kancası OLMADAN (mp=... yok) gerçek düğmelere tıklayarak:
 //   A: Ana menü → ARKADAŞLARLA → ODA KUR → takma ad penceresi → lobi; link = FM.net.shareLink()
 //   B: link (?oda=KOD) ile açılır → otomatik katılma → takma ad → lobi → karakter değiştir → HAZIRIM
-//   A: ayarlar (mod, tur) → BAŞLAT → yarış (otomatik pilot) → emoji, ağ menüsü → sonuç (B'de "Ev sahibi bekleniyor") → FİNAL → LOBİYE DÖN
-//   B: ODADAN AYRIL. Konsol hatası olmamalı; ekran görüntüleri klasöre.
-// YAVAŞ MOD: en fazla 2 Chrome; bitince kapatılır.
+//   A: ayarlar (mod, tur) → HAZIRIM (ev sahibi de) → "Herkes hazır! 5…" geri sayımı (iptal/yeniden dene) → yarış KENDİLİĞİNDEN başlar
+//      (FM.netgame.countdown yoksa HEMEN BAŞLAT ile devam eder) → ağ menüsü (duraklamaz) → emoji → sonuç ("Sonraki tur N…" herkeste)
+//      → final → herkes KENDİLİĞİNDEN lobiye döner (hazırlar sıfır) → B sayfayı yeniler → "ODAYA GERİ DÖN" / otomatik geri dönüş → B ayrılır.
+// Aracı: --broker verilmezse dev/broker.js yerel aracı başlatılır ve sayfalara ?brokerUrl= ile verilir (bu bulut ortamı herkese açık aracılara bağlanamaz).
+// Konsol hatası olmamalı; ekran görüntüleri klasöre. YAVAŞ MOD: en fazla 2 Chrome; bitince kapatılır.
 'use strict';
 try { require('os').setPriority(0, require('os').constants.priority.PRIORITY_LOW); } catch (e) { }
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -17,6 +19,7 @@ const ARGS = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const opt = k => { const a = process.argv.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=')[1] : null; };
 const OUT = path.resolve(ARGS[0] || path.join(os.tmpdir(), 'fm-mp-ui'));
 const ROUNDS = [1, 3, 5].indexOf(+opt('rounds')) >= 0 ? +opt('rounds') : 1, MODE = opt('mode') || 'classic';
+let BROKER = opt('broker') || '', LOCAL = null;   // yerel aracı (dev/broker.js)
 fs.mkdirSync(OUT, { recursive: true });
 
 function cdp(wsUrl) {
@@ -44,6 +47,7 @@ function killAll() {
 }
 process.on('exit', killAll);
 async function openPage(name, query) {
+  if (BROKER) query += '&brokerUrl=' + encodeURIComponent(BROKER);
   const profile = path.join(os.tmpdir(), 'fm-mpui-' + name + '-' + process.pid);
   const url = 'file:///' + root.split(path.sep).join('/') + '/index.html?' + query;
   const ch = spawn(chromePath, ['--headless=new', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []), '--disable-gpu', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-allow-origins=*',
@@ -85,6 +89,10 @@ const ui = p => p.eval('FM.ui.state()');
   let fails = 0;
   const ok = (c, m) => { console.log((c ? 'TAMAM ' : 'HATA  ') + m); if (!c) fails++; };
   try {
+    if (!BROKER) {
+      try { LOCAL = await require('./broker.js').start({ port: 18840 + Math.floor(Math.random() * 100) }); BROKER = LOCAL.url; console.log('yerel aracı: ' + BROKER); }
+      catch (e) { console.log('yerel aracı başlatılamadı (' + e.message + '): herkese açık aracılar denenecek'); }
+    }
     // ---------- A: oda kur ----------
     const A = await openPage('evsahibi', 'dev=1&scene=menu&run=1&mobile=1');
     await waitFor(async () => (await ui(A)).screen === 'menu', 15000, 'A ana menü');
@@ -117,6 +125,7 @@ const ui = p => p.eval('FM.ui.state()');
     await waitFor(() => A.eval('!!(FM.net.players().find(p => !p.me) || {}).ready'), 8000, 'A, B\'yi hazır görüyor');
     await waitFor(() => A.eval('document.querySelectorAll(".lb-pl-in .pc.rdy").length >= 1'), 5000, 'A lobi listesinde HAZIR');
     ok(true, 'HAZIRIM karşıya geçti');
+    ok(await A.eval('!!document.querySelector("[data-act=\\"lbready\\"]") && !!document.querySelector("[data-act=\\"lbstart\\"]")'), 'ev sahibinde de HAZIRIM + HEMEN BAŞLAT düğmesi var');
     // A: ayarlar (tur, mod)
     await tap(A, `[data-act="lcfg"][data-k="rounds"][data-v="${ROUNDS === 1 ? 1 : ROUNDS}"]`, 'A tur');
     if (MODE !== 'classic') {
@@ -131,11 +140,28 @@ const ui = p => p.eval('FM.ui.state()');
     await sleep(300);
     await A.shot(path.join(OUT, 'a-lobby.png')); await B.shot(path.join(OUT, 'b-lobby.png'));
     ok(true, 'lobide emoji karşıya geçti');
-    // ---------- yarış ----------
+    // ---------- herkes hazır → geri sayım → yarış kendiliğinden ----------
     await A.eval('FM.netgame.autopilot = true'); await B.eval('FM.netgame.autopilot = true');
-    await tap(A, '[data-act="lbstart"]', 'A BAŞLAT');
-    await waitFor(async () => (await ui(A)).view === 'race' && (await ui(B)).view === 'race', 15000, 'iki taraf yarışta');
-    ok(true, 'BAŞLAT → iki taraf yarışta');
+    const hasCd = await A.eval('typeof FM.netgame.countdown === "function"');
+    if (hasCd) {
+      await tap(A, '[data-act="lbready"]', 'A HAZIRIM (ev sahibi)');
+      await waitFor(() => B.eval('!!document.querySelector(".lb-cd .cd-n")'), 10000, 'B geri sayım afişi');
+      await B.shot(path.join(OUT, 'b-countdown.png')); await A.shot(path.join(OUT, 'a-countdown.png'));
+      ok(true, 'herkes hazır → geri sayım afişi iki lobide de görünüyor');
+      // iptal: B hazırı geri alır
+      await tap(B, '[data-act="lbready"]', 'B hazırı geri al');
+      await waitFor(() => A.eval('!document.querySelector(".lb-cd .cd-n")'), 6000, 'A geri sayım iptal oldu');
+      await waitFor(() => A.eval('!!document.querySelector(".lb-cd .cd-x")'), 3000, 'A iptal nedeni afişi');
+      ok(true, 'hazırı geri alınca geri sayım iptal oldu, neden gösterildi');
+      await tap(B, '[data-act="lbready"]', 'B yeniden HAZIRIM');
+      await waitFor(async () => (await ui(A)).view === 'race' && (await ui(B)).view === 'race', 25000, 'geri sayım bitince iki taraf kendiliğinden yarışta');
+      ok(true, 'geri sayım → yarış KENDİLİĞİNDEN başladı');
+    } else {
+      console.log('NOT  FM.netgame.countdown yok (AĞ ajanı bekleniyor): HEMEN BAŞLAT ile devam');
+      await tap(A, '[data-act="lbstart"]', 'A HEMEN BAŞLAT');
+      await waitFor(async () => (await ui(A)).view === 'race' && (await ui(B)).view === 'race', 15000, 'iki taraf yarışta');
+      ok(true, 'HEMEN BAŞLAT → iki taraf yarışta');
+    }
     await sleep(5500);
     // ağ menüsü: duraklatma yok
     await A.eval('FM.emit("ui:pause", {toggle: true})');
@@ -154,27 +180,62 @@ const ui = p => p.eval('FM.ui.state()');
     await waitFor(async () => (await ui(A)).view === 'results' && (await ui(B)).view === 'results', 150000, 'iki tarafta sonuç');
     await sleep(1500);
     const ra = await A.eval('({next: !!document.querySelector(".res-foot [data-act=\\"next\\"]"), me: document.querySelectorAll(".res-tbl .rr.me").length})');
-    const rb = await B.eval('({wait: !!document.querySelector(".res-foot .btn-next.wait"), me: document.querySelectorAll(".res-tbl .rr.me").length})');
+    const rb = await B.eval('({wait: !!document.querySelector(".res-foot .btn-next.wait"), txt: (document.querySelector(".res-foot .btn-next") || {}).textContent, me: document.querySelectorAll(".res-tbl .rr.me").length})');
     ok(ra.next && ra.me === 1, 'A sonuç: SONRAKİ/FİNAL düğmesi, tek "SEN" satırı');
-    ok(rb.wait && rb.me === 1, 'B sonuç: "Ev sahibi bekleniyor", tek "SEN" satırı');
+    ok(rb.wait && rb.me === 1, 'B sonuç: "' + String(rb.txt || '').trim() + '" (sonraki tur sayacı / ev sahibi bekleniyor), tek "SEN" satırı');
     await A.shot(path.join(OUT, 'a-results.png')); await B.shot(path.join(OUT, 'b-results.png'));
+    // tur / final ilerlemesi: otomatik (FM.netgame.autoLeft) ya da elle (düğme). Otomatik çalışıyorsa düğmeye BASILMAZ.
+    const autoOn = await A.eval('typeof FM.netgame.autoLeft === "function" && FM.netgame.autoLeft() != null');
+    const bothView = async v => (await ui(A)).view === v && (await ui(B)).view === v;
+    const advance = async (want, sel, label) => {
+      const t0 = Date.now();
+      while (autoOn && Date.now() - t0 < 16000) { if (await bothView(want)) return 'otomatik'; await sleep(300); }
+      if (await bothView(want)) return 'otomatik';
+      await tap(A, sel, label);
+      await waitFor(() => bothView(want), 15000, label + ' sonrası ' + want);
+      return 'elle';
+    };
     for (let r = 1; r < ROUNDS; r++) {
-      await tap(A, '.res-foot [data-act="next"]', 'A SONRAKİ TUR');
-      await waitFor(async () => (await ui(A)).view === 'race' && (await ui(B)).view === 'race', 15000, 'tur ' + (r + 1) + ' başladı');
-      await waitFor(async () => (await ui(A)).view === 'results' && (await ui(B)).view === 'results', 150000, 'tur ' + (r + 1) + ' sonucu');
+      const how = await advance('race', '.res-foot [data-act="next"]', 'A SONRAKİ TUR');
+      ok(true, 'tur ' + (r + 1) + ' başladı (' + how + ')');
+      await waitFor(() => bothView('results'), 150000, 'tur ' + (r + 1) + ' sonucu');
       await sleep(1200);
     }
-    await tap(A, '.res-foot [data-act="next"]', 'A FİNAL');
-    await waitFor(async () => (await ui(A)).view === 'final' && (await ui(B)).view === 'final', 15000, 'iki tarafta final');
-    await sleep(1500);
-    const fa = await A.eval('({lob: !!document.querySelector("[data-act=\\"tolobby\\"]"), me: document.querySelectorAll(".fin-rows .fr.me").length})');
-    const fb = await B.eval('({wait: !!document.querySelector(".fin-btns .wait"), me: document.querySelectorAll(".fin-rows .fr.me").length})');
-    ok(fa.lob && fa.me === 1, 'A final: LOBİYE DÖN, tek "SEN"');
-    ok(fb.wait && fb.me === 1, 'B final: ev sahibi bekleniyor, tek "SEN"');
+    const hf = await advance('final', '.res-foot [data-act="next"]', 'A FİNAL');
+    ok(true, 'iki tarafta final (' + hf + ')');
+    await sleep(1200);
+    const fa = await A.eval('({lob: !!document.querySelector("[data-act=\\"tolobby\\"]"), me: document.querySelectorAll(".fin-rows .fr.me").length, aw: document.querySelectorAll(".fin .fa").length})');
+    const fb = await B.eval('({wait: !!document.querySelector(".fin-btns .wait"), txt: (document.querySelector(".fin-btns .wait") || {}).textContent, me: document.querySelectorAll(".fin-rows .fr.me").length})');
+    ok(fa.lob && fa.me === 1, 'A final: LOBİYE DÖN, tek "SEN" (eğlenceli ödül kartı: ' + fa.aw + ')');
+    ok(fb.wait && fb.me === 1, 'B final: "' + String(fb.txt || '').trim() + '", tek "SEN"');
     await A.shot(path.join(OUT, 'a-final.png')); await B.shot(path.join(OUT, 'b-final.png'));
-    await tap(A, '[data-act="tolobby"]', 'A LOBİYE DÖN');
+    // maç sonu: herkes KENDİLİĞİNDEN lobiye döner (menüye atılmaz); olmazsa ev sahibi düğmesi
+    let back = 'otomatik';
+    const t1 = Date.now();
+    while (autoOn && Date.now() - t1 < 30000) { const a = (await ui(A)).screen, b = (await ui(B)).screen; if (a === 'lobby' && b === 'lobby') break; await sleep(400); }
+    if (!((await ui(A)).screen === 'lobby' && (await ui(B)).screen === 'lobby')) { back = 'elle'; await tap(A, '[data-act="tolobby"]', 'A LOBİYE DÖN'); }
     await waitFor(async () => (await ui(A)).screen === 'lobby' && (await ui(B)).screen === 'lobby', 15000, 'iki taraf lobiye döndü');
-    ok(true, 'lobiye dönüş');
+    ok(true, 'lobiye dönüş (' + back + ')');
+    await sleep(800);
+    ok(await A.eval('FM.net.players().every(p => !p.ready || p.off)'), 'lobiye dönünce hazırlar sıfırlandı');
+    await A.shot(path.join(OUT, 'a-lobby2.png'));
+    // ---------- B sayfayı yeniler: odaya geri dön ----------
+    if (await B.eval('typeof FM.netgame.rejoinInfo === "function" && !!FM.netgame.rejoinInfo()')) {
+      await B.send('Page.navigate', { url: 'file:///' + root.split(path.sep).join('/') + '/index.html?dev=1&scene=menu&run=1&mobile=1' + (BROKER ? '&brokerUrl=' + encodeURIComponent(BROKER) : '') });
+      await sleep(1500);
+      await waitFor(() => B.eval('!!(window.FM && FM.ui && FM.ui.state && FM.S && FM.S.mode !== "boot")'), 25000, 'B yeniden yüklendi');
+      let auto = false;
+      for (let i = 0; i < 24; i++) {
+        if ((await ui(B)).screen === 'lobby') { auto = true; break; }
+        if (await B.eval('!!document.querySelector("[data-act=\\"rejoin\\"]")')) break;
+        await sleep(500);
+      }
+      await B.shot(path.join(OUT, 'b-reload.png'));
+      if (!auto) await tap(B, '[data-act="rejoin"]', 'B ODAYA GERİ DÖN');
+      await waitFor(async () => (await ui(B)).screen === 'lobby', 30000, 'B odaya geri döndü');
+      await waitFor(() => A.eval('FM.net.players().filter(p => !p.off).length === 2'), 15000, 'A, B\'yi yine odada görüyor');
+      ok(true, 'sayfa yenilendi → odaya geri dönüldü (' + (auto ? 'otomatik' : 'ODAYA GERİ DÖN düğmesiyle') + ')');
+    } else console.log('NOT  FM.netgame.rejoinInfo yok (AĞ ajanı bekleniyor): geri dönüş testi atlandı');
     // ---------- B ayrılır ----------
     await tap(B, '[data-act="lbleave"]', 'B AYRIL');
     await tap(B, '[data-act="mok"]', 'B onay');
@@ -191,5 +252,6 @@ const ui = p => p.eval('FM.ui.state()');
   }
   console.log(fails ? 'SONUÇ: ' + fails + ' HATA' : 'SONUÇ: HEPSİ GEÇTİ', '— görüntüler: ' + OUT);
   killAll();
+  if (LOCAL) { try { await LOCAL.close(); } catch (e) { } }
   setTimeout(() => process.exit(fails ? 1 : 0), 1200);
 })();

@@ -49,6 +49,9 @@
   // bu bölümlerden sonra iniş noktası belirsiz: hemen ardından tehlike gelmesin
   const LANDY = { route: 1, drop: 1, plat: 1, wall: 1, step: 1, gap: 1, lowg: 1, portal: 1, roof: 1, chimney: 1, geyser: 1, bridge: 1, stairs: 1, boulder: 1 };
   const HAZ = { spikes: 1, crush: 1, saw: 1, boulder: 1, portal: 1 };
+  /* Isınma: başlangıçtan WARM_X'e kadar başlayan bölümler tehlikesiz ve düz (koşu mesafesiyle ~3 sn): start kalabalığı
+     ilk saniyelerde dikene/çukura yığılmasın. Yalnızca bunlar seçilebilir; diğerleri düz zemine döner. */
+  const WARM_X = 1060, WARM_OK = { flat: 1, pad: 1, belt: 1 };
   function poolFor(themeId, mode) {
     let p = (mode === 'pure' ? TECH : BASE).slice();
     switch (themeId) {
@@ -114,6 +117,7 @@
       if (t === 'wall' && gy < 300) t = 'drop';
       if (t === 'chimney' && gy < 330) t = 'drop';
       if (t === 'drop' && gy > 420) t = 'step';
+      if (x < WARM_X && !WARM_OK[t]) t = 'flat';
       prev = t;
       // kutu merkezi zeminden 50 px yukarıda: koşarken başa değer (zıplayınca üstünden aşılmaz); kutular seyrek
       if (!noBox && x - lastBox > BOX_GAP && t !== 'route') { const w = afterRoute ? R(380, 460) : R(260, 340), s = ground(w); box(s + w / 2, gy - 50); continue; }

@@ -334,6 +334,7 @@
   /* =================== olay alımı =================== */
   FM.on('net:event', m => {
     try {
+      if (m && m.type === 'cd') { onCd(m); return; }
       if (!m || m.type !== 'b' || !isObj(m.data) || !Array.isArray(m.data.l) || !M.on) return;
       const D = m.data;
       if (D.mid !== M.mid || (D.rd | 0) !== M.round) return;          // başka maçın/turun (geç gelen) olayları
@@ -536,6 +537,8 @@
     game.startRound({ seed: d.seed, themeIdx: d.theme });   // aynı seed + tema + mod → herkeste aynı harita; geri sayım başlar
     S.netRole = host ? 'host' : 'member';
     if (S.player.ghost) { S.player.x = 80; S.player.y = S.L.startY - C.RH; }
+    // yarış sürerken geri döndük (sayfa yenilendi / uygulama yeniden açıldı) ve kadrodayız: kaldığımız yerden devam
+    if (late && mine && snapRestore(mine, d)) FM.fx.toast('Yarışa geri döndün!', '#7be3ff');
     // saat: start mesajını aracı herkese aynı anda iletir → kendi rtt/2'm kadar geç aldım
     const half = (FM.net.rtt() || 0) / 2;
     if (late) { K.ok = false; K.lastT = -1; S.mode = 'race'; S.countT = 0; S.raceT = 0; S.lt = COUNT0; }
@@ -545,8 +548,13 @@
     if (M.spectating) FM.emit('mp:waiting', { round: d.round, rounds: d.rounds, late: !!late, phase: 'race' });
     return true;
   }
-  FM.on('net:start', d => { try { beginRace(d, !!(d && d.late)); } catch (e) { errLog('start', e); } });
-  FM.on('net:next', d => { try { beginRace(d, !!(d && d.late)); } catch (e) { errLog('next', e); } });
+  function onStartMsg(d) {
+    rejoining = null;
+    if (CD.left != null) { clearTimeout(CD.timer); CD.timer = null; CD.left = null; CD.at = 0; cdEmit(null, 'start'); }
+    beginRace(d, !!(d && d.late));
+  }
+  FM.on('net:start', d => { try { onStartMsg(d); } catch (e) { errLog('start', e); } });
+  FM.on('net:next', d => { try { onStartMsg(d); } catch (e) { errLog('next', e); } });
 
   /* =================== tur sonu (ev sahibi karar verir, herkes aynen uygular) =================== */
   function mpRanking() {
@@ -673,6 +681,7 @@
     const cfg = normCfg(Object.assign({}, lob.cfg, isObj(over) ? over : {}));
     const players = humans(); if (!players.length) return false;
     const seq = game.themeSeqFor(cfg.map, cfg.rounds);
+    cdStop('start', true);                               // HEMEN BAŞLAT ya da geri sayım bitti
     return FM.net.start(buildRound({ round: 1, cfg, seq, mid: rid('m'), players, prevBots: [], tot: {} }));
   }
   /** Ev sahibi: sonraki tur (son turdan sonra final sıralaması; finalden sonra lobiye). */
@@ -890,6 +899,7 @@
   }
   function leftRoom(reason) {
     const racing = M.on && !!S.netRole;
+    if (CD.left != null) { clearTimeout(CD.timer); CD.timer = null; CD.left = null; CD.at = 0; cdEmit(null); }
     resetMatch('off'); outQ.length = 0; M.lastEnd = null; M.final = null;
     if (racing) game.toMenu();
     FM.emit('mp:left', { reason: reason || 'left' });
@@ -911,6 +921,11 @@
       }
     } catch (e) { errLog('status', e); }
   });
+  // lobi değişince (hazır, katılan, çıkan) geri sayım kararını hemen ver (tik 4 Hz'i beklemeden)
+  FM.on('net:players', () => { try { if (!M.on && isHost()) lobbyCheck(); } catch (e) { errLog('players', e); } });
+  FM.on('net:lobby', () => { try { if (!M.on && isHost()) lobbyCheck(); } catch (e) { errLog('lobby', e); } });
+  FM.on('net:pagehide', () => { try { snapSave(); } catch (e) { errLog('pagehide', e); } });
+  try { if (typeof document !== 'undefined' && document && document.addEventListener) document.addEventListener('visibilitychange', () => { try { if (document.hidden) snapSave(); } catch (e) { } }); } catch (e) { }
   FM.on('net:emoji', m => {
     try {
       if (!isObj(m) || typeof m.e !== 'string') return;
@@ -922,7 +937,8 @@
   // 4 Hz: kopan oyuncu taraması, saat ince ayarı, otomatik sonraki tur, tur sonu yeniden deneme, olay kuyruğu
   const tick = function () {
     try {
-      if (!M.on) return;
+      if (!M.on) { if (isHost()) lobbyCheck(); else memberCdTick(); return; }
+      if (M.phase === 'race' && now() - snapT > 3000) snapSave();
       offScan();
       clockSync();
       const t = now();
@@ -944,11 +960,17 @@
     state: () => ({
       on: M.on, phase: M.phase, role: isHost() ? 'host' : (inRoom() ? 'member' : null), spectating: M.spectating, late: M.late,
       round: M.round, rounds: M.rounds, mode: M.mode, mid: M.mid, theme: S.L && S.L.theme ? S.L.theme.id : null,
-      autoLeft: NG.autoLeft(), lastEnd: M.lastEnd, final: M.final
+      autoLeft: NG.autoLeft(), countdown: CD.left, lastEnd: M.lastEnd, final: M.final
     }),
-    /** Ev sahibinde otomatik sonraki tur/lobiye kalan sn (yoksa null). */
+    /** Otomatik sonraki tura / lobiye kalan sn (yoksa null) — HERKESTE (üyeler de); uygulayan ev sahibi. */
     autoLeft: () => (M.autoAt ? Math.max(0, Math.ceil((M.autoAt - now()) / 1000)) : null),
     cancelAuto: () => { M.autoAt = 0; return true; },
+    /** Lobide "herkes hazır" geri sayımı: kalan sn (5..1) ya da null. Olay: 'mp:countdown {left, reason?}'. */
+    countdown: () => CD.left,
+    /** Son odaya geri dönüş: {code, mins, nick} | null / dene (bool) / kaydı unut. */
+    rejoinInfo: () => { try { return rejoinInfo(); } catch (e) { errLog('rejoinInfo', e); return null; } },
+    rejoin: () => { try { return rejoin(); } catch (e) { errLog('rejoin', e); return false; } },
+    forgetRoom: () => { try { return !!(FM.net && FM.net.forgetRoom && FM.net.forgetRoom()); } catch (e) { return false; } },
     racer: id => byRid.get(id) || null,
     racers: () => S.racers.slice(),
     totals: () => Object.assign({}, M.tot),
@@ -979,6 +1001,7 @@
   // Otomatik pilot varsayılan açık (&auto=0 kapatır). Test düzeneği: dev/mp-browser.js, dev/mp-bots.js
   FM.on('boot', () => {
     const P = FM.params || {};
+    setTimeout(() => { try { autoRejoin(); } catch (e) { errLog('autoRejoin', e); } }, 450);   // ?oda= yoksa son odaya dön (TUR5 §7)
     if (!FM.DEV || !P.mp || !FM.net || !FM.net.available()) return;
     NG.autopilot = P.auto !== '0';
     setTimeout(() => {

@@ -1596,7 +1596,11 @@
     const sx = cxOf(tgt) >= cxOf(r) ? 1 : -1;
     for (const a of BOT_ANGS) {
       const d = aimDir(sx * Math.cos(a), Math.sin(a));
-      if (throwHits(r, it, d, [tgt])) return d;
+      if (throwHits(r, it, d, [tgt])) {
+        // insan gibi küçük nişan hatası (±0.08 rad): botlar her atışta kusursuz olmasın
+        const e = (Math.random() - .5) * .16, b = Math.atan2(d.y, d.x) + e;
+        return aimDir(Math.cos(b), Math.sin(b));
+      }
     }
     return null;
   }

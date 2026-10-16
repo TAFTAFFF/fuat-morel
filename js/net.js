@@ -1412,6 +1412,7 @@
     if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
       window.addEventListener('online', guard(function () { if (C.want && !connected()) { C.att = 0; reconnectNow('çevrimiçi'); } pOnline(); }, 'online'));
       window.addEventListener('pagehide', guard(function (ev) {
+        emit('net:pagehide', { persisted: !!(ev && ev.persisted) });   // netgame: yarış konumunu kaydet (oda kapanmadan önce)
         pPageHide();
         if (!R.phase) return;
         if (R.phase === 'in') rjWrite({ closed: Date.now() });     // yenileme / kapanma: geri dönüş kaydı kalır (bilerek çıkış değil)
@@ -1592,7 +1593,7 @@
       // varlığın KENDİ bağlantısını ani kopar (paylaşılan oda bağlantısına dokunmaz)
       pkill: guard(function () { const m = P.mq; if (m) m.end('test: ani kopma'); return !!m; }, 'pkill', false),
       // sayfa kapanma / gizlenme benzetimi (node testleri; tarayıcıda gerçek olaylar)
-      pagehide: guard(function () { pPageHide(); if (R.phase === 'in') rjWrite({ closed: Date.now() }); if (R.phase) leave(false, true); return true; }, 'pagehide', false),
+      pagehide: guard(function () { emit('net:pagehide', { persisted: false }); pPageHide(); if (R.phase === 'in') rjWrite({ closed: Date.now() }); if (R.phase) leave(false, true); return true; }, 'pagehide', false),
       hidden: guard(function (h) { pHidden(!!h); return true; }, 'hidden', false),
       freeze: null, R, C, P, bufs, offs, SN: () => SN, Mq, packet, mqStr, utf8, fromUtf8, override: OVR
     }

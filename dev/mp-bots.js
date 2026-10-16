@@ -4,6 +4,10 @@
 //         tüm istemcilerde tur sonuçlarının (sıralama + puan) AYNI olduğunu, uzak yarışçıların hareket ettiğini, olayların
 //         karşıya geçtiğini ve konsol hatası olmadığını denetler.
 //   node dev/mp-bots.js join KOD [oyuncu=3] [sn=240]
+//   node dev/mp-bots.js lobi [--yerel]
+//       → TUR5 lobi akışı: herkes HAZIR → 5 sn geri sayım (mp:countdown herkeste) → yarış; hazırı geri alma iptali; turlar arası
+//         otomatik geçiş + üyede autoLeft(); final sonrası herkes LOBİYE (aynı oda); yarış ortasında yenileyen üyenin aynı yarışçıya dönmesi.
+//   --yerel: dev/broker.js ile bu süreçte yerel aracı başlatır (ya da NET_BROKER=ws://.../mqtt). Herkese açık aracıya ulaşılamayan ortamlar için.
 //       → var olan odaya (ör. tarayıcıdaki oyun) N hayalet katılır ve otomatik pilotla oynar (ev sahibi lobiye dönünce / süre dolunca biter).
 // Her hayalet GERÇEK istemcidir: core+gfx+net+level+game+meta+netgame (çizim yok) ayrı bir vm bağlamında, kendi pid'i ve kaydıyla;
 // yerel yarışçısını oyunun yapay zekâsı sürer (FM.netgame.autopilot). Aracıya gerçek WebSocket ile bağlanır (Node 24 global WebSocket).
@@ -15,6 +19,8 @@ const root = path.resolve(__dirname, '..');
 const FILES = ['core', 'gfx', 'net', 'level', 'game', 'meta', 'netgame'];
 const SRC = FILES.map(f => [f, fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8')]);
 const CHARS = ['TAFTAF', 'Caner', 'LUL', 'ertan', 'Kral', 'Nuss', 'baso'];
+let BURL = process.env.NET_BROKER || null;      // yerel/özel aracı: tüm hayaletler ?brokerUrl= ile buna bağlanır
+function setBroker(u) { BURL = u || null; }
 
 function stubEl() {
   return { style: {}, classList: { add() { }, remove() { }, toggle() { }, contains() { return false; } }, addEventListener() { }, removeEventListener() { }, appendChild() { }, remove() { },
@@ -25,9 +31,9 @@ function stubEl() {
 /* Bir hayalet istemci oluştur. opts: {nick, char, quiet} */
 function ghost(nick, opts) {
   opts = opts || {};
-  const store = {};
+  const store = opts.store || {};
   const ch = opts.char || CHARS[(Math.random() * CHARS.length) | 0];
-  store.fuatmorel_save_v2 = JSON.stringify({ selChar: ch, nick, nickSet: true });
+  if (!store.fuatmorel_save_v2) store.fuatmorel_save_v2 = JSON.stringify({ selChar: ch, nick, nickSet: true });
   const g = { nick, errors: [], ev: [], timers: [], stopped: false };
   const cons = {
     log: (...a) => { if (!opts.quiet) console.log('[' + nick + ']', ...a); },
@@ -40,7 +46,7 @@ function ghost(nick, opts) {
     setInterval: (f, ms) => { const t = setInterval(f, ms); g.timers.push(t); return t; }, clearInterval,
     performance, crypto: globalThis.crypto, TextEncoder, TextDecoder, WebSocket, URL, URLSearchParams,
     localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    location: { search: '', href: 'https://ornek.github.io/fuat-morel/index.html' }, navigator: { maxTouchPoints: 0, onLine: true }, history: { replaceState() { } },
+    location: { search: BURL ? '?brokerUrl=' + encodeURIComponent(BURL) : '', href: 'https://ornek.github.io/fuat-morel/index.html' }, navigator: { maxTouchPoints: 0, onLine: true }, history: { replaceState() { } },
     matchMedia: () => ({ matches: false, addEventListener() { } }), innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1,
     addEventListener() { }, removeEventListener() { }, requestAnimationFrame() { return 0; },
     document: { hidden: false, getElementById: () => stubEl(), createElement: () => stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [], addEventListener() { }, body: stubEl(), fonts: null } };
@@ -50,8 +56,9 @@ function ghost(nick, opts) {
   FM.view.VW = 1100;
   FM.netgame.autopilot = true;
   g.FM = FM; g.net = FM.net; g.ng = FM.netgame;
-  for (const e of ['mp:start', 'mp:end', 'mp:final', 'mp:lobby', 'mp:host', 'mp:drop', 'mp:back', 'mp:left', 'mp:waiting', 'net:error', 'net:kicked', 'mp:emote'])
-    FM.on(e, d => { g.ev.push({ e, t: Date.now(), d: e === 'mp:end' || e === 'mp:final' ? JSON.parse(JSON.stringify(d)) : (d && (d.code || d.pid || d.round || d.reason)) || null }); });
+  g.store = store;
+  for (const e of ['mp:start', 'mp:end', 'mp:final', 'mp:lobby', 'mp:host', 'mp:drop', 'mp:back', 'mp:left', 'mp:waiting', 'net:error', 'net:kicked', 'mp:emote', 'mp:countdown', 'mp:rejoining'])
+    FM.on(e, d => { g.ev.push({ e, t: Date.now(), d: e === 'mp:end' || e === 'mp:final' || e === 'mp:countdown' || e === 'mp:start' || e === 'mp:left' ? JSON.parse(JSON.stringify(d, (k, v) => (k === 'r' && v && typeof v === 'object' ? undefined : v))) : (d && (d.code || d.pid || d.round || d.reason)) || null }); });
   // oyun döngüsü (main.js yerine): sabit adım + parçacık/bildirim sönümü
   const STEP = FM.C.STEP, S = FM.S;
   let last = performance.now(), acc = 0;
@@ -86,17 +93,19 @@ async function waitFor(fn, ms, what) {
 // sonuçlar aynı mı? (sıra + puan + toplam)
 function endSig(d) { return d && Array.isArray(d.ranking) ? d.ranking.map(e => e.pid + ':' + e.rp + ':' + e.total).join(',') : 'yok'; }
 
-module.exports = { ghost, sleep, waitFor, endSig, CHARS };
+module.exports = { ghost, sleep, waitFor, endSig, CHARS, setBroker };
 
 /* =================== komut satırı =================== */
 if (require.main === module) {
   // bayraklar: --hostdrop=SN (ev sahibi SN. saniyede donar/kopar → göç), --drop=SN (Oyuncu1 kopar → "bağlantı koptu", sonuçta en sonda),
   //           --late=SN (SN. saniyede bir oyuncu daha katılır → izleyici, sonraki turda yarışır)
-  const FL = {}; const A = process.argv.slice(2).filter(a => { const m = /^--([a-z]+)=(.*)$/.exec(a); if (m) { FL[m[1]] = m[2]; return false; } return true; });
+  const FL = {}; const A = process.argv.slice(2).filter(a => { const m = /^--([a-z]+)(?:=(.*))?$/.exec(a); if (m) { FL[m[1]] = m[2] == null ? '1' : m[2]; return false; } return true; });
   const cmd = A[0] || 'host';
   (async () => {
     const all = [];
-    const finish = code => { for (const g of all) g.stop(); setTimeout(() => process.exit(code), 400); };
+    let broker = null;
+    if (FL.yerel && !BURL) { broker = await require('./broker.js').start({ port: 0, delay: +(FL.gecikme || 0) }); setBroker(broker.url); console.log('Yerel aracı: ' + broker.url); }
+    const finish = code => { for (const g of all) g.stop(); setTimeout(() => { if (broker) broker.close(); process.exit(code); }, 400); };
     process.on('SIGINT', () => finish(130));
     try {
       if (cmd === 'join') {

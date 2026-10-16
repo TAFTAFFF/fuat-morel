@@ -1212,10 +1212,10 @@
   }
   function touchList() {
     return '<div class="tlist">' +
-      '<div class="tl"><span class="tl-b tl-jump">' + svg('up') + '</span><span><b>ZIPLA</b> sağ altta. Basılı tutarsan duvara tırmanırsın.</span></div>' +
-      '<div class="tl"><span class="tl-b tl-slide">' + svg('down') + '</span><span><b>KAY</b> sol altta. Havadayken yere çakılırsın.</span></div>' +
-      '<div class="tl"><span class="tl-b tl-item">' + gi('box', 32) + '</span><span><b>EŞYA</b> elindeki eşyayı kullanır.</span></div>' +
-      '<div class="tl"><span class="tl-b tl-pow">' + svg('bolt') + '</span><span><b>GÜÇ</b> halka dolunca parlar, dokun ve kullan.</span></div>' +
+      '<div class="tl"><span class="tl-b tl-jump">' + svg('up') + '</span><span><b>ZIPLA</b> sol alt köşede. Basılı tutarsan duvara tırmanırsın.</span></div>' +
+      '<div class="tl"><span class="tl-b tl-slide">' + svg('down') + '</span><span><b>KAY</b> ZIPLA’nın hemen sağında. Havadayken yere çakılırsın.</span></div>' +
+      '<div class="tl"><span class="tl-b tl-item">' + gi('box', 32) + '</span><span><b>EŞYA</b> sağ alt köşede, elindeki eşyayı kullanır.</span></div>' +
+      '<div class="tl"><span class="tl-b tl-pow">' + svg('bolt') + '</span><span><b>GÜÇ</b> EŞYA’nın solunda; halka dolunca parlar, dokun ve kullan.</span></div>' +
     '</div>';
   }
   function sliderRow(key, label, icon) {
@@ -1483,7 +1483,7 @@
     const n = list.length;
     const bots = cfg.bots ? clamp((cfg.fill || 4) - n, 0, 10 - n) : 0;
     for (let i = 0; i < bots; i++) h += '<div class="pc bot"><span class="pc-pt">' + svg('user') + '</span><span class="pc-m"><b class="pc-n"><span>Bot</span></b><span class="pc-c">Yarışta boş yeri doldurur</span></span></div>';
-    for (let i = n + bots; i < 10; i++) h += '<div class="pc empty" data-act="share" role="button" tabindex="0"><span class="pc-pt">' + svg('users') + '</span><span class="pc-m"><b class="pc-n"><span>Boş yer</span></b><span class="pc-c">Dokun, arkadaşını davet et</span></span></div>';
+    for (let i = n + bots; i < 10; i++) h += '<div class="pc slot" data-act="share" role="button" tabindex="0"><span class="pc-pt">' + svg('users') + '</span><span class="pc-m"><b class="pc-n"><span>Boş yer</span></b><span class="pc-c">Dokun, arkadaşını davet et</span></span></div>';
     return h;
   }
   function lobbySet(d) {
@@ -2866,7 +2866,7 @@
       return;
     }
     if (st.view === 'menu') {
-      if (k === 'Enter' && st.screen === 'menu' && !onCtl) { e.preventDefault(); click(); startGame(); }
+      if (k === 'Enter' && (st.screen === 'menu' || st.screen === 'solo') && !onCtl) { e.preventDefault(); click(); startGame(); }
       else if (k === 'Escape' && st.screen !== 'menu') { e.preventDefault(); click(); goBack(); }
       else if (st.screen === 'menu' && (k === 'ArrowLeft' || k === 'ArrowRight') && !onCtl) { e.preventDefault(); click(); cycleChar(k === 'ArrowLeft' ? -1 : 1); }
     } else if (st.view === 'results') {

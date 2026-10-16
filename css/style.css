@@ -1591,11 +1591,11 @@ kbd {
 .tbtn .tb-ico { width: 44%; height: 44%; color: #fff; filter: drop-shadow(0 .3vh 0 rgba(26, 11, 46, .55)); }
 .tbtn b { --o: rgba(26, 11, 46, .95); font: clamp(12px, 2.8vh, 16px)/1 var(--fh); font-weight: 400; letter-spacing: .04em; color: #fff; }
 .tbtn.down .tb-in { transform: scale(.88); background: radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .6), rgba(255, 255, 255, .18) 55%, rgba(0, 0, 0, .1)), var(--tbd); }
-.tb-jump { --sz: clamp(86px, 26vh, 152px); --tb: rgba(46, 176, 76, .48); --tbd: rgba(80, 230, 110, .75); right: calc(3.2vh + var(--sr)); bottom: calc(3.2vh + var(--sb)); }
-.tb-slide { --sz: clamp(78px, 22vh, 130px); --tb: rgba(40, 124, 236, .48); --tbd: rgba(70, 170, 255, .75); left: calc(3.2vh + var(--sl)); bottom: calc(3.2vh + var(--sb)); }
-.tb-item { --sz: clamp(62px, 17vh, 100px); --tb: rgba(130, 70, 220, .42); --tbd: rgba(170, 110, 255, .75); left: calc(3.2vh + var(--sl) + clamp(78px, 22vh, 130px) + 1vh); bottom: calc(3.2vh + var(--sb) + clamp(78px, 22vh, 130px) * .55); }
+.tb-jump { --sz: clamp(86px, 26vh, 152px); --tb: rgba(46, 176, 76, .48); --tbd: rgba(80, 230, 110, .75); left: calc(3.2vh + var(--sl)); bottom: calc(3.2vh + var(--sb)); } /* kullanıcı isteği: ZIPLA + KAY sol altta */
+.tb-slide { --sz: clamp(78px, 22vh, 130px); --tb: rgba(40, 124, 236, .48); --tbd: rgba(70, 170, 255, .75); left: calc(3.2vh + var(--sl) + clamp(86px, 26vh, 152px) + 1.4vh); bottom: calc(3.2vh + var(--sb) + clamp(86px, 26vh, 152px) * .14); }
+.tb-item { --sz: clamp(70px, 20vh, 116px); --tb: rgba(130, 70, 220, .42); --tbd: rgba(170, 110, 255, .75); right: calc(3.2vh + var(--sr)); bottom: calc(3.2vh + var(--sb)); } /* EŞYA + GÜÇ sağ altta */
 /* GÜÇ: ZIPLA'nın solunda, eskisinden alçakta (koşu yönündeki zemin bandını kapatmasın; kamera dokunmatikte zemini ekranın %60'ına koyar) */
-.tb-power { --sz: clamp(62px, 17vh, 100px); --tb: rgba(232, 128, 30, .42); --tbd: rgba(255, 170, 60, .8); right: calc(3.2vh + var(--sr) + clamp(86px, 26vh, 152px) + 1.4vh); bottom: calc(3.2vh + var(--sb) + clamp(86px, 26vh, 152px) * .24); }
+.tb-power { --sz: clamp(62px, 17vh, 100px); --tb: rgba(232, 128, 30, .42); --tbd: rgba(255, 170, 60, .8); right: calc(3.2vh + var(--sr) + clamp(70px, 20vh, 116px) + 1.4vh); bottom: calc(3.2vh + var(--sb) + clamp(70px, 20vh, 116px) * .3); }
 .tb-itm { width: 54%; height: 54%; display: grid; place-items: center; }
 .tb-gi { width: 100%; height: 100%; }
 .tb-item:not(.has) .tb-in { opacity: .55; }
@@ -2476,10 +2476,10 @@ span.foot-up.maxed { align-items: center; gap: .3rem; }
 .png em { margin-left: .2rem; font: 600 max(10px, .95rem)/1 var(--fb); color: var(--txt3); font-style: normal; }
 .pc-emo { position: absolute; right: 30%; top: -1.1rem; z-index: 2; padding: .15rem .45rem; border-radius: .9rem .9rem .9rem .2rem; font: 1.9rem/1.1 var(--fh); color: #3a1a00; background: #fff; border: .14rem solid var(--ink); box-shadow: 0 .2rem .4rem rgba(0, 0, 0, .4); animation: popIn .3s cubic-bezier(.2, 1.6, .4, 1) both; }
 .pc.bot { opacity: .7; border-style: dashed; box-shadow: none; background: rgba(0, 0, 0, .18); }
-.pc.bot .pc-pt, .pc.empty .pc-pt { font-size: 2.3rem; color: #8f7bd0; border-radius: 50%; background: rgba(0, 0, 0, .28); width: 3.8rem; height: 3.8rem; }
-.pc.empty { pointer-events: auto; cursor: pointer; border-style: dashed; border-color: rgba(143, 216, 255, .35); background: rgba(63, 176, 255, .06); box-shadow: none; transition: filter .15s; }
-.pc.empty .pc-n { color: #8fd8ff; font-size: 1.3rem; }
-.pc.empty:active { transform: scale(.97); }
+.pc.bot .pc-pt, .pc.slot .pc-pt { font-size: 2.3rem; color: #8f7bd0; border-radius: 50%; background: rgba(0, 0, 0, .28); width: 3.8rem; height: 3.8rem; }
+.pc.slot { pointer-events: auto; cursor: pointer; border-style: dashed; border-color: rgba(143, 216, 255, .35); background: rgba(63, 176, 255, .06); box-shadow: none; transition: filter .15s; }
+.pc.slot .pc-n { color: #8fd8ff; font-size: 1.3rem; }
+.pc.slot:active { transform: scale(.97); }
 .lb-set { display: flex; flex-direction: column; gap: .35rem; padding: .9rem 1rem .6rem; }
 .lb-set > * { position: relative; z-index: 1; }
 .ls-h { display: flex; align-items: center; gap: .4rem; font: 1.2rem/1 var(--fh) !important; color: #ffd977; letter-spacing: .08em; margin-bottom: .2rem !important; }
@@ -2604,7 +2604,7 @@ a.btn { text-decoration: none; }
 
 /* --- sonuç / final: kalabalık tablo, ev sahibi bekleniyor --- */
 .res-tbl.many { min-height: 0; flex: 0 1 auto; }
-.rr-sc { display: flex; flex-direction: column; gap: .3rem; max-height: 17rem; overflow-y: auto; padding-right: .1rem; }
+.rr-sc { position: relative; display: flex; flex-direction: column; gap: .3rem; max-height: 17rem; overflow-y: auto; padding-right: .1rem; }
 .rr.off { opacity: .5; }
 .rr-co { display: inline-flex; align-items: center; gap: .15rem; }
 .rr-co .bi { width: 1.4rem; height: 1.4rem; margin: 0; }

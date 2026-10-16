@@ -1366,7 +1366,10 @@
       if (!any) { pGone(pid); ch = true; }
     }
     if (ch) pChanged();
-    if (gap > 4000 || (t % 60000) < 1100) for (const T of [P.gone, P.cameAt, P.lobAt]) for (const k in T) if (t - T[k] > CAME_GAP) delete T[k];
+    if (gap > 4000 || (t % 60000) < 1100) {                       // dakikada bir: eski sınır kayıtlarını ve kartı olmayanların son görülmesini temizle
+      for (const T of [P.gone, P.cameAt, P.lobAt]) for (const k in T) if (t - T[k] > CAME_GAP) delete T[k];
+      const wall = Date.now(); for (const k in P.ls) if (!P.cards[k] && !P.peers[k] && wall - P.ls[k] > 3600000) delete P.ls[k];
+    }
     if (!pMq()) { if (!P.mq && !P.timer) pRoute(); if (P.prDirty) pEmit(); return; }
     if (P.subMq !== pMq()) pRoute();
     const iv = pHiddenLong() ? HB_AWAY_MS : HB_MS;

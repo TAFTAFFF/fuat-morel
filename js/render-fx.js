@@ -2343,6 +2343,11 @@
   /* =====================================================================
      OLAY KANCALARI (ek "juice")
      ===================================================================== */
+  // sıvıya düşüp kaybolan eşya: buhar bulutu + küçük kabarcıklar (havada asılı kalmaz, söner)
+  FM.on('fizzle', d => {
+    if (!d || typeof d.x !== 'number' || !FM.fx) return;
+    try { FM.fx.puff(d.x, d.y - 6, 7, 'rgba(235,240,255,.75)', 11, 70); FM.fx.puff(d.x, d.y - 2, 4, 'rgba(180,200,220,.6)', 7, 40); } catch (e) { /* yok say */ }
+  });
   FM.on('explode', d => {
     if (!d || !inView(num(d.x, 0), num(d.y, 0), 200)) return;
     const rad = num(d.rad, 80), x = num(d.x, 0), y = num(d.y, 0);

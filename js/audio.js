@@ -2288,6 +2288,8 @@
     if (d.r) play(nm, { r: d.r, vol: isP(d.r) ? 1 : 0.5 });
     else play(nm, { x: d.x, y: d.y });
   });
+  // sıvıya düşüp kaybolan eşya (ağ/tuzak/testere/dinamit): kısık cız sesi, yalnızca yakında
+  hook('fizzle', d => { if (typeof d.x === 'number') { const L = FM.S && FM.S.L, lq = L && L.theme && L.theme.liquid; play('splash_' + (LIQ[lq] ? lq : 'water'), { x: d.x, y: d.y, vol: 0.35 }); }; });
   hook('countdown', d => {
     if (demo()) return;
     const n = d.n | 0;

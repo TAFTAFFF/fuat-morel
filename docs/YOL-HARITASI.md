@@ -30,6 +30,9 @@ Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 - ✅ "Atarken daha mantıklı olsun" + "sürüklerken testere elimde kaldı" → yukarı = ileri-yukarı kavis, parmak düğmeden taşsa da atış kaybolmaz, kendi testeren/dinamitin sana zarar vermez
 - ✅ "Zıplarken ve kayarken hız yavaşlamalı" → zıplama %8 (+havada %10), kayma %20 hız keser
 - ✅ "Çok ping var" → WebRTC doğrudan bağlantı (STUN; olmazsa MQTT yedeği), en hızlı aracı seçimi, daha az ara değerleme gecikmesi, lobide DOĞRUDAN rozeti
+- ✅ "Akıcılık Fun Run 4 gibi değil" → çizim ara değerlemesi, çevik koşu adımı, kısa vuruş donması, daha hızlı düşüş (1.22×), kilitli kamera
+- ✅ "Atılan şey havada kalıyor, düşmeli, zemine sabitlenmeli" → ağ/tuzak yere düşüp oturur, sıvıda söner; buz dalgası, mürekkep cephesi, Nuss süzülüşü düzeltildi
+- ✅ "Kaymadan geçiyorsun, bazı yerlerde zıplamak çözüm değil" → dev/obstacles.js denetleyicisi: 93 ihlal → 0 (testere makineleri ayakta geçilmiyor, imkânsız çukur/duvar yok)
 - Not: Fable'ı az kullan (kullanıcı: çok token yiyor) → küçük işleri ana ajan yapar, Fable yalnızca gerçek çizim işlerinde ve kısa görevle
 - Not: "Karakterler güzel, eline sağlık" → karakter tasarımlarının ana hatları korunur.
 

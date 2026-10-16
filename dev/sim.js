@@ -14,7 +14,7 @@ const sb = { console, Math, Date, JSON, setTimeout: () => 0, clearTimeout() { },
   location: { search: '' }, URLSearchParams, navigator: { maxTouchPoints: 0 }, matchMedia: () => ({ matches: false, addEventListener() { } }), innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1, addEventListener() { },
   document: { getElementById: () => stubEl(), createElement: () => stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [], addEventListener() { }, body: stubEl(), fonts: null } };
 sb.window = sb; vm.createContext(sb);
-for (const f of ['core', 'gfx', 'net', 'level', 'game', 'meta']) { const p = path.join(root, 'js', f + '.js'); if (fs.existsSync(p)) vm.runInContext(fs.readFileSync(p, 'utf8'), sb, { filename: f + '.js' }); }
+for (const f of ['core', 'gfx', 'net', 'level', 'game', 'meta', 'netgame']) { const p = path.join(root, 'js', f + '.js'); if (fs.existsSync(p)) vm.runInContext(fs.readFileSync(p, 'utf8'), sb, { filename: f + '.js' }); }
 const FM = sb.FM; FM.view.VW = 1000;
 const N = +(process.argv[2] || 10);
 const MODE = process.argv[3] && FM.modeById(process.argv[3]) ? process.argv[3] : 'classic';

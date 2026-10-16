@@ -176,6 +176,8 @@
      Menünün alt ekranlarında / final ekranında / menü pencerelerinde arkadaki demo yarışı bulanık ve neredeyse opak bir
      panelin arkasında kalır: 30 FPS yeterli (bulanıklık filtresi de yarı sıklıkla yeniden hesaplanır). */
   let rotEl = null, wasPaused = false, frameN = 0, lastStill = 0;
+  // çok oyunculu yarış ekrandayken DURAKLATMA YOK: menü açılsa da (S.paused) simülasyon ve çizim sürer
+  const mpLive = () => !!(FM.netgame && typeof FM.netgame.live === 'function' && FM.netgame.live());
   function rotOn() {
     if (!rotEl) rotEl = document.querySelector('.ly-rot');
     return !!(rotEl && rotEl.classList.contains('on'));
@@ -191,7 +193,7 @@
     frameN++;
     if (S.paused !== wasPaused) { wasPaused = S.paused; dirty = true; }
     if (dirty) { dirty = false; lastStill = now; return true; }
-    if (S.paused || rotOn()) { if (now - lastStill > 500) { lastStill = now; return true; } return false; }
+    if ((S.paused && !mpLive()) || rotOn()) { if (now - lastStill > 500) { lastStill = now; return true; } return false; }
     if (behindPanel()) return (frameN & 1) === 0;
     return true;
   }
@@ -234,7 +236,7 @@
       if (touchNow() !== !!V.mobile) resize(false);           // ilk dokunuşta dokunmatik düzene geçildi: telefon kamerası
       if (pendingDpr && S.mode !== 'race') applyPendingDpr();   // çözünürlük düşürme yarış dışında (takılma görünmesin)
       watchPerf(dt);
-      if (!S.paused && S.L) {
+      if ((!S.paused || mpLive()) && S.L) {
         acc += dt;
         let n = 0;
         while (acc >= C.STEP && n < 12) { FM.game.step(C.STEP); acc -= C.STEP; n++; }
@@ -285,8 +287,9 @@
   cv.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
   cv.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
-  window.addEventListener('blur', () => { I.jh = I.dh = false; if (S.mode === 'race' && !S.paused) FM.emit('ui:pause', { toggle: false, force: true }); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && S.mode === 'race' && !S.paused) FM.emit('ui:pause', { force: true }); last = performance.now(); dirty = true; });
+  // çok oyunculu yarışta odak/görünürlük kaybı duraklatma menüsü açmaz (yarış zaten durmaz)
+  window.addEventListener('blur', () => { I.jh = I.dh = false; if (S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { toggle: false, force: true }); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { force: true }); last = performance.now(); dirty = true; });
   if (document.fonts && document.fonts.addEventListener) { try { document.fonts.addEventListener('loadingdone', () => { dirty = true; }); } catch (e) { } }
 
   /* ---------- geliştirici modu: ?dev=1&scene=race&t=6&char=Kral&theme=2&seed=5 ----------

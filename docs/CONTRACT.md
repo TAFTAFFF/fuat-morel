@@ -11,7 +11,7 @@ Kullanıcının tek şikâyeti: **"görünüş kötü"**. Hedef: Fun Run 4'ten d
 - Hata yok: tarayıcı konsolunda tek bir hata bile olmamalı. Tanımsız alanlara karşı korumalı yaz (`r.item && ...`).
 
 ## DOSYALAR VE SAHİPLİK
-Yükleme sırası (index.html): `core.js → gfx.js → level.js → game.js → meta.js → audio.js → render-world.js → render-chars.js → render-fx.js → render-hud.js → ui.js → main.js`
+Yükleme sırası (index.html): `core.js → gfx.js → net.js → level.js → game.js → meta.js → netgame.js → audio.js → render-world.js → render-chars.js → render-fx.js → render-hud.js → ui.js → main.js`
 
 | Dosya | Sahibi | Ne yapar |
 |---|---|---|
@@ -21,6 +21,8 @@ Yükleme sırası (index.html): `core.js → gfx.js → level.js → game.js →
 | js/game.js | ana ajan (DOKUNMA) | fizik, eşyalar, güçler, yapay zekâ, yarış akışı `FM.game` |
 | js/main.js | ana ajan (DOKUNMA) | tuval, döngü, kamera, çizim sırası, klavye, geliştirici modu |
 | index.html | ana ajan (DOKUNMA) | iskelet: `<canvas id="game">`, `<div id="ui">`, script etiketleri, Google Fonts (Lilita One, Fredoka) |
+| js/net.js | ağ ajanı | sunucusuz çok oyunculu ağ katmanı `FM.net` (MQTT, oda, lobi, göç, durum akışı) — docs/MULTIPLAYER.md |
+| js/netgame.js | ağ-oyun ajanı | çok oyunculu yarış `FM.netgame`: FM.net ↔ FM.game köprüsü (uzak yarışçılar, olay eşitleme, tur akışı, `mp:*` olayları) — docs/MULTIPLAYER.md "Uygulama Notları → netgame.js" |
 | js/meta.js | meta ajanı | para/elmas, XP/seviye, görevler, başarımlar, geliştirmeler, kozmetik satın alma, günlük ödül |
 | js/audio.js | ses ajanı | WebAudio ile prosedürel efekt sesleri + tema müzikleri |
 | js/render-world.js | dünya ajanı | gökyüzü/parallax arka plan, zemin, sıvı, dekor, tehlikeler, kutular, altınlar, başlangıç/bitiş, ön plan, ortam parçacıkları |
@@ -80,7 +82,9 @@ abLv (özel güç seviyesi), chargeMul
 nick (görünen ad; aynı karakterden birden çok yarışçıda name/nick "Kral 2"), ctrl ('local'|'bot'|'remote'), pid (ağ kimliği | null)
 out (bool: ELENDİ → izleyici; dead=1e9 tutulur, çizilmez), elim (= out, ağ alanı), outN (kaçıncı elenen), outT, gates (geçilen kapı bit maskesi)
 tp (ışınlanma sayacı: yeniden doğma/portal → ara değerleme kaydırmasın), onIce, onSand (bataklık kum), inLift (rüzgâr bacasında), bounceT (trambolin/gayzer fırlatması)
+ağ (netgame.js): pid botlarda 'b0'..'b9', nbot (ağ botu), off (bağlantı koptu → out da true), stale (uzak veri 1.5 sn yok), emote ({id: emoji, t: kalan sn} | null), gateT (kapı geçiş anları)
 ```
+Çok oyunculu izleyicide (geç katılan) `S.player` S.racers'ta OLMAYAN hayalet nesnedir (`ghost: true, ctrl: 'spec', out/spec: true`); x/y/idx izlenen yarışçıdan (`S.spec`) kopyalanır.
 Ayaklar `y+h`'de, gövde merkezi `x+14`. Karakter görseli çarpışma kutusundan en fazla ~1.3 kat büyük çizilebilir (Fun Run gibi okunaklı olsun, 1.2-1.3 öneriliyor).
 
 ### Seviye `FM.S.L`
@@ -125,7 +129,9 @@ ui:podium (aynı sonuç nesnesi, 1.5 sn sonra; mode='podium')
 match:end {standings, player, champion}
 ui:menu {}   ui:pause {toggle?, force?}   ui:hide {}   boot {}   resize (FM.view)
 ```
+Ek alanlar: `item:use`/`ability` → `p` (konum/hedef) ve `ents` (kurulan varlıklar); `hit`/`death`/`blocked` → `ent` (vuran varlık | null); ağdan uygulanan olaylarda `net: true`. Ağ yarışında `race:end`/`ui:podium` sonucunda `mp: true` (izleyicide `spectator: true`, `race:end` yok).
 meta.js yayınlar: `meta:change {}`, `meta:rewards {rewards}`, `meta:levelup {level}`, `meta:mission {mission}`.
+netgame.js yayınlar (çok oyunculu): `mp:lobby {lobby, back}`, `mp:start {round, rounds, mode, theme, late, spectating, mid, newMatch}`, `mp:waiting {round, rounds, late}`, `mp:end {…sonuç}`, `mp:final {standings, rounds, champion}`, `mp:host {me, pid, prev, pending?}`, `mp:drop {r, pid, nick}`, `mp:back {…}`, `mp:emote {r, pid, e, me}`, `mp:left {reason}` — ayrıntı: docs/MULTIPLAYER.md "Uygulama Notları → netgame.js".
 
 ## OYUN API (`FM.game`)
 `startMatch({char, rounds, mode, theme: 'random'|indeks|id, n})` (n = toplam yarışçı 2..10; verilmeyenler FM.save.mode/map/rivals'tan), `next()` (sonraki tur veya maç sonu → 'match:end'), `startDemo()`, `toMenu()` (demoya dön + 'ui:menu'), `quitRace()`, `ranking()` (moda göre: Altın Avı'nda altına göre, elemede elenenler sonda), `timeLeft()`, `finishNow()` (turu hemen bitir), ağ/test yardımcıları: docs/MULTIPLAYER.md "Uygulama Notları → Motor".

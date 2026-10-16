@@ -26,13 +26,17 @@
   const DYN_MIN = 165, DYN_MAX = 365; // bot dinamiti öndekine bu mesafedeyken atar (yeni atış menziline göre)
   const post = () => S.mode === 'end' || S.mode === 'podium';   // tur bitti: kimse zarar görmez
   function clearInput() { const I = FM.input; if (I) { I.jp = I.dp = I.use = I.ab = false; } }
+  /* Ağ (netgame.js): ctrl === 'remote' yarışçı başka bir telefonda simüle edilir → burada fizik/hasar/ölüm UYGULANMAZ.
+     curEnt: updateEnts o an hangi varlığı işliyor (hit/death/blocked olaylarına `ent` olarak eklenir → ağda varlık eşitleme). */
+  const isRemote = r => !!r && r.ctrl === 'remote';
+  let curEnt = null;
 
   /* =================== YARIŞÇI =================== */
   function mkRacer(id, idx, bot) {
     return {
       id, idx, name: id, nick: id, bot, ctrl: bot ? 'bot' : 'local', pid: null,
       x: 0, y: 0, w: RW, h: RH, vx: 0, vy: 0, onGround: false, coy: 0, jumps: 0,
-      out: false, elim: false, outN: 0, outT: 0, gates: 0, tp: 0,
+      out: false, elim: false, outN: 0, outT: 0, gates: 0, gateT: null, tp: 0,
       portCd: 0, ventCd: 0, bounceT: 0, onIce: false, onSand: false, inLift: false,
       slide: false, slideT: 0, climb: false, blocked: false, slam: false,
       item: null, charge: 0, boost: 0, shield: 0, balloon: false, padT: 0,
@@ -143,7 +147,7 @@
   };
   function resetRace() {
     S.ents = []; S.parts = []; S.rings = []; S.toasts = []; S.feed = [];
-    S.finishedN = 0; S.endTimer = null; S.raceT = 0; S.shake = 0; S.flash.a = 0;
+    S.finishedN = 0; S.endTimer = null; S.raceT = 0; S.shake = 0; S.flash.a = 0; S.endReq = false;
     S.lt = 0;                                   // seviye saati (tehlike döngüleri; tur başında 0 → ağda herkeste aynı)
     S.elimN = 0; S.spec = null; S.dropN = 0;
     S.limitT = null;
@@ -160,7 +164,7 @@
     });
     // eleme kapıları: yarışçı sayısına göre yalnızca SON (n-1) kapı etkin (2 kişide tek kapı, 5+ kişide dördü de)
     const G = S.L.gates || [], act = Math.min(G.length, Math.max(1, S.racers.length - 1));
-    G.forEach((g, i) => { g.off = i < G.length - act; g.pass = 0; g.done = false; g.t0 = null; });
+    G.forEach((g, i) => { g.off = i < G.length - act; g.pass = 0; g.done = false; g.t0 = null; g.tc = null; });
     clearInput();
     S.cam.x = 0; S.cam.y = 0;
   }
@@ -206,21 +210,43 @@
   game.ranking = ranking;
   game.timeLeft = () => S.limitT ? Math.max(0, S.limitT - S.raceT) : null;
 
-  function endRound() {
+  // tur puanları (sıralama dizisine göre): eleme ve altın avında herkes sırasına göre puan alır; diğer modlarda yalnızca bitirenler
+  function roundPoints(rk) {
+    const pts = FM.ptsFor(rk.length), all = S.gameMode === 'elim' || S.gameMode === 'coins';
+    return rk.map((r, i) => all ? (pts[i] || 0) : (r.finished ? pts[r.place - 1] || 0 : 0));
+  }
+  game.roundPoints = roundPoints;
+  /* Tur sonu. fixed (ağ): {ranking: [yarışçı], rp: [puan], total: [toplam]} — ev sahibinin kararı herkeste AYNEN uygulanır.
+     Ağda ev sahibinde (fixed yok) karar game.onEndRound kancasına devredilir (netgame.js sıralamayı yayınlar; yankısı fixed ile gelir).
+     Oyuncu sıralamada yoksa (geç katılan izleyici) kupa/ödül yok: race:end YAYINLANMAZ, yalnızca kürsü (res.spectator). */
+  function endRound(fixed) {
+    if (!fixed && S.netRole === 'host' && typeof game.onEndRound === 'function') {
+      if (!S.endReq) { S.endReq = true; try { game.onEndRound(); } catch (e) { console.error(e); } }
+      return;
+    }
     S.mode = 'end';
-    const rk = ranking(), N = rk.length, pts = FM.ptsFor(N);
-    // eleme ve altın avında herkes sırasına göre puan alır; diğer modlarda yalnızca bitirenler
-    const all = S.gameMode === 'elim' || S.gameMode === 'coins';
-    rk.forEach((r, i) => { r.rp = all ? (pts[i] || 0) : (r.finished ? pts[r.place - 1] || 0 : 0); r.total += r.rp; r._rk = i; });
+    let rk;
+    if (fixed && Array.isArray(fixed.ranking)) {
+      rk = fixed.ranking;
+      rk.forEach((r, i) => { r.rp = (fixed.rp && fixed.rp[i]) | 0; r.total = fixed.total && fixed.total[i] != null ? fixed.total[i] | 0 : (r.total | 0) + r.rp; r._rk = i; });
+    } else {
+      rk = ranking();
+      const rp = roundPoints(rk);
+      rk.forEach((r, i) => { r.rp = rp[i]; r.total += r.rp; r._rk = i; });
+    }
+    const N = rk.length;
     const pr = rk.indexOf(S.player);
-    const td = FM.trophyFor(N)[pr] || 0;
-    FM.save.trophies[S.player.id] = Math.max(0, (FM.save.trophies[S.player.id] || 0) + td);
-    S.player.td = td;
-    FM.persist();
+    const td = pr >= 0 ? FM.trophyFor(N)[pr] || 0 : 0;
+    if (pr >= 0) {
+      FM.save.trophies[S.player.id] = Math.max(0, (FM.save.trophies[S.player.id] || 0) + td);
+      S.player.td = td;
+      FM.persist();
+    }
     const res = { ranking: rk, player: S.player, playerRank: pr, round: S.round, rounds: S.ROUNDS, theme: S.L.theme, trophyDelta: td, last: S.round >= S.ROUNDS,
       mode: S.gameMode || 'classic', n: N };
+    if (S.netRole) { res.mp = true; if (pr < 0) res.spectator = true; }
     S.lastResult = res;
-    FM.emit('race:end', res);
+    if (pr >= 0) FM.emit('race:end', res);
     setTimeout(() => { if (S.mode === 'end') { S.paused = false; S.mode = 'podium'; S.podiumT = 0; FM.emit('ui:podium', res); } }, 1500);
   }
 
@@ -258,14 +284,20 @@
   // Saldırıya uğradıktan kısa süre sonra çevreden ölen yarışçının öldürmesi saldırgana yazılır (savurma/sersemletme/yavaşlatma)
   function assistOf(q) { const k = q.lastHitBy; return k && k !== q && S.raceT - (q.lastHitT == null ? -99 : q.lastHitT) < ASSIST_T ? k : null; }
 
+  // kapı geçişini kaydet: t = geçiş anı (yarış saati; ağda geçenin kendi telefonundaki an — eleme kararında "en son geçen" buna göre)
+  function passGate(r, g, t) {
+    const gb = 1 << g.n;
+    if (r.gates & gb) { if (t != null && isFinite(t)) (r.gateT || (r.gateT = {}))[g.n] = t; return false; }
+    r.gates |= gb; (r.gateT || (r.gateT = {}))[g.n] = t != null && isFinite(t) ? t : S.raceT;
+    if (!g.off) { g.pass++; FM.emit('gate', { r, n: g.n }); }
+    return true;
+  }
+  game.passGate = passGate;
   // eleme kapıları: x'i kapıyı geçen yarışçının geçişini kaydet (eleme kararı checkGates'te). Uzak yarışçılar için de çağrılır.
   function markGates(r) {
     const G0 = S.L.gates; if (!G0.length || r.out) return;
     const cx = cxOf(r);
-    for (const g of G0) {
-      const gb = 1 << g.n;
-      if (!(r.gates & gb) && cx > g.x) { r.gates |= gb; if (!g.off) { g.pass++; FM.emit('gate', { r, n: g.n }); } }
-    }
+    for (const g of G0) if (!(r.gates & (1 << g.n)) && cx > g.x) passGate(r, g);
   }
   game.markGates = markGates;
   function setSlide(r, on) {
@@ -277,7 +309,7 @@
   const near = r => { const f = focus(); return !!f && Math.abs(cxOf(r) - cxOf(f)) < FM.view.VW; };
 
   function die(r, src, cause) {
-    if (r.dead > 0 || r.finished || post()) return;
+    if (isRemote(r) || r.dead > 0 || r.finished || post()) return;
     setSlide(r, false);
     r.dead = 1.1; r.deaths++; r.vx = r.vy = 0; r.climb = false; r.fly = 0; r.dash = 0; r.sled = 0; r.boost = 0; r.stun = 0; r.frozen = 0; r.netted = 0; r.pull = 0; r.ccImm = 0;
     const killer = src && src !== r ? src : null;
@@ -299,7 +331,7 @@
     }
     FM.fx.feed(killer ? killer.name : (src === r ? r.name : ''), icon, r.name);
     if (r === S.player) FM.fx.shake(.3);
-    FM.emit('death', { r, src: src || null, killer, cause: cause || 'env', self: src === r });
+    FM.emit('death', { r, src: src || null, killer, cause: cause || 'env', self: src === r, ent: curEnt });
     // Altın Avı: ölen altınının %20'sini düşürür (yerdeki altını herkes toplayabilir)
     if (S.gameMode === 'coins' && S.mode === 'race' && (r.coins | 0) >= 1) {
       const n = Math.floor(r.coins * .2);
@@ -358,14 +390,15 @@
   game.eliminate = eliminate;
   // saldırı etkisi: true dönerse isabet
   function harm(q, kind, dur, src, cause) {
+    if (isRemote(q)) return false;   // ağ: uzak yarışçıya isabet kendi telefonunda hesaplanır (oradan olay gelir)
     if (q.dead > 0 || q.finished || post()) return false;
     if (q.dash > 0 || q.frozen > 0) return false;
-    if (q.shield > 0) { if (near(q)) FM.fx.burst(cxOf(q), cyOf(q), ['#7be3ff', '#ffffff'], 12); FM.emit('blocked', { r: q, by: 'shield', src, cause }); return false; }
+    if (q.shield > 0) { if (near(q)) FM.fx.burst(cxOf(q), cyOf(q), ['#7be3ff', '#ffffff'], 12); FM.emit('blocked', { r: q, by: 'shield', src, cause, ent: curEnt }); return false; }
     if (q.inv > 0) return false;
     // kontrol kaybı (sersemletme/ağ/dondurma/savurma) üst üste zincirlenemez; ama öldürücü saldırılar etkili kalır
     const cc = kind === 'stun' || kind === 'net' || kind === 'freeze' || kind === 'knock';
     if (cc && q.ccImm > 0) return false;
-    if (q.balloon && kind !== 'ink') { q.balloon = false; q.inv = .4; if (near(q)) FM.fx.burst(cxOf(q), q.y - 14, ['#ff5a7a', '#ffffff'], 12); FM.emit('blocked', { r: q, by: 'balloon', src, cause }); return false; }
+    if (q.balloon && kind !== 'ink') { q.balloon = false; q.inv = .4; if (near(q)) FM.fx.burst(cxOf(q), q.y - 14, ['#ff5a7a', '#ffffff'], 12); FM.emit('blocked', { r: q, by: 'balloon', src, cause, ent: curEnt }); return false; }
     q.boost = 0; q.lastHitBy = src || null; q.lastHitT = S.raceT;
     if (kind === 'kill') die(q, src, cause);
     else if (kind === 'stun') { q.stun = dur; q.ccImm = dur + 1; q.climb = false; q.fly = 0; if (near(q)) FM.fx.burst(cxOf(q), q.y, ['#ffd23f', '#ffffff'], 8); }
@@ -375,7 +408,7 @@
     else if (kind === 'slow') { q.slowT = dur; }
     else if (kind === 'pull') { q.pull = dur; }
     else if (kind === 'ink') { q.inked = dur; }
-    FM.emit('hit', { victim: q, src: src || null, kind, cause: cause || null });
+    FM.emit('hit', { victim: q, src: src || null, kind, cause: cause || null, ent: curEnt });
     return true;
   }
   game.harm = harm;
@@ -621,9 +654,9 @@
         FM.emit('box', { r, item: got ? r.item : null });
       }
     }
-    // altınlar (her yarışçı kendi altınlarını toplar)
+    // altınlar (her yarışçı kendi altınlarını toplar). Ağda süre dolunca toplanmaz (ev sahibinin bitirme mesajı gelene kadar sayı donar)
     const bit = 1 << r.idx;
-    for (const co of L.coins) {
+    if (!(S.netRole && S.limitT && S.raceT >= S.limitT)) for (const co of L.coins) {
       if (co.got & bit) continue;
       if (co.drop && (co.ready > 0 || co.t <= 0)) continue;
       if (Math.abs(co.x - cx) < 22 && co.y > r.y - 16 && co.y < r.y + r.h + 10) {
@@ -642,19 +675,24 @@
     }
     markGates(r);
     // bitiş
-    if (!r.finished && r.x > L.end) {
-      r.finished = true; r.place = ++S.finishedN; r.ftime = S.raceT; r.inv = 999; r.item = null;
-      if (S.gameMode === 'coins' && S.mode === 'race') {
-        r.coins += FM.COINS_FINISH;
-        FM.emit('coins:bonus', { r, n: FM.COINS_FINISH });
-        FM.fx.toast(`${r.name} bitirdi!  +${FM.COINS_FINISH} altın`, r === S.player ? '#ffe14d' : '#ffffff');
-      } else if (S.mode !== 'demo') FM.fx.toast(`${r.name} bitirdi!  #${r.place}`, r === S.player ? '#ffe14d' : '#ffffff');
-      if (near(r)) FM.fx.confetti(L.end + 40, L.finY - 200, r === S.player ? 70 : 25);
-      // ilk bitirenden sonra diğerlerine 12 sn; kalabalık yarışta kişi başı +1.5 sn (10 kişide 21), kaosta +4 (Altın Avı'nda süre sayacı belirler)
-      if (S.finishedN === 1 && !S.limitT) S.endTimer = 12 + Math.max(0, S.racers.length - 4) * 1.5 + (S.gameMode === 'chaos' ? 4 : 0);
-      FM.emit('finish', { r, place: r.place, time: r.ftime });
-    }
+    if (!r.finished && r.x > L.end) finishRacer(r);
   }
+  /* Bitiş kaydı. net = true: uzak yarışçının bitişi (ağdan; altın bonusunu kendi telefonu ekledi). ftime verilmezse şimdiki yarış saati. */
+  function finishRacer(r, ftime, net) {
+    if (!r || r.finished) return false;
+    const L = S.L;
+    r.finished = true; r.place = ++S.finishedN; r.ftime = ftime != null && isFinite(ftime) ? +ftime : S.raceT; r.inv = 999; r.item = null;
+    if (S.gameMode === 'coins' && S.mode === 'race') {
+      if (!net) { r.coins += FM.COINS_FINISH; FM.emit('coins:bonus', { r, n: FM.COINS_FINISH }); }
+      FM.fx.toast(`${r.name} bitirdi!  +${FM.COINS_FINISH} altın`, r === S.player ? '#ffe14d' : '#ffffff');
+    } else if (S.mode !== 'demo') FM.fx.toast(`${r.name} bitirdi!  #${r.place}`, r === S.player ? '#ffe14d' : '#ffffff');
+    if (near(r)) FM.fx.confetti(L.end + 40, L.finY - 200, r === S.player ? 70 : 25);
+    // ilk bitirenden sonra diğerlerine 12 sn; kalabalık yarışta kişi başı +1.5 sn (10 kişide 21), kaosta +4 (Altın Avı'nda süre sayacı belirler)
+    if (S.finishedN === 1 && !S.limitT) S.endTimer = 12 + Math.max(0, S.racers.length - 4) * 1.5 + (S.gameMode === 'chaos' ? 4 : 0);
+    FM.emit('finish', net ? { r, place: r.place, time: r.ftime, net: true } : { r, place: r.place, time: r.ftime });
+    return true;
+  }
+  game.finishRacer = finishRacer;
 
   /* =================== EŞYALAR =================== */
   function rollItem(r) {
@@ -685,36 +723,52 @@
       return;
     }
     const it = r.item;
-    const cx = cxOf(r), cy = cyOf(r);
-    let gyTrap = null;
-    if (it === 'trap') { gyTrap = groundY(r.x - 12, r.y + r.h - 10); if (gyTrap === null) return; }   // çukurun üstünde: kurulamaz, eşya elde kalır
+    const p = itemParams(r, it);
+    if (!p) return;   // tuzak çukurun üstünde kurulamaz / füzenin hedefi yok: eşya elde kalır
     r.item = null;
+    const ents = castItem(r, it, p);
+    FM.emit('item:use', { r, item: it, p, ents });
+  }
+  /* Eşya kullanım parametreleri (konum, hız, hedef) — kullananın telefonunda hesaplanır; ağda aynen yayınlanır ve
+     castItem her istemcide aynı varlığı kurar. null = şu an kullanılamaz (eşya elde kalır). */
+  function itemParams(r, it) {
+    const cx = cxOf(r), cy = cyOf(r);
     switch (it) {
-      case 'speed': r.boost = 3.2; r.shield = 0; break;
-      case 'shield': r.shield = 4; r.boost = 0; break;
-      case 'balloon': r.balloon = true; break;
-      case 'saw': S.ents.push({ type: 'saw', x: cx + 20, y: r.y + r.h - 16, vx: 720 + Math.max(0, r.vx) * .3, vy: 0, r: 15, o: r, age: 0, life: 2.4, b: 0 }); break;
+      case 'saw': return { x: cx + 20, y: r.y + r.h - 16, vx: 720 + Math.max(0, r.vx) * .3 };
       // uzun atış: patlama atanın ~250+ px önüne düşer (eskiden 114 px: atan sık sık kendini patlatıyordu)
-      case 'dyn': S.ents.push({ type: 'dyn', x: cx + 10, y: r.y, vx: Math.max(0, r.vx) + 520, vy: -600, o: r, age: 0, fuse: .95 }); break;
-      case 'trap': S.ents.push({ type: 'trap', x: r.x - 26, y: gyTrap - 12, w: 34, h: 12, o: r, age: 0, life: 16 }); break;
-      case 'net': S.ents.push({ type: 'net', x: r.x - 56, y: r.y - 30, w: 44, h: 76, o: r, age: 0, life: 10, n: 0 }); break;
+      case 'dyn': return { x: cx + 10, y: r.y, vx: Math.max(0, r.vx) + 520, vy: -600 };
+      case 'trap': { const gy = groundY(r.x - 12, r.y + r.h - 10); return gy === null ? null : { x: r.x - 26, y: gy - 12 }; }
+      case 'net': return { x: r.x - 56, y: r.y - 30 };
       case 'mis': {
         const rk = ranking().filter(q => !q.finished && q.dead <= 0);
         const tgt = rk[0] === r ? rk[1] : rk[0];
-        if (!tgt) { r.item = it; return; }   // hedef yok: eşya boşa gitmesin
-        S.ents.push({ type: 'mis', x: cx, y: r.y - 30, vx: 0, vy: 0, tgt, o: r, age: 0, warn: 1.1 });
-        break;
+        return tgt ? { x: cx, y: r.y - 30, tgt } : null;   // hedef yok: eşya boşa gitmesin
       }
-      case 'bolt': {   // yalnızca öndekiler; en yakın 4 kişi (10 kişilik yarışta herkesi silmesin)
-        const ah = S.racers.filter(q => q !== r && !q.finished && !q.out && q.x > r.x).sort((a, b) => a.x - b.x).slice(0, 4);
-        for (const q of ah) S.ents.push({ type: 'bolt', tgt: q, o: r, t: 1.8, age: 0 });
-        break;
-      }
-      case 'ice': for (const q of S.racers) if (q !== r) harm(q, 'freeze', 2.2, r, 'ice'); FM.fx.ring(cx, cy, 300, '#bfefff', .6); break;
-      case 'mag': S.ents.push({ type: 'mag', o: r, t: .45, age: 0 }); break;
-      case 'ink': for (const q of S.racers) if (q !== r && q.x > r.x) harm(q, 'ink', 3.5, r, 'ink'); FM.fx.burst(cx, cy, ['#222233', '#444466'], 16, 240); break;
+      // yıldırım yalnızca öndekiler; en yakın 4 kişi (10 kişilik yarışta herkesi silmesin)
+      case 'bolt': return { x: cx, y: cy, tg: S.racers.filter(q => q !== r && !q.finished && !q.out && q.x > r.x).sort((a, b) => a.x - b.x).slice(0, 4) };
+      default: return { x: cx, y: cy, rx: r.x };
     }
-    FM.emit('item:use', { r, item: it });
+  }
+  /* Eşyanın etkisini uygular / varlığını kurar; kurulan varlıkları döndürür. Uzak (ağ) kullanıcıda kendi durumuna (hız, kalkan,
+     balon) dokunulmaz — onu kendi telefonu simüle eder; alan etkileri (buz, mürekkep) harm() ile yalnızca yerel yetkililere işler. */
+  function castItem(r, it, p) {
+    const out = [], own = !isRemote(r);
+    const add = e => { S.ents.push(e); out.push(e); };
+    switch (it) {
+      case 'speed': if (own) { r.boost = 3.2; r.shield = 0; } break;
+      case 'shield': if (own) { r.shield = 4; r.boost = 0; } break;
+      case 'balloon': if (own) r.balloon = true; break;
+      case 'saw': add({ type: 'saw', x: p.x, y: p.y, vx: p.vx, vy: 0, r: 15, o: r, age: 0, life: 2.4, b: 0 }); break;
+      case 'dyn': add({ type: 'dyn', x: p.x, y: p.y, vx: p.vx, vy: p.vy, o: r, age: 0, fuse: .95 }); break;
+      case 'trap': add({ type: 'trap', x: p.x, y: p.y, w: 34, h: 12, o: r, age: 0, life: 16 }); break;
+      case 'net': add({ type: 'net', x: p.x, y: p.y, w: 44, h: 76, o: r, age: 0, life: 10, n: 0 }); break;
+      case 'mis': add({ type: 'mis', x: p.x, y: p.y, vx: 0, vy: 0, tgt: p.tgt || null, o: r, age: 0, warn: 1.1 }); break;
+      case 'bolt': for (const q of p.tg || []) add({ type: 'bolt', tgt: q, o: r, t: 1.8, age: 0 }); break;
+      case 'ice': for (const q of S.racers) if (q !== r) harm(q, 'freeze', 2.2, r, 'ice'); FM.fx.ring(p.x, p.y, 300, '#bfefff', .6); break;
+      case 'mag': add({ type: 'mag', o: r, t: .45, age: 0 }); break;
+      case 'ink': { const rx = p.rx != null ? p.rx : r.x; for (const q of S.racers) if (q !== r && q.x > rx) harm(q, 'ink', 3.5, r, 'ink'); FM.fx.burst(p.x, p.y, ['#222233', '#444466'], 16, 240); break; }
+    }
+    return out;
   }
   function explode(x, y, rad, owner, cause) {
     for (const q of S.racers) {
@@ -735,24 +789,33 @@
   function useAbility(r) {
     if (r.charge < 100 || r.dead > 0 || r.finished) return;
     r.charge = 0;
-    const cx = cxOf(r), cy = cyOf(r), k = 1 + (r.abLv - 1) * .1; // seviye başına %10 güç
+    const p = { x: cxOf(r), y: cyOf(r), fy: r.y + r.h };
+    if (r.id === 'Caner') p.tgt = aheadOf(r, 1300);
+    const ents = castAbility(r, p);
+    FM.emit('ability', { r, id: r.id, p, ents });
+  }
+  /* Özel gücün etkisi (p = kullanım anındaki gövde merkezi x,y + ayak fy; Caner için hedef tgt). Kurulan varlıkları döndürür.
+     Uzak (ağ) kullanıcıda kendi hareketi (atılım/kızak/süzülüş/hız) uygulanmaz; alan etkileri yalnızca yerel yetkililere işler. */
+  function castAbility(r, p) {
+    const out = [], own = !isRemote(r);
+    const cx = p.x, cy = p.y, fy = p.fy != null ? p.fy : cy + RH / 2, k = 1 + (r.abLv - 1) * .1; // seviye başına %10 güç
     if (S.mode !== 'demo') FM.fx.toast(`${r.name}: ${FM.CH[r.id].ab}!`, FM.CH[r.id].col2);
     switch (r.id) {
-      case 'TAFTAF': r.dash = .55 * k; r.climb = false; if (r.slide) setSlide(r, false); FM.fx.burst(cx, cy, ['#5b2a86', '#c9a0ff'], 16, 200, 0, 'star'); break;
+      case 'TAFTAF': if (own) { r.dash = .55 * k; r.climb = false; if (r.slide) setSlide(r, false); } FM.fx.burst(cx, cy, ['#5b2a86', '#c9a0ff'], 16, 200, 0, 'star'); break;
       case 'Caner': {
-        const tgt = aheadOf(r, 1300);
-        if (tgt) for (let i = 0; i < 3; i++) S.ents.push({ type: 'crow', x: cx - 10 * i, y: cy - 20 - i * 12, tgt, o: r, life: 3.5, first: i === 0, ph: i, age: 0, dur: 2.0 * k });
-        else { r.boost = 2.2 * k; FM.fx.burst(cx, cy, ['#c0182e', '#1d1d26'], 16, 220); }
+        const tgt = p.tgt;
+        if (tgt) for (let i = 0; i < 3; i++) { const e = { type: 'crow', x: cx - 10 * i, y: cy - 20 - i * 12, tgt, o: r, life: 3.5, first: i === 0, ph: i, age: 0, dur: 2.0 * k }; S.ents.push(e); out.push(e); }
+        else { if (own) r.boost = 2.2 * k; FM.fx.burst(cx, cy, ['#c0182e', '#1d1d26'], 16, 220); }
         break;
       }
       case 'LUL': {
         const rad = 340 * k;
         for (const q of S.racers) if (q !== r && Math.abs(cxOf(q) - cx) < rad && Math.abs(cyOf(q) - cy) < 130 && q.onGround) harm(q, 'stun', 1.7 * k, r, 'LUL');
-        FM.fx.ring(cx, r.y + r.h, rad, '#8fa8dd', .6, 10); FM.fx.burst(cx, r.y + r.h, ['#8a6a3a', '#dddddd'], 24, 300); FM.fx.puff(cx, r.y + r.h, 14, 'rgba(200,180,150,.8)', 16, 220);
+        FM.fx.ring(cx, fy, rad, '#8fa8dd', .6, 10); FM.fx.burst(cx, fy, ['#8a6a3a', '#dddddd'], 24, 300); FM.fx.puff(cx, fy, 14, 'rgba(200,180,150,.8)', 16, 220);
         if (near(r)) FM.fx.shake(.25);
         break;
       }
-      case 'ertan': r.sled = 1.25 * k; if (r.onGround) setSlide(r, true); FM.fx.burst(cx, cy + 10, ['#bfefff', '#ffffff'], 14, 160, 200, 'ice'); break;
+      case 'ertan': if (own) { r.sled = 1.25 * k; if (r.onGround) setSlide(r, true); } FM.fx.burst(cx, cy + 10, ['#bfefff', '#ffffff'], 14, 160, 200, 'ice'); break;
       case 'Kral': {
         const rad = 420 * k;
         for (const q of S.racers) { const dx = cxOf(q) - cx; if (q !== r && dx > -60 && dx < rad && Math.abs(cyOf(q) - cy) < 200) harm(q, 'knock', 1.0 * k, r, 'Kral'); }
@@ -765,16 +828,20 @@
         FM.fx.ring(cx, cy, rad, '#ffd23f', .6, 10);
         break;
       }
-      case 'Nuss': r.fly = 2.4 * k; r.vy = -520; r.climb = false; if (r.slide) setSlide(r, false); FM.fx.burst(cx, cy, ['#ffffff', '#7be3ff'], 16, 200, 100, 'leaf'); break;
-      case 'baso': S.ents.push({ type: 'wave', x: r.x + r.w, y: cy, o: r, life: 1.15 * k, hit: [], age: 0, dur: 3.2 * k }); break;
+      case 'Nuss': if (own) { r.fly = 2.4 * k; r.vy = -520; r.climb = false; if (r.slide) setSlide(r, false); } FM.fx.burst(cx, cy, ['#ffffff', '#7be3ff'], 16, 200, 100, 'leaf'); break;
+      case 'baso': { const e = { type: 'wave', x: cx + r.w / 2, y: cy, o: r, life: 1.15 * k, hit: [], age: 0, dur: 3.2 * k }; S.ents.push(e); out.push(e); break; }
     }
-    FM.emit('ability', { r, id: r.id });
+    return out;
   }
 
   /* =================== VARLIKLAR =================== */
   function circleHit(e, q, rad) { const hx = clamp(e.x, q.x, q.x + q.w), hy = clamp(e.y, q.y, q.y + q.h); return (hx - e.x) ** 2 + (hy - e.y) ** 2 < rad * rad; }
   function updateEnts(dt) {
-    for (const e of S.ents) {
+    try { for (const e of S.ents) { curEnt = e; updateEnt(e, dt); } } finally { curEnt = null; }
+    S.ents = S.ents.filter(e => !e.dead && !(e.life !== undefined && e.life <= 0 && e.type !== 'bolt'));
+  }
+  function updateEnt(e, dt) {
+    {
       e.age = (e.age || 0) + dt;
       switch (e.type) {
         case 'saw': {
@@ -883,7 +950,6 @@
         }
       }
     }
-    S.ents = S.ents.filter(e => !e.dead && !(e.life !== undefined && e.life <= 0 && e.type !== 'bolt'));
   }
 
   /* =================== YAPAY ZEKÂ =================== */
@@ -1050,8 +1116,11 @@
   /* ---------- mod kuralları (yalnızca yarışta) ---------- */
   // Eleme: hayattaki (elenmemiş) herkesin kapıdan geçmesi beklenir; geçmeyen son k kişi elenir.
   // k = max(1, floor((kalan-1) / kalan etkin kapı)) → kapılar eşit dağıtır, son kapıda 1 kişi kalır.
+  // Ağda uzak geçişler gecikmeyle gelir: koşul sağlanınca bu kadar beklenir, sonra GEÇİŞ ZAMANINA göre en son geçen(ler) elenir.
+  const GATE_GRACE = .45;
   function checkGates() {
     const G0 = S.L.gates; if (!G0.length || !auth()) return;
+    const grace = S.netRole ? GATE_GRACE : 0;
     for (const g of G0) {
       if (g.off || g.done) continue;
       const alive = S.racers.filter(r => !r.out);
@@ -1064,15 +1133,33 @@
       // güvenlik: ilk geçişten 40 sn sonra hâlâ bekleyen varsa en geridekiler elenir (takılan/çevrimdışı oyuncu)
       const timeout = S.raceT - g.t0 > 40;
       if (left.length <= k || timeout) {
-        left.sort((p, q) => p.x - q.x);
-        const vic = left.slice(0, Math.min(k, left.length));
+        let vic;
+        if (grace > 0 && !timeout) {
+          if (g.tc == null) g.tc = S.raceT;
+          if (S.raceT - g.tc < grace) continue;
+          // geçemeyenler (en geride olan önce), sonra geçiş anı en geç olanlar; bitirmiş olan asla elenmez
+          const gt = r => (r.gateT && r.gateT[g.n] != null ? r.gateT[g.n] : 0);
+          vic = alive.filter(r => !r.finished).sort((p, q) => {
+            const pc = !!(p.gates & gb), qc = !!(q.gates & gb);
+            if (pc !== qc) return pc ? 1 : -1;
+            return pc ? gt(q) - gt(p) : p.x - q.x;
+          }).slice(0, k);
+        } else {
+          left.sort((p, q) => p.x - q.x);
+          vic = left.slice(0, Math.min(k, left.length));
+        }
         g.done = true;
         for (const v of vic) eliminate(v, g.n);
         // zaman aşımında kalanlar kapıdan geçmiş sayılır
         for (const v of left) if (!v.out) v.gates |= gb;
       }
     }
-    // tek kişi kaldı: hayatta kalan kazanır
+    checkSurvivor();
+  }
+  game.checkGates = checkGates;
+  // Eleme: tek kişi kaldıysa hayatta kalan kazanır (ağda üyeler de ev sahibinin elemelerini uyguladıktan sonra çağırır)
+  function checkSurvivor() {
+    if (S.gameMode !== 'elim' || S.mode !== 'race') return false;
     const alive = S.racers.filter(r => !r.out);
     if (alive.length === 1 && !alive[0].finished && S.elimN > 0) {
       const w = alive[0];
@@ -1080,9 +1167,11 @@
       FM.fx.toast(w === S.player ? 'HAYATTA KALDIN! KAZANDIN!' : `${w.name} kazandı!`, '#ffe14d');
       if (near(w)) FM.fx.confetti(cxOf(w), w.y - 160, w === S.player ? 70 : 30);
       FM.emit('finish', { r: w, place: w.place, time: w.ftime, survivor: true });
+      return true;
     }
+    return false;
   }
-  game.checkGates = checkGates;
+  game.checkSurvivor = checkSurvivor;
   // Kaos: arada bir meteor yağmuru (uyarı gölgesi METEOR_WARN sn önce)
   function spawnMeteor(x, warn, y) {
     if (!S.L) return null;
@@ -1123,6 +1212,8 @@
   }
   game.step = function (dt) {
     if (!S.L) return;
+    // ağ yarışı: netgame.js her adım başında uzak durumları/olayları işler, kendi durumunu yayınlar, saati eşitler
+    if (S.netRole && typeof game.onNetStep === 'function') { try { game.onNetStep(dt); } catch (e) { console.error(e); } }
     S.T += dt; S.lt = (S.lt || 0) + dt; updateLevel(dt);
     if (S.mode === 'count') {
       S.countT -= dt;
@@ -1176,6 +1267,8 @@
   // yardımcıları dışa aç (test/geliştirme için)
   game.physics = physics; game.ai = ai; game.useItem = useItem; game.useAbility = useAbility; game.mkRacer = mkRacer; game.explode = explode;
   game.endRound = endRound; game.die = die; game.harm = harm; game.respawn = respawn;
-  // turu hemen bitir (ör. elenen oyuncu "Sonuçlara geç" derse): o anki sıralamayla puanlanır
-  game.finishNow = function () { if (S.mode === 'race' && auth()) { endRound(); return true; } return false; };
+  game.itemParams = itemParams; game.castItem = castItem; game.castAbility = castAbility; game.near = near;
+  game.deathIcon = cause => (cause && FM.ITEMS[cause] && FM.ITEMS[cause].ic) || DEATH_ICON[cause] || '💥';
+  // turu hemen bitir (ör. elenen oyuncu "Sonuçlara geç" derse): o anki sıralamayla puanlanır. Ağ yarışında YOK (tur herkes için biter).
+  game.finishNow = function () { if (S.mode === 'race' && auth() && !S.netRole) { endRound(); return true; } return false; };
 })(window.FM);

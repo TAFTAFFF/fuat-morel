@@ -36,6 +36,8 @@
   const DYN_FUSE = .95, DASH_V = 2.2;
   const KRAL_SPREAD = .62, KRAL_NEAR = 90, WAVE_V = 880;
   const JBUF = .12;                // zıplama tamponu (yere değmeden önce basılan zıplama sayılır)
+  // Fun Run gibi: zıplamak ve kaymak hız keser (boşuna zıplamak/kaymak cezalı; kusursuz zıplama muaf)
+  const JUMP_KEEP = .92, DJ_KEEP = .85, AIR_MUL = .9, SLIDE_MUL = .8;
   const PERF_WIN = .08, PERF_T = .7, PERF_MUL = 1.1;   // kusursuz iniş/zıplama penceresi ve hız ödülü
   const DRAFT_MIN = 40, DRAFT_MAX = 160, DRAFT_T = .6, DRAFT_K = .07;   // rüzgâr arkası
   const NM_CD = 2;                 // kıl payı olayı en sık 2 sn'de bir
@@ -542,6 +544,8 @@
     if (r.onIce) mult *= r.slide ? 1.3 : 1.1;           // buz: kaygan ve hızlı (göbek üstü kayış daha da hızlı)
     if (r.perfT > 0) mult *= PERF_MUL;                  // kusursuz iniş/zıplama ödülü
     if (r.draft > 0) mult *= 1 + DRAFT_K * r.draft;     // rüzgâr arkası
+    if (r.slide && r.onGround && r.sled <= 0 && !r.onIce) mult *= SLIDE_MUL;          // kayış hız keser (buzda ve kızakta değil)
+    if (r.airJ && !r.onGround && r.fly <= 0 && r.dash <= 0) mult *= AIR_MUL;           // zıplayan havada daha yavaş
     if (r.dash > 0) mult = DASH_V * (r.dashX == null ? 1 : r.dashX);   // yönlü atılımda yatay pay
     if (r.bot) mult *= 1 + .035 * Math.sin(S.T * .55 + r.idx * 2.1);   // ortalaması 0: yalnızca görsel ayrışma
     let tgt = locked ? 0 : RUN * mult;
@@ -572,14 +576,14 @@
             // kusursuz zıplama: inişten hemen sonra (ya da hemen önce basılmış tamponla) zıplayan hız kaybetmez + kısa hız ödülü
             const age = JBUF - r.jbuf;
             const perf = S.mode === 'race' && r.onGround && r.landT <= PERF_WIN && age - r.landT <= PERF_WIN && r.landHard && r.perfCd <= 0;
-            r.vy = -JUMP * (r.onSand ? .82 : 1); if (!perf) r.vx *= .96; r.coy = 0; r.jumps = 1; r.onGround = false; r.jumpT = 1; r.jbuf = 0;
+            r.vy = -JUMP * (r.onSand ? .82 : 1); if (!perf) r.vx *= JUMP_KEEP; r.airJ = !perf; r.coy = 0; r.jumps = 1; r.onGround = false; r.jumpT = 1; r.jbuf = 0;
             if (near(r)) FM.fx.puff(cxOf(r), r.y + r.h, 4, 'rgba(255,255,255,.8)', 7, 70);
             FM.emit('jump', { r, dbl: false });
             if (perf) perfect(r, 'jump');
           }
         } else if (c.jp && r.jumps < 2) {
           if (r.slide) setSlide(r, false);
-          r.vy = -DJ; r.vx *= .88; r.jumps = 2; r.slam = false; r.slamPerf = false; r.jumpT = 1; r.jbuf = 0;
+          r.vy = -DJ; r.vx *= DJ_KEEP; r.airJ = true; r.jumps = 2; r.slam = false; r.slamPerf = false; r.jumpT = 1; r.jbuf = 0;
           if (near(r)) FM.fx.burst(cxOf(r), r.y + r.h, ['#ffffff', '#bfe9ff'], 7, 110, 300, 'star', 4);
           FM.emit('jump', { r, dbl: true });
         }
@@ -660,7 +664,7 @@
           r.y = s.y - r.h; r.onGround = true; r.jumps = 0;
           if (!was) {
             r.land = clamp(vyBefore / 1300, .25, 1);
-            r.landT = 0; r.landHard = vyBefore > 500;   // kusursuz zıplama penceresi inişten sayılır
+            r.landT = 0; r.landHard = vyBefore > 500; r.airJ = false;   // kusursuz zıplama penceresi inişten sayılır
             if (near(r) && (vyBefore > 700 || r.slam)) FM.fx.puff(cxOf(r), r.y + r.h, r.slam ? 10 : 5, 'rgba(255,255,255,.85)', r.slam ? 12 : 8, r.slam ? 140 : 70);
             if (r.slam) {
               if (r === S.player) FM.fx.shake(.12);
@@ -689,7 +693,7 @@
     if (r.vy >= 0) for (const m of L.mush) {
       if (cx > m.x - 4 && cx < m.x + m.w + 4 && feet > m.y - 24 && feet <= m.y + 2) {
         if (r.slide) setSlide(r, false);
-        r.vy = -MUSH; r.jumps = 1; r.onGround = false; r.y = m.y - 24 - r.h; m.sq = .3; r.jumpT = 1;
+        r.vy = -MUSH; r.jumps = 1; r.onGround = false; r.y = m.y - 24 - r.h; m.sq = .3; r.jumpT = 1; r.airJ = false;   // harita fırlatması: zıplama cezası yok
         FM.emit('mush', { r });
       }
     }
@@ -697,7 +701,7 @@
     if (r.vy >= 0) for (const m of L.tramp) {
       if (cx > m.x - 4 && cx < m.x + m.w + 4 && feet > m.y - 24 && feet <= m.y + 2) {
         if (r.slide) setSlide(r, false);
-        r.vy = -TRAMP; r.jumps = 1; r.onGround = false; r.y = m.y - 24 - r.h; m.sq = .35; r.jumpT = 1; r.bounceT = .6; r.climb = false;
+        r.vy = -TRAMP; r.jumps = 1; r.onGround = false; r.y = m.y - 24 - r.h; m.sq = .35; r.jumpT = 1; r.bounceT = .6; r.climb = false; r.airJ = false;
         FM.emit('mush', { r, kind: 'tramp' });
       }
     }

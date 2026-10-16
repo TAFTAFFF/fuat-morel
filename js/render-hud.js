@@ -999,15 +999,176 @@
     if (c > H.coins) { H.coinBump = H.t; H.coinGain = c - H.coins; }
     H.coins = c;
     if (rank !== H.rank) { if (S.mode === 'race') { H.rankDir = rank < H.rank ? 1 : -1; H.rankPop = H.t; } H.rank = rank; }
-    if (P.item !== H.item) { if (P.item) H.itemPop = H.t; H.item = P.item; }
+    if (P.item !== H.item) { if (P.item && !(PICK.phase && PICK.it === P.item)) H.itemPop = H.t; H.item = P.item; }   // uçuş sürerken yuva varışta "pop" eder
     const full = P.charge >= 100;
     if (full && !H.full) H.fullPop = H.t;
     H.full = full;
+  }
+  /* olaydan da (motor charge:full yayınlarsa) aynı anı yakala — track() zaten durumdan türetiyor, çift tetiklenmez */
+  FM.on('charge:full', d => { const S = FM.S; if (d && d.r === S.player && !H.full && S.mode !== 'demo') { H.full = true; H.fullPop = H.t; } });
+
+  /* ---- eşya alma geri bildirimi (TUR5 §3): başın üstünde büyük ikon "pop", sonra eşya yuvasına uçuş ----
+     Hedef: FM.ui.slotRect('item') (mantıksal ekran birimi) → HUD birimi (÷hs); yoksa dokunmatikte css'teki EŞYA düğmesinin
+     yeri, klavyede HUD'un kendi yuvası. Varınca FM.emit('hud:arrive', {kind:'item'}) — ARAYÜZ düğmeyi zıplatır. */
+  const PICK = { it: null, t: 0, phase: 0, sx: 0, sy: 0, tx: 0, ty: 0, ts: 60, sp: [] };
+  const PICK_POP = .62, PICK_FLY = .46, PICK_END = .4;
+  FM.on('box', d => {
+    const S = FM.S, P = S.player;
+    if (!d || !d.item || !P || d.r !== P || P.ghost || S.mode === 'demo' || !FM.ITEMS[d.item]) return;
+    PICK.it = d.item; PICK.t = 0; PICK.phase = 1; PICK.sp.length = 0;
+    for (let i = 0; i < 9; i++) PICK.sp.push({ a: Math.random() * TAU, v: 46 + Math.random() * 70, s: 3.5 + Math.random() * 4, d: Math.random() * .25 });
+  });
+  FM.on('race:start', () => { PICK.phase = 0; PICK.it = null; });
+  function itemSlotTarget() {
+    const V = FM.view, hs = Lo.hs || 1;
+    if (FM.ui && typeof FM.ui.slotRect === 'function') {
+      try {
+        const r = FM.ui.slotRect('item');
+        if (r && isFinite(+r.x) && isFinite(+r.y) && +r.w > 0 && +r.h > 0) return { x: (+r.x + r.w / 2) / hs, y: (+r.y + r.h / 2) / hs, s: Math.min(+r.w, +r.h) / hs };
+      } catch (e) { /* arayüz henüz hazır değil */ }
+    }
+    if (Lo.touch) {
+      // css/style.css .tb-item: sağ alt köşe, boyut clamp(70px, 20vh, 116px), kenar 3.2vh + güvenli alan
+      const dpr = V.dpr || 1, sc = V.S || 1, cssH = Lo.cssH || 390, cssW = (V.W || 960) / dpr, vh = cssH / 100;
+      const size = clamp(20 * vh, 70, 116), m = 3.2 * vh;
+      const toL = px => px * dpr / sc / hs;
+      return { x: toL(cssW - m - (safe.r || 0) - size / 2), y: toL(cssH - m - (safe.b || 0) - size / 2), s: toL(size) };
+    }
+    const k = Lo.compact ? CMP_K : SLOT_K;
+    return { x: Lo.padL + 42 * k, y: Lo.padT + 42 * k, s: 72 * k };
+  }
+  function drawPickup(ctx, P) {
+    if (!PICK.phase || !P) return;
+    const S = FM.S, hs = Lo.hs || 1, it = PICK.it, t = PICK.t;
+    if (!FM.ITEMS[it]) { PICK.phase = 0; return; }
+    const tg = itemSlotTarget();
+    PICK.tx = tg.x; PICK.ty = tg.y; PICK.ts = tg.s;
+    const col = hex6(FM.ITEMS[it].col) || '#ffffff';
+    ctx.save();
+    if (PICK.phase === 1) {
+      // başın üstünde (plakanın da üstünde) zıplayarak büyüyen ikon + ezilme/esneme + saçılan parıltılar
+      const hx = (P.x + (P.w || 28) / 2 - S.cam.x) / hs, hy = (P.y - 62 - S.cam.y) / hs;
+      const u = clamp(t / PICK_POP, 0, 1);
+      const e = u < .4 ? ease.outBack(u / .4, 2.8) : 1;
+      const sq = u < .4 ? Math.sin(u / .4 * Math.PI) : 0;
+      let sx = 1 + .3 * sq, sy = 1 - .24 * sq;
+      if (u > .78) { const q = (u - .78) / .22; sx *= 1 - .14 * q; sy *= 1 + .22 * q; }   // kalkışa hazırlık: uzama
+      const y = hy - 16 * e - Math.sin(u * Math.PI) * 8, size = 56 * e;
+      PICK.sx = hx; PICK.sy = y;
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .45 + .25 * Math.sin(H.t * 9);
+      drawSpr(ctx, gfx.glowSprite(col, 54), hx, y, e);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      for (const s of PICK.sp) {   // parıltılar
+        const k = clamp((u - s.d) / .6, 0, 1);
+        if (k <= 0 || k >= 1) continue;
+        ctx.globalAlpha = 1 - k;
+        sparkle(ctx, hx + Math.cos(s.a) * s.v * k, y + Math.sin(s.a) * s.v * k * .7 - 10 * k, s.s * (1 - k * .5), '#fff6c0');
+      }
+      ctx.globalAlpha = 1;
+      ctx.translate(hx, y); ctx.scale(sx, sy);
+      drawIcon(ctx, it, 0, 0, size, 56);
+      if (t >= PICK_POP) { PICK.phase = 2; PICK.t = 0; }
+    } else if (PICK.phase === 2) {
+      // kavisli uçuş: başın üstünden yuvaya (kontrol noktası yukarıda), arkasında solan izler
+      const u = clamp(t / PICK_FLY, 0, 1), k = u * u * (3 - 2 * u);
+      const x0 = PICK.sx, y0 = PICK.sy, x1 = PICK.tx, y1 = PICK.ty;
+      const cx = (x0 + x1) / 2, cy = Math.min(y0, y1) - 70;
+      const at = q => [(1 - q) * (1 - q) * x0 + 2 * (1 - q) * q * cx + q * q * x1, (1 - q) * (1 - q) * y0 + 2 * (1 - q) * q * cy + q * q * y1];
+      const sz0 = 52, sz1 = Math.max(26, PICK.ts * .62);
+      for (let i = 3; i >= 1; i--) {
+        const q = clamp(k - i * .07, 0, 1), p = at(q);
+        ctx.globalAlpha = .28 - i * .06;
+        drawIcon(ctx, it, p[0], p[1], lerp(sz0, sz1, q) * (1 - i * .12), 56);
+      }
+      const p = at(k);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .5;
+      drawSpr(ctx, gfx.glowSprite(col, 40), p[0], p[1]);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      drawIcon(ctx, it, p[0], p[1], lerp(sz0, sz1, k), 56);
+      if (u >= 1) {
+        PICK.phase = 3; PICK.t = 0; H.itemPop = H.t;
+        try { FM.emit('hud:arrive', { kind: 'item' }); } catch (e) { /* dinleyici hatası uçuşu bozmasın */ }
+      }
+    } else {
+      // varış: yuvada genişleyen halka + parıltı
+      const u = clamp(t / PICK_END, 0, 1), rr0 = PICK.ts * .5;
+      ctx.globalAlpha = (1 - u) * .9;
+      ctx.lineWidth = 5 * (1 - u) + 1; ctx.strokeStyle = '#ffffff';
+      circ(ctx, PICK.tx, PICK.ty, rr0 + u * 36); ctx.stroke();
+      ctx.lineWidth = 2.5 * (1 - u) + .5; ctx.strokeStyle = col;
+      circ(ctx, PICK.tx, PICK.ty, rr0 * .8 + u * 26); ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        const a = i * TAU / 6 + .4, d = rr0 + 8 + u * 30;
+        sparkle(ctx, PICK.tx + Math.cos(a) * d, PICK.ty + Math.sin(a) * d, 5 * (1 - u), '#fff6c0');
+      }
+      if (u >= 1) PICK.phase = 0;
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /* ---- ekran dışı rakipler (TUR5 §9): kenar oku + küçük portre + mesafe (30 px = 1 m) ----
+     Üst HUD bandının altında, dokunmatikte köşe düğmelerinin üstünde kalır; kenar başına en çok 3 kişi. */
+  function drawOffscreen(ctx, P) {
+    const S = FM.S, V = FM.view, hs = Lo.hs || 1;
+    if (S.mode !== 'race' || !S.L) return;
+    const me = (isGhost(P) || P.out) && S.spec ? S.spec : P;
+    if (!me || !isFinite(+me.x)) return;
+    const camX = S.cam.x, camY = S.cam.y, VW = V.VW || 960, VH = V.VH || 540;
+    const top = Lo.padT + 102, bot = Lo.H - Lo.padB - (Lo.touch ? Lo.H * .3 : 16) - 16;
+    if (bot - top < 40) return;
+    const mx = me.x + (me.w || 28) / 2;
+    const left = [], right = [];
+    for (const r of S.racers) {
+      if (!r || r === me || r.dead > 0 || r.off || r.out || r.ghost) continue;
+      const cx = r.x + (r.w || 28) / 2, cy = r.y + (r.h || 42) / 2;
+      const sx = cx - camX, sy = cy - camY;
+      if (sx >= -8 && sx <= VW + 8 && sy >= -60 && sy <= VH + 40) continue;   // görünür
+      if (sx >= -8 && sx <= VW + 8) continue;                                   // yalnız dikey dışarıda: ok yanıltır
+      (sx < 0 ? left : right).push({ r, d: Math.abs(cx - mx), y: clamp(sy / hs, top, bot) });
+    }
+    for (const [list, side] of [[left, -1], [right, 1]]) {
+      if (!list.length) continue;
+      list.sort((a, b) => a.d - b.d);
+      const arr = list.slice(0, 3).sort((a, b) => a.y - b.y);
+      for (let i = 1; i < arr.length; i++) if (arr[i].y < arr[i - 1].y + 50) arr[i].y = arr[i - 1].y + 50;   // üst üste binme
+      const over = arr[arr.length - 1].y - bot;
+      if (over > 0) for (const o of arr) o.y = Math.max(top, o.y - over);
+      for (const o of arr) drawEdgePin(ctx, o, side);
+    }
+  }
+  function drawEdgePin(ctx, o, side) {
+    const r = o.r, col = racerColor(r);
+    const x = side < 0 ? Lo.padL + 30 : Lo.W - Lo.padR - 30, y = o.y + Math.sin(H.t * 4 + (r.idx | 0)) * 1.5;
+    const rad = 15, m = Math.max(0, Math.round(o.d / 30));
+    ctx.save();
+    ctx.globalAlpha = .94;
+    // ok: dış kenara bakan üçgen (kenara yapışık)
+    const ax = x + side * (rad + 11);
+    ctx.beginPath(); ctx.moveTo(ax + side * 9, y); ctx.lineTo(ax - side * 3, y - 10); ctx.lineTo(ax - side * 3, y + 10); ctx.closePath();
+    ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2.6; ctx.strokeStyle = OUT; ctx.lineJoin = 'round'; ctx.stroke();
+    // portre
+    ctx.fillStyle = 'rgba(8,4,24,.38)'; circ(ctx, x, y + 2.5, rad + 2.6); ctx.fill();
+    ctx.fillStyle = OUT; circ(ctx, x, y, rad + 2.6); ctx.fill();
+    ctx.fillStyle = lg(ctx, 0, y - rad, 0, y + rad, [0, gfx.shade(col, .35), 1, gfx.shade(col, -.25)]); circ(ctx, x, y, rad + .6); ctx.fill();
+    drawPortrait(ctx, r, x, y, rad - 2.4);
+    ctx.lineWidth = 1.4; ctx.strokeStyle = OUT; circ(ctx, x, y, rad - 2.4); ctx.stroke();
+    if (r.finished) {                                  // bitişte: bayrak rozeti
+      ctx.fillStyle = OUT; circ(ctx, x - side * rad * .75, y - rad * .75, 8); ctx.fill();
+      drawIcon(ctx, 'flag', x - side * rad * .75, y - rad * .75, 14, 20);
+    }
+    // mesafe hapı (portrenin altında)
+    const txt = m + ' m', sz = 11.5, w = tw(ctx, txt, sz) + 12, h = 17;
+    pill(ctx, x - w / 2, y + rad + 3, w, h, { top: 'rgba(30,20,60,.92)', bot: 'rgba(14,9,32,.92)', lw: 1.8, gloss: false });
+    T(ctx, txt, x, y + rad + 3 + h / 2 + .5, sz, '#ffffff', { lw: 2.8, shadow: false });
+    ctx.restore();
   }
 
   /* =====================================================================
      4) HUD PARÇALARI
      ===================================================================== */
+  const SLOT_K = 1.24;                 // masaüstü (klavye) eşya/güç yuvaları: daha büyük ve belirgin (TUR5 §3)
   function slotFrame() {
     return hspr('slot', 96, 100, 48, 48, g => {
       g.fillStyle = 'rgba(8,4,24,.38)'; circ(g, 0, 4, 42); g.fill();
@@ -1041,7 +1202,8 @@
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
     drawSpr(ctx, slotFrame(), 0, 0);
-    if (it) {
+    const flying = !!(it && PICK.phase && PICK.phase !== 3 && PICK.it === it);   // ikon hâlâ yuvaya uçuyor: yuva boş görünür
+    if (it && !flying) {
       const sc = pe < .6 ? .3 + .7 * ease.outElastic(clamp(pe / .6, 0, 1)) : 1;
       const bob = Math.sin(H.t * 3) * 1.2;
       drawIcon(ctx, it, 0, bob, 50 * sc, 50);
@@ -1055,13 +1217,22 @@
     }
     ctx.restore();
     let right = x + 30;
-    if (it) {
-      const nm = FM.ITEMS[it].n, sz = 13, w = tw(ctx, nm, sz) + 20, h = 21;
+    const sz = 13, h = 21;
+    if (it && !flying) {
+      const nm = FM.ITEMS[it].n, w = tw(ctx, nm, sz) + 20;
       const col = hex6(FM.ITEMS[it].col) || '#8b5cf6';
       pill(ctx, x - w / 2, y + 34, w, h, { top: gfx.mix(col, '#2c2066', .55), bot: gfx.mix(col, '#120c2e', .8) });
       T(ctx, nm, x, y + 34 + h / 2 + .5, sz, '#ffffff', { lw: 3.4 });
       right = x + w / 2;
-      if (!Lo.touch) keycap(ctx, x + 31, y - 28, 'E', 18);
+    } else {
+      const w = tw(ctx, 'EŞYA', sz) + 20;   // boşken de okunur etiket
+      pill(ctx, x - w / 2, y + 34, w, h, { top: 'rgba(44,32,92,.8)', bot: 'rgba(20,14,46,.8)', gloss: false });
+      T(ctx, 'EŞYA', x, y + 34 + h / 2 + .5, sz, 'rgba(255,255,255,.55)', { lw: 3, shadow: false });
+      right = x + w / 2;
+    }
+    if (!Lo.touch) {   // tuş kapağı her zaman görünür; eşya varken hafif nabız
+      const ks = it && !flying ? 1 + .08 * Math.sin(H.t * 5) : 1;
+      ctx.save(); ctx.translate(x + 31, y - 28); ctx.scale(ks, ks); keycap(ctx, 0, 0, 'E', 18); ctx.restore();
     }
     return right;
   }

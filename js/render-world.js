@@ -2622,71 +2622,108 @@
     }
   }
 
-  /** Eşya kutusu */
+  /** Eşya kutusu: kalın koyu dış hat, doygun kırmızı-turuncu gövde, altın çerçeve bandı, büyük "?" — telefonda uzaktan okunsun
+      (çarpışma kutusu 32×32 aynı; görsel 34×34 + kontur) */
   function boxSpr() {
-    return spr('ibox', 50, 50, 25, 25, g => {
-      const p = new Path2D(); rrp(p, -16, -16, 32, 32, 6.5);
-      g.fillStyle = 'rgba(60,0,10,0.35)'; g.beginPath(); rrp(g, -15, -13, 32, 32, 6.5); g.fill();
-      g.fillStyle = LG(g, -16, -16, 16, 16, [[0, '#ff8a7a'], [.35, '#f0303f'], [1, '#9a0d1c']]); g.fill(p);
+    return spr('ibox3', 58, 58, 29, 29, g => {
+      const p = new Path2D(); rrp(p, -17, -17, 34, 34, 7);
+      g.lineJoin = 'round'; g.lineWidth = 5.6; g.strokeStyle = '#2a0408'; g.stroke(p);
+      g.fillStyle = LG(g, 0, -17, 0, 17, [[0, '#ffb08a'], [.26, '#ff5a3c'], [.6, '#e8202e'], [1, '#8e0a1c']]); g.fill(p);
       g.save(); g.clip(p);
-      g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 2.2; g.beginPath(); rrp(g, -12.5, -12.5, 25, 25, 4); g.stroke();
-      g.fillStyle = 'rgba(80,0,10,0.3)'; g.beginPath(); g.moveTo(16, -16); g.lineTo(16, 16); g.lineTo(-16, 16); g.lineTo(-10, 10); g.lineTo(10, 10); g.lineTo(10, -10); g.closePath(); g.fill();
-      g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.ellipse(-7, -10, 9, 4, -.4, 0, TAU); g.fill();
+      // sağ-alt iç gölge + üst parlama
+      g.fillStyle = 'rgba(70,0,12,0.32)'; g.beginPath(); g.moveTo(17, -17); g.lineTo(17, 17); g.lineTo(-17, 17); g.lineTo(-12, 12); g.lineTo(12, 12); g.lineTo(12, -12); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(-6, -11.5, 10, 4.2, -.35, 0, TAU); g.fill();
+      // altın çerçeve bandı
+      g.lineWidth = 2.6; g.strokeStyle = '#ffd23f'; g.beginPath(); rrp(g, -13, -13, 26, 26, 4.5); g.stroke();
+      g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.6)'; g.beginPath(); rrp(g, -13.6, -13.6, 27.2, 27.2, 5); g.stroke();
       g.restore();
-      g.lineJoin = 'round'; g.lineWidth = 3; g.strokeStyle = '#3e040c'; g.stroke(p);
+      g.lineWidth = 3.4; g.strokeStyle = '#2a0408'; g.stroke(p);
       // altın köşe perçinleri
-      for (const [x, y] of [[-11.5, -11.5], [11.5, -11.5], [-11.5, 11.5], [11.5, 11.5]]) {
-        E(g, x, y, 2.6, 2.6, '#3e040c'); E(g, x, y, 1.8, 1.8, '#ffd23f'); E(g, x - .5, y - .6, .7, .6, '#fff6c0');
+      for (const [x, y] of [[-13, -13], [13, -13], [-13, 13], [13, 13]]) {
+        E(g, x, y, 2.8, 2.8, '#2a0408'); E(g, x, y, 1.9, 1.9, '#ffd23f'); E(g, x - .5, y - .6, .75, .65, '#fff6c0');
       }
-      G.text(g, '?', 0, 1.5, 25, '#ffffff', { stroke: '#5a0812', lw: 5, shadowCol: 'rgba(60,0,10,0.55)' });
+      G.text(g, '?', 0, 1.5, 27, '#ffffff', { stroke: '#4a0610', lw: 5.6, shadowCol: 'rgba(60,0,10,0.55)' });
     });
+  }
+  /** Kutu etrafındaki genişleyen altın nabız halkası (önbellekli) */
+  function boxRingSpr() {
+    return spr('iboxring', 80, 80, 40, 40, g => {
+      g.lineWidth = 3; g.strokeStyle = '#ffd23f'; g.beginPath(); rrp(g, -30, -30, 60, 60, 12); g.stroke();
+      g.lineWidth = 1.2; g.strokeStyle = 'rgba(255,255,255,0.8)'; g.stroke();
+    });
+  }
+  const boxGnd = new WeakMap();   // kutu → altındaki zemin y (statik; bir kez hesaplanır)
+  function boxGroundY(b, cx) {
+    let gy = boxGnd.get(b);
+    if (gy === undefined) {
+      gy = null;
+      try { if (FM.game && typeof FM.game.groundY === 'function') gy = FM.game.groundY(cx, b.y + b.h); } catch (e) { gy = null; }
+      if (gy != null && gy - (b.y + b.h) > 120) gy = null;
+      boxGnd.set(b, gy);
+    }
+    return gy;
   }
   function drawBoxes(ctx, L, vx0, vx1) {
     const bs = boxSpr(), pi = S.player ? S.player.idx : 0;
+    const halo = G.glowSprite('rgba(255,140,80,0.9)', 40), ring = boxRingSpr(), sp = sparkleSpr();
     for (const b of L.boxes) {
       if (b.x > vx1 + 40 || b.x + b.w < vx0 - 40) continue;
-      const cx = b.x + b.w / 2, cy = b.y + b.h / 2 + Math.sin(tk * 2.6 + b.x * .01) * 3;
+      const bob = Math.sin(tk * 2.6 + b.x * .01);
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2 + bob * 3.5;
       const cd = b.cd && b.cd[pi] > 0;
+      // zemin gölgesi (kutu havada: gölge onu yere bağlar, yükseklik okunur)
+      const gy = boxGroundY(b, cx);
+      if (gy != null) E(ctx, cx, gy + 1, 16 - bob * 1.5, 3.8 - bob * .4, cd ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.28)');
       if (cd) {
-        ctx.save(); ctx.globalAlpha = .16;
-        drawS(ctx, bs, cx, cy);
+        ctx.save(); ctx.globalAlpha = .18;
+        drawS(ctx, bs, cx, cy, .92);
         ctx.restore();
         continue;
       }
+      // sıcak hale (lighter) — nabız
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = .28 + .16 * Math.sin(tk * 4 + b.x);
-      drawS(ctx, G.glowSprite('rgba(255,120,90,0.85)', 34), cx, cy);
+      ctx.globalAlpha = .34 + .18 * Math.sin(tk * 4 + b.x);
+      ctx.drawImage(halo.c, cx - 46, cy - 46, 92, 92);
       ctx.restore();
-      const pulse = 1 + Math.sin(tk * 4 + b.x) * .035;
-      ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.sin(tk * 1.8 + b.x) * .05);
+      // genişleyen altın halka (1.5 sn'de bir)
+      const rq = ((tk * .68) + hash((b.x | 0) + 7)) % 1;
+      if (rq < .55) { const q = rq / .55; ctx.globalAlpha = (1 - q) * .75; drawS(ctx, ring, cx, cy, .62 + q * .55); ctx.globalAlpha = 1; }
+      // gövde: nabız + hafif sallanma
+      const pulse = 1 + Math.sin(tk * 4 + b.x) * .05;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.sin(tk * 1.8 + b.x) * .06);
       drawS(ctx, bs, 0, 0, pulse);
       ctx.restore();
+      // yörüngede dönen parıltı + köşede ara sıra çakan yıldız
+      const oa = tk * 2.4 + b.x * .01;
+      ctx.globalAlpha = .9; drawS(ctx, sp, cx + Math.cos(oa) * 24, cy + Math.sin(oa) * 12 - 2, .42 + .1 * Math.sin(oa * 2));
       const ph = (tk * .9 + hash(b.x | 0)) % 2.2;
-      if (ph < .4) { ctx.globalAlpha = Math.sin(ph / .4 * PI); drawS(ctx, sparkleSpr(), cx + 13, cy - 13, .6); ctx.globalAlpha = 1; }
+      if (ph < .4) { ctx.globalAlpha = Math.sin(ph / .4 * PI); drawS(ctx, sp, cx + 14, cy - 14, .7); }
+      ctx.globalAlpha = 1;
     }
   }
 
-  /** Dönen altın (klan maçası amblemli) */
+  /** Dönen altın (klan maçası amblemli): koyu kalın kenar + parlak doygun altın + net amblem (telefonda okunsun) */
   function coinSpr(edge) {
-    return spr(edge ? 'coinE' : 'coin', 30, 30, 15, 15, g => {
+    return spr(edge ? 'coinE2' : 'coin2', 32, 32, 16, 16, g => {
       if (edge) {
-        g.fillStyle = '#5a3204'; g.beginPath(); g.arc(0, 0, 12.2, 0, TAU); g.fill();
-        g.fillStyle = '#c4801a'; g.beginPath(); g.arc(0, 0, 10.8, 0, TAU); g.fill();
+        g.fillStyle = '#3e2002'; g.beginPath(); g.arc(0, 0, 13.2, 0, TAU); g.fill();
+        g.fillStyle = '#d08a1a'; g.beginPath(); g.arc(0, 0, 11.2, 0, TAU); g.fill();
+        g.fillStyle = '#ffd650'; g.beginPath(); g.arc(0, 0, 11.2, PI * 1.15, PI * 1.85); g.lineTo(0, 0); g.closePath(); g.fill();
         return;
       }
-      g.fillStyle = '#5a3204'; g.beginPath(); g.arc(0, 0, 12.2, 0, TAU); g.fill();
-      g.fillStyle = RG(g, -4, -5, 1, 0, 0, 11, [[0, '#fffbd0'], [.35, '#ffe14d'], [.8, '#f0a818'], [1, '#c4801a']]); g.beginPath(); g.arc(0, 0, 10.8, 0, TAU); g.fill();
-      g.strokeStyle = 'rgba(160,96,10,0.9)'; g.lineWidth = 1.6; g.beginPath(); g.arc(0, 0, 7.8, 0, TAU); g.stroke();
-      g.strokeStyle = 'rgba(255,255,220,0.8)'; g.lineWidth = 1.2; g.beginPath(); g.arc(0, 0, 8.8, 3.4, 4.9); g.stroke();
-      const sp = new Path2D(); spadePath(sp, .6, 1.1, 4.6); g.fillStyle = 'rgba(255,250,200,0.7)'; g.fill(sp);
-      const sp2 = new Path2D(); spadePath(sp2, 0, .5, 4.6); g.fillStyle = '#c47a10'; g.fill(sp2);
-      g.fillStyle = 'rgba(255,255,255,0.75)'; g.beginPath(); g.ellipse(-4.5, -5, 3, 1.6, -.7, 0, TAU); g.fill();
+      g.fillStyle = '#3e2002'; g.beginPath(); g.arc(0, 0, 13.2, 0, TAU); g.fill();
+      g.fillStyle = RG(g, -4, -5, 1, 0, 0, 12, [[0, '#fffbd8'], [.3, '#ffe655'], [.78, '#f5ac18'], [1, '#c87a10']]); g.beginPath(); g.arc(0, 0, 11.4, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(150,84,6,0.95)'; g.lineWidth = 1.8; g.beginPath(); g.arc(0, 0, 8.3, 0, TAU); g.stroke();
+      g.strokeStyle = 'rgba(255,255,225,0.9)'; g.lineWidth = 1.4; g.beginPath(); g.arc(0, 0, 9.4, 3.4, 4.9); g.stroke();
+      const sp = new Path2D(); spadePath(sp, .6, 1.1, 4.9); g.fillStyle = 'rgba(255,250,200,0.75)'; g.fill(sp);
+      const sp2 = new Path2D(); spadePath(sp2, 0, .5, 4.9); g.fillStyle = '#b86a08'; g.fill(sp2);
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.beginPath(); g.ellipse(-4.8, -5.4, 3.2, 1.7, -.7, 0, TAU); g.fill();
     });
   }
   function drawCoins(ctx, L, vx0, vx1, vy0, vy1) {
     const face = coinSpr(false), edge = coinSpr(true);
     const bit = S.player ? 1 << S.player.idx : 1;
-    const gl = G.glowSprite('rgba(255,215,80,0.55)', 16);
+    const gl = G.glowSprite('rgba(255,215,80,0.7)', 18);
     for (const co of L.coins) {
       if (co.got & bit) continue;
       if (co.x < vx0 - 20 || co.x > vx1 + 20 || co.y < vy0 - 20 || co.y > vy1 + 20) continue;
@@ -2695,10 +2732,10 @@
       const sx = Math.max(.12, Math.abs(c));
       // düşen altın (Altın Avı): ömrünün son 3 sn'sinde yanıp söner, değeri ≥3 ise iri
       const dA = co.drop && co.t < 3 ? .3 + .7 * Math.abs(Math.cos(tk * (5 + (3 - co.t) * 3))) : 1, dS = co.drop && co.v >= 3 ? 1.3 : 1;
-      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .5 * dA; drawS(ctx, gl, co.x, y, dS); ctx.restore();
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .55 * dA; drawS(ctx, gl, co.x, y, dS * 1.15); ctx.restore();
       ctx.save(); ctx.translate(co.x, y); if (dS !== 1) ctx.scale(dS, dS); ctx.globalAlpha = dA;
-      ctx.save(); ctx.translate((1 - sx) * 2.6 * (c >= 0 ? 1 : -1), 0); ctx.scale(sx, 1); ctx.drawImage(edge.c, -15, -15, 30, 30); ctx.restore();
-      ctx.scale(sx, 1); ctx.drawImage(face.c, -15, -15, 30, 30);
+      ctx.save(); ctx.translate((1 - sx) * 2.8 * (c >= 0 ? 1 : -1), 0); ctx.scale(sx, 1); ctx.drawImage(edge.c, -16, -16, 32, 32); ctx.restore();
+      ctx.scale(sx, 1); ctx.drawImage(face.c, -16, -16, 32, 32);
       ctx.restore();
       const ph = (tk * .8 + hash(co.x | 0) * 3) % 2.4;
       if (ph < .35) { ctx.globalAlpha = Math.sin(ph / .35 * PI); drawS(ctx, sparkleSpr(), co.x + 6, y - 7, .5); ctx.globalAlpha = 1; }
@@ -5301,7 +5338,7 @@
       ctx.beginPath(); rrp(ctx, -2, -4.5, s.w + 4, 10, 4.5);
       ctx.fillStyle = cg(ctx, 'ice:plate', g => LG(g, 0, -5, 0, 6, [[0, 'rgba(255,255,255,0.97)'], [.35, 'rgba(206,242,255,0.95)'], [1, 'rgba(120,196,240,0.92)']]));
       ctx.fill();
-      ctx.lineWidth = 1.6; ctx.strokeStyle = '#3a6fa8'; ctx.stroke();
+      ctx.lineJoin = 'round'; ctx.lineWidth = 2.8; ctx.strokeStyle = '#27579a'; ctx.stroke();
       ctx.save(); ctx.clip();
       ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
       ctx.beginPath();
@@ -5410,6 +5447,24 @@
       ctx.fillStyle = 'rgba(70,35,8,0.18)'; ctx.fillRect(b.x0, b.y - 2.2, b.x1 - b.x0, 2.2);
       if (b.st === 0) continue;
       const r = b.r;
+      // TEHLİKE İPUCU: uyarıda (st 1) ve yuvarlanırken kayanın önündeki yol kırmızıya döner, sola akan oklar "kaya geliyor" der
+      {
+        const wa = b.st === 1 ? .25 + .75 * b.k : Math.max(0, 1 - b.k * 1.1);
+        if (wa > .02) {
+          const xa = Math.max(b.x0, vx0 - 20), xb = Math.min(b.st === 2 ? b.bx - r : b.x1, vx1 + 20);
+          if (xb > xa) {
+            const pulse = .6 + .4 * Math.sin(tk * 8);
+            ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.globalAlpha = wa * (.25 + .2 * pulse); ctx.fillStyle = '#ff2a2a'; ctx.fillRect(xa, b.y - 4, xb - xa, 4);
+            const off = (tk * 110) % 56;
+            ctx.beginPath();
+            for (let x = b.x1 - off; x > xa - 10; x -= 56) { if (x > xb + 10) continue; ctx.moveTo(x + 6, b.y - 16); ctx.lineTo(x, b.y - 10); ctx.lineTo(x + 6, b.y - 4); }
+            ctx.globalAlpha = wa * .6; ctx.strokeStyle = '#3a0a00'; ctx.lineWidth = 6.2; ctx.stroke();
+            ctx.globalAlpha = wa * (.6 + .4 * pulse); ctx.strokeStyle = '#ff9a3a'; ctx.lineWidth = 3.2; ctx.stroke();
+            ctx.restore();
+          }
+        }
+      }
       if (b.st === 1) {
         ctx.save(); ctx.beginPath(); ctx.rect(b.x1 - 9, b.y - 70, 78, 72); ctx.clip();
         ctx.translate(b.bx, b.by); ctx.rotate(-(b.rot || 0)); ctx.drawImage(bs.c, -36 * r / 30, -36 * r / 30, 72 * r / 30, 72 * r / 30);
@@ -5529,6 +5584,18 @@
             const q = (tk * 2.4 + k * .2) % 1, x = cx + (hash(k * 7 + (v.x | 0)) - .5) * 20, y = v.y - 16 - q * 30 * v.k;
             E(ctx, x, y, (5 + q * 10) * v.k, (4 + q * 8) * v.k, rgba('#ffffff', .55 * (1 - q) * v.k));
           }
+          // İPUCU: ağızdan genişleyen turkuaz halkalar + yukarı ok ("fışkıracak, fırlatır")
+          ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          for (let k = 0; k < 2; k++) {
+            const q = (tk * 1.8 + k * .5) % 1;
+            ctx.globalAlpha = (1 - q) * .85 * v.k; ctx.lineWidth = 2.6 - q; ctx.strokeStyle = '#8af4ff';
+            ctx.beginPath(); ctx.ellipse(cx, v.y - 14, 10 + q * 34, 3 + q * 9, 0, 0, TAU); ctx.stroke();
+          }
+          const ay = v.y - 44 - Math.sin(tk * 7) * 3;
+          ctx.beginPath(); ctx.moveTo(cx - 9, ay + 7); ctx.lineTo(cx, ay); ctx.lineTo(cx + 9, ay + 7);
+          ctx.globalAlpha = v.k * .6; ctx.strokeStyle = '#0a2a3a'; ctx.lineWidth = 6.4; ctx.stroke();
+          ctx.globalAlpha = v.k * (.6 + .4 * Math.sin(tk * 7)); ctx.strokeStyle = '#d8fbff'; ctx.lineWidth = 3.2; ctx.stroke();
+          ctx.restore();
         } else {
           const q = (tk * .8 + hash(v.x | 0)) % 1;
           E(ctx, cx + Math.sin(tk) * 4, v.y - 18 - q * 22, 5 + q * 8, 4 + q * 6, rgba('#ffffff', .3 * (1 - q)));
@@ -5627,14 +5694,15 @@
       // mat
       ctx.beginPath(); ctx.moveTo(x0 + 4, top + 2); ctx.quadraticCurveTo(cx, top + 2 + dip * 2, x1 - 4, top + 2);
       ctx.lineWidth = 5; ctx.strokeStyle = '#141420'; ctx.stroke(); ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(160,170,255,0.5)'; ctx.stroke();
-      // kenar pedi (kırmızı-sarı)
+      // kenar pedi (turkuaz-sarı: dost nesne dili, kırmızı yok)
       for (let i = 0; i < 2; i++) {
         const px = i ? x1 - 10 : x0 - 2;
-        ctx.fillStyle = OLN; ctx.beginPath(); rrp(ctx, px - 1.5, top - 4.5, 15, 9, 3.5); ctx.fill();
-        ctx.fillStyle = i ? '#ffd23f' : '#ff3a5a'; ctx.beginPath(); rrp(ctx, px, top - 3, 12, 6, 2.5); ctx.fill();
+        ctx.fillStyle = OLN; ctx.beginPath(); rrp(ctx, px - 2, top - 5, 16, 10, 3.5); ctx.fill();
+        ctx.fillStyle = i ? '#ffd23f' : '#3fe0ff'; ctx.beginPath(); rrp(ctx, px, top - 3, 12, 6, 2.5); ctx.fill();
       }
-      ctx.fillStyle = OLN; ctx.fillRect(x0 + 10, top - 2.5, t.w - 20, 5);
-      ctx.fillStyle = '#3a6aff'; ctx.fillRect(x0 + 10, top - 1.5, t.w - 20, 3);
+      ctx.fillStyle = OLN; ctx.fillRect(x0 + 10, top - 3, t.w - 20, 6);
+      ctx.fillStyle = '#4a86ff'; ctx.fillRect(x0 + 10, top - 1.5, t.w - 20, 3);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(x0 + 12, top - 1.5, t.w - 24, 1);
       // yukarı ok
       const a = .45 + .4 * Math.sin(tk * 6 + t.x);
       ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = '#fff0a0'; ctx.lineWidth = 3.4;

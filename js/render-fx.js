@@ -2536,6 +2536,8 @@
     // her zaman hafif vinyet (+ kar/kale tema tonu aynı tuvalde pişmiş: tek tam ekran geçiş)
     ctx.globalAlpha = 1;
     ctx.drawImage(themeVignette(tid), 0, 0, VW, VH);
+    // vurulma yönü yayı (oyuncunun etrafında)
+    if (inRace && hits.length) drawHitDirs(ctx);
     // renkli tam ekran flaş
     const fl = S.flash;
     if (fl && fl.a > .003) {
@@ -2935,6 +2937,403 @@
   FM.on('race:start', () => { swirls.length = 0; ghosts.length = 0; scorches.length = 0; coinL = null; });
 
   /* =====================================================================
+     5. TUR — YÖNLÜ ATIŞ ÖNİZLEMESİ (FM.S.aim), GÜÇ HAZIR HALKASI, VURULMA YÖNÜ,
+     RÜZGÂR ARKASI ÇİZGİLERİ, "KUSURSUZ!" / "KIL PAYI!"
+     Sözleşme (docs/TUR5.md §2.4, §3, §9, §11):
+       FM.S.aim = { kind: 'item'|'ab', key, shape: 'arc'|'line'|'cone'|'target'|'none', pts: [[x,y],…] (dünya),
+                    cone: {x, y, ang, spread, len} | null, tgt: yarışçı | null, ok: bool }
+       FM.R.drawAim(ctx) — main.js drawWorldFront'tan SONRA, dünya dönüşümündeyken çağırır.
+       charge:full {r} · hit/death/blocked (vurulma yönü) · r.draft (0..1) · perfect {r} · nearmiss {r, cause}
+     ===================================================================== */
+  const localP = () => { const p = S.player; return p && !p.ghost && S.mode !== 'demo' ? p : null; };
+
+  /* ---------- nişan renkleri: eşya rengi / karakter rengi; ok=false → kırmızı ---------- */
+  const AIM_RED = '#ff3b4e';
+  function aimCols(aim) {
+    let base;
+    if (aim.ok === false) base = AIM_RED;
+    else if (aim.kind === 'ab') { const ch = FM.CH[aim.key]; base = ch ? (C(ch.col2).lum < .2 ? (ch.acc || ch.col) : ch.col2) : '#ffd23f'; }
+    else { const it = FM.ITEMS[aim.key]; base = it && it.col ? it.col : '#ffffff'; }
+    const o = C(base);
+    const hex = o.lum < .3 ? mix(o.hex, '#ffffff', .45) : o.hex;          // koyu eşya (mürekkep) okunsun
+    return { base: hex, core: mix(hex, '#ffffff', .55), dark: mix(hex, INK, .78) };
+  }
+  /* karakter gücü rozeti (nişan + güç hazır): karakter renkli daire içinde portre */
+  function abBadgeSprite(id) {
+    const ch = FM.CH[id] || { col: '#ffd23f', col2: '#5b2a86', acc: '#ffd23f' };
+    return sp('aimbadge:' + id, 60, 60, 30, 30, g => {
+      const c2 = C(ch.col2 || '#5b2a86').hex, c1 = C(ch.col || '#ffd23f').hex;
+      g.beginPath(); g.arc(0, 0, 24, 0, TAU);
+      g.lineWidth = 5; g.strokeStyle = INK; g.stroke();
+      const gr = g.createRadialGradient(-6, -8, 2, 0, 0, 24);
+      gr.addColorStop(0, mix(c2, '#ffffff', .45)); gr.addColorStop(.7, c2); gr.addColorStop(1, mix(c2, INK, .4));
+      g.fillStyle = gr; g.fill();
+      g.lineWidth = 3; g.strokeStyle = c1; g.beginPath(); g.arc(0, 0, 21.2, 0, TAU); g.stroke();
+      let ok = false;
+      if (typeof R.portrait === 'function') {
+        try {
+          const pc = R.portrait(id, 48, { ring: false });
+          if (pc && pc.width > 0) { g.save(); g.beginPath(); g.arc(0, 0, 19.6, 0, TAU); g.clip(); g.drawImage(pc, -23, -21, 46, 46); g.restore(); ok = true; }
+        } catch (e) { ok = false; }
+      }
+      if (!ok) {   // yıldırım işareti
+        g.beginPath(); g.moveTo(3, -14); g.lineTo(-7, 2); g.lineTo(0, 2); g.lineTo(-3, 14); g.lineTo(8, -3); g.lineTo(1, -3); g.closePath();
+        g.lineWidth = 3; g.strokeStyle = INK; g.stroke(); g.fillStyle = '#ffe14d'; g.fill();
+      }
+      g.fillStyle = 'rgba(255,255,255,.26)'; g.beginPath(); g.ellipse(-6, -11, 10, 4.5, -.5, 0, TAU); g.fill();
+    });
+  }
+  /* renkli nişangâh (hedef şekli) */
+  function aimRetSprite(hex) {
+    const core = mix(hex, '#ffffff', .4);
+    return sp('aimret:' + hex, 96, 96, 48, 48, g => {
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      for (let i = 0; i < 4; i++) {
+        const a0 = i * PI / 2 + .3, a1 = (i + 1) * PI / 2 - .3;
+        g.beginPath(); g.arc(0, 0, 34, a0, a1);
+        g.lineWidth = 7.5; g.strokeStyle = rgba(INK, .85); g.stroke();
+        g.lineWidth = 3.8; g.strokeStyle = hex; g.stroke();
+        g.lineWidth = 1.3; g.strokeStyle = core; g.beginPath(); g.arc(0, 0, 34.8, a0 + .08, a1 - .08); g.stroke();
+      }
+      for (let i = 0; i < 4; i++) {   // içe bakan üçgenler
+        const a = i * PI / 2, c = Math.cos(a), s = Math.sin(a);
+        g.beginPath(); g.moveTo(c * 25, s * 25); g.lineTo(c * 42 - s * 6, s * 42 + c * 6); g.lineTo(c * 42 + s * 6, s * 42 - c * 6); g.closePath();
+        g.lineWidth = 3.4; g.strokeStyle = rgba(INK, .9); g.stroke(); g.fillStyle = core; g.fill();
+      }
+      for (let i = 0; i < 4; i++) {   // merkez artı (boşluklu)
+        const a = i * PI / 2, c = Math.cos(a), s = Math.sin(a);
+        g.beginPath(); g.moveTo(c * 5, s * 5); g.lineTo(c * 13, s * 13);
+        g.lineWidth = 4.4; g.strokeStyle = rgba(INK, .85); g.stroke(); g.lineWidth = 2.2; g.strokeStyle = '#ffffff'; g.stroke();
+      }
+    });
+  }
+  /* "×" kullanılamaz rozeti */
+  function aimNoSprite() {
+    return sp('aimno', 32, 32, 16, 16, g => {
+      g.beginPath(); g.arc(0, 0, 11.5, 0, TAU); g.lineWidth = 4; g.strokeStyle = INK; g.stroke(); g.fillStyle = AIM_RED; g.fill();
+      g.lineCap = 'round'; g.lineWidth = 3.4; g.strokeStyle = '#ffffff';
+      g.beginPath(); g.moveTo(-5, -5); g.lineTo(5, 5); g.moveTo(5, -5); g.lineTo(-5, 5); g.stroke();
+    });
+  }
+  function aimPath(ctx, pts) {
+    ctx.beginPath(); ctx.moveTo(+pts[0][0], +pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(+pts[i][0], +pts[i][1]);
+  }
+  /* yay: koyu taban + akan kesikli parlak çizgi + yol boyunca kayan noktalar + iniş halkası */
+  function drawAimArc(ctx, pts, col, ok) {
+    aimPath(ctx, pts);
+    ctx.lineWidth = 8; ctx.strokeStyle = rgba(col.dark, .6); ctx.stroke();
+    ctx.setLineDash([12, 10]); ctx.lineDashOffset = -((FXT * 95) % 22);
+    ctx.lineWidth = 4; ctx.strokeStyle = col.base; ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = col.core; ctx.stroke();
+    ctx.setLineDash([]);
+    // kayan noktalar (yol uzunluğuna göre eşit aralıklı)
+    const STEP = 38, ph = (FXT * 120) % STEP;
+    let acc = 0, next = ph, n = 0;
+    for (let i = 1; i < pts.length && n < 24; i++) {
+      const ax = +pts[i - 1][0], ay = +pts[i - 1][1], bx = +pts[i][0], by = +pts[i][1];
+      const seg = Math.hypot(bx - ax, by - ay);
+      while (next <= acc + seg && seg > 0 && n < 24) {
+        const u = (next - acc) / seg;
+        spr(ctx, dotSprite(col.core), lerp(ax, bx, u), lerp(ay, by, u), 0, .36);
+        next += STEP; n++;
+      }
+      acc += seg;
+    }
+    resetXf(ctx);
+    // iniş / çarpma noktası
+    const e = pts[pts.length - 1], p2 = pts[pts.length - 2];
+    const ex = +e[0], ey = +e[1], dy = ey - +p2[1], dx = ex - +p2[0];
+    const pulse = .5 + .5 * Math.sin(FXT * 7);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .35 + .25 * pulse;
+    spr(ctx, glowSprite(col.base), ex, ey, 0, 1.3); resetXf(ctx);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = ok ? 1 : .8;
+    const ground = dy > Math.abs(dx) * .4;          // aşağı iniyor → zemin halkası (elips), yoksa çarpma halkası (daire)
+    const rr = 15 + pulse * 4;
+    ctx.beginPath();
+    if (ground) ctx.ellipse(ex, ey + 4, rr * 1.25, rr * .45, 0, 0, TAU); else ctx.arc(ex, ey, rr * .9, 0, TAU);
+    ctx.lineWidth = 7; ctx.strokeStyle = rgba(col.dark, .65); ctx.stroke();
+    ctx.lineWidth = 3.4; ctx.strokeStyle = col.base; ctx.stroke();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = col.core; ctx.stroke();
+    // merkez işareti
+    ctx.beginPath(); ctx.arc(ex, ey + (ground ? 4 : 0), 3.2, 0, TAU);
+    ctx.lineWidth = 3; ctx.strokeStyle = rgba(INK, .8); ctx.stroke(); ctx.fillStyle = '#ffffff'; ctx.fill();
+  }
+  /* çizgi: kalın ok + yön boyunca kayan köşeli parantezler */
+  function drawAimLine(ctx, pts, col, ok) {
+    const a = pts[0], b = pts[pts.length - 1];
+    const ax = +a[0], ay = +a[1], bx = +b[0], by = +b[1];
+    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
+    if (!(len > 6)) return;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    const hx = bx - ux * 18, hy = by - uy * 18;
+    // gövde (duvardan sekme gibi kırılmaları da izler)
+    aimPath(ctx, pts.length > 2 ? pts : [[ax, ay], [hx, hy]]);
+    ctx.lineWidth = 12; ctx.strokeStyle = rgba(col.dark, .6); ctx.stroke();
+    ctx.lineWidth = 6.5; ctx.strokeStyle = col.base; ctx.stroke();
+    ctx.lineWidth = 2.2; ctx.strokeStyle = col.core; ctx.stroke();
+    // ok başı
+    ctx.beginPath(); ctx.moveTo(bx + ux * 4, by + uy * 4); ctx.lineTo(hx - ux * 3 + px * 13, hy - uy * 3 + py * 13); ctx.lineTo(hx + ux * 2, hy + uy * 2); ctx.lineTo(hx - ux * 3 - px * 13, hy - uy * 3 - py * 13); ctx.closePath();
+    ctx.lineWidth = 5; ctx.strokeStyle = rgba(col.dark, .8); ctx.stroke();
+    ctx.fillStyle = col.base; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bx - ux * 2, by - uy * 2); ctx.lineTo(hx + px * 6, hy + py * 6); ctx.lineTo(hx - px * 6, hy - py * 6); ctx.closePath();
+    ctx.fillStyle = col.core; ctx.fill();
+    // kayan ">" işaretleri
+    const run = Math.max(10, len - 30);
+    for (let i = 0; i < 3; i++) {
+      const d = (FXT * 150 + i * run / 3) % run, k = d / run;
+      const cx = ax + ux * (d + 8), cy = ay + uy * (d + 8);
+      ctx.globalAlpha = (ok ? 1 : .8) * Math.sin(k * PI);
+      ctx.beginPath(); ctx.moveTo(cx - ux * 6 + px * 7, cy - uy * 6 + py * 7); ctx.lineTo(cx + ux * 2, cy + uy * 2); ctx.lineTo(cx - ux * 6 - px * 7, cy - uy * 6 - py * 7);
+      ctx.lineWidth = 5; ctx.strokeStyle = rgba(col.dark, .7); ctx.stroke();
+      ctx.lineWidth = 2.4; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    }
+    ctx.globalAlpha = ok ? 1 : .8;
+  }
+  /* koni: yarı saydam dilim + kenar çizgileri + dışa yayılan dalgalar */
+  function drawAimCone(ctx, c, col, ok) {
+    const x = num(c.x, 0), y = num(c.y, 0), ang = num(c.ang, 0), half = Math.max(.04, num(c.spread, .6)) / 2, len = Math.max(12, num(c.len, 200));
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, len, ang - half, ang + half); ctx.closePath();
+    ctx.fillStyle = rgba(col.base, .17); ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = rgba(col.dark, .55); ctx.stroke();
+    ctx.lineWidth = 2.6; ctx.strokeStyle = col.core; ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      const rr = (FXT * 170 + i * len / 3) % len, k = rr / len;
+      const a = (ok ? 1 : .8) * Math.min(1, k * 5) * (1 - k) * .9;
+      if (rr < 6) continue;
+      ctx.globalAlpha = a;
+      ctx.beginPath(); ctx.arc(x, y, rr, ang - half, ang + half);
+      ctx.lineWidth = 5.5; ctx.strokeStyle = rgba(col.dark, .55); ctx.stroke();
+      ctx.lineWidth = 2.6; ctx.strokeStyle = col.base; ctx.stroke();
+    }
+    ctx.globalAlpha = ok ? 1 : .8;
+  }
+  /* hedef: elden hedefe kesikli bağ + renkli nişangâh */
+  function drawAimTarget(ctx, lx, ly, t, col, ok) {
+    const tx = num(t.x, 0) + num(t.w, 28) / 2, ty = num(t.y, 0) + num(t.h, 42) / 2;
+    ctx.setLineDash([8, 10]); ctx.lineDashOffset = -((FXT * 80) % 18);
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(tx, ty);
+    ctx.lineWidth = 5; ctx.strokeStyle = rgba(col.dark, .45); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = col.core; ctx.stroke();
+    ctx.setLineDash([]);
+    const sc = 1 + .06 * Math.sin(FXT * 8);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3;
+    spr(ctx, glowSprite(col.base), tx, ty, 0, 1.4);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = ok ? 1 : .8;
+    spr(ctx, aimRetSprite(col.base), tx, ty, FXT * 1.3, sc);
+    resetXf(ctx);
+  }
+  /* eldeki eşya ikonu / güç rozeti (ön elde, hafif salınır, arkasında ışık) */
+  function drawAimBadge(ctx, aim, bx, by, col, ok) {
+    const pulse = .5 + .5 * Math.sin(FXT * 6);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .45 + .25 * pulse;
+    spr(ctx, glowSprite(col.base), bx, by, 0, 1.15);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = ok ? 1 : .78;
+    if (aim.kind === 'ab') spr(ctx, abBadgeSprite(aim.key), bx, by, 0, .66);
+    else if (typeof R.itemIcon === 'function') {
+      let c = null;
+      try { c = R.itemIcon(aim.key, clamp(Math.ceil(36 * (V.S || 1) / 8) * 8, 24, 192)); } catch (e) { c = null; }
+      if (c) { setXf(ctx, bx, by, Math.sin(FXT * 4) * .08, 1, 1); ctx.drawImage(c, -17, -17, 34, 34); }
+    }
+    resetXf(ctx);
+  }
+  R.drawAim = function (ctx) {
+    const aim = S.aim;
+    if (!aim || !S.L || !ctx) return;
+    const P = localP(); if (!P || P.dead > 0 || P.out) return;
+    const shape = aim.shape || 'none';
+    const pts = Array.isArray(aim.pts) ? aim.pts.filter(p => p && isFinite(+p[0]) && isFinite(+p[1])) : null;
+    const ok = aim.ok !== false;
+    const col = aimCols(aim);
+    const face = P.face === -1 ? -1 : 1;
+    const bx = rcx(P) + face * 17, by = num(P.y, 0) + num(P.h, 42) * .42 + Math.sin(FXT * 5) * 1.5;   // ön el
+    ctx.save();
+    grabXf(ctx, true);
+    try {
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.globalAlpha = ok ? 1 : .8;
+      if ((shape === 'arc' || shape === 'line') && pts && pts.length >= 2) { if (shape === 'arc') drawAimArc(ctx, pts, col, ok); else drawAimLine(ctx, pts, col, ok); }
+      else if (shape === 'cone' && aim.cone) drawAimCone(ctx, aim.cone, col, ok);
+      else if (shape === 'target' && aim.tgt && isFinite(+aim.tgt.x)) drawAimTarget(ctx, bx, by, aim.tgt, col, ok);
+      drawAimBadge(ctx, aim, bx, by, col, ok);
+      if (!ok) { spr(ctx, aimNoSprite(), bx + 15, by - 15, Math.sin(FXT * 9) * .12, 1); resetXf(ctx); }
+    } catch (e) {
+      if (!R.drawAim.errs) R.drawAim.errs = 0;
+      if (R.drawAim.errs++ < 5) console.error('[drawAim]', e);
+    } finally {
+      resetXf(ctx);
+      ctx.restore();
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    }
+  };
+
+  /* ---------- güç hazır: yerel oyuncunun etrafında nabız atan halka + yükselen kıvılcımlar ---------- */
+  const pow = { on: false, t: -9, acc: 0 };
+  function powCol(p) {
+    const ch = FM.CH[p.id] || {};
+    const c2 = ch.col2 || '#ffd23f';
+    return C(c2).lum < .2 ? (ch.acc || '#ffd23f') : c2;
+  }
+  function powReady(p) {
+    return !!p && num(p.charge, 0) >= 100 && !(p.dead > 0) && !p.finished && !p.out && (S.mode === 'race' || S.mode === 'count');
+  }
+  function powBurst(p) {
+    const x = rcx(p), y = rcy(p), col = powCol(p);
+    if (FM.fx && FM.fx.ring) { FM.fx.ring(x, y, 72, col, .5, 7); FM.fx.ring(x, y, 42, '#fff6c0', .35, 4); }
+    P({ k: 'glow', x, y, vx: 0, vy: 0, life: .35, c: '#ffe9a0', s: 96, add: true });
+    for (let i = 0; i < 12; i++) {
+      const a = rnd() * TAU, v = 120 + rnd() * 180;
+      P({ k: 'star', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: .5 + rnd() * .3, c: i % 2 ? col : '#fff6c0', s: 3.6, g: 260, drag: 1.4, rot: a, vr: (rnd() - .5) * 8 });
+    }
+  }
+  function updPower(dt) {
+    const p = localP(), on = powReady(p);
+    if (on && !pow.on && FXT - pow.t > .5) { pow.t = FXT; if (inView(rcx(p), rcy(p), 120)) powBurst(p); }
+    pow.on = on;
+    if (!on || !budget() || !inView(rcx(p), rcy(p), 100)) { pow.acc = 0; return; }
+    pow.acc += dt * 8;
+    const col = powCol(p);
+    let n = 0;
+    while (pow.acc >= 1 && n++ < 3) {
+      pow.acc -= 1;
+      P({ k: 'spark', x: rcx(p) + (rnd() - .5) * 34, y: num(p.y, 0) + num(p.h, 42) - rnd() * 8, vx: (rnd() - .5) * 24, vy: -(50 + rnd() * 70), life: .4 + rnd() * .3, c: rnd() < .5 ? '#fff6c0' : col, s: 1.8, g: -60, add: true });
+    }
+  }
+  FM.on('charge:full', d => {
+    const p = localP();
+    if (!d || !p || d.r !== p) return;
+    if (FXT - pow.t > .5) { pow.t = FXT; pow.on = powReady(p); if (inView(rcx(p), rcy(p), 120)) powBurst(p); }
+  });
+  /* ayak halkası (yarışçının altında) */
+  function drawPowerAura(ctx) {
+    const p = localP();
+    if (!pow.on || !p) return;
+    const x = rcx(p), fy = num(p.y, 0) + num(p.h, 42);
+    if (!inView(x, fy, 90)) return;
+    const col = powCol(p), pulse = .5 + .5 * Math.sin(FXT * 6);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3 + .25 * pulse;
+    spr(ctx, glowSprite(col), x, fy - 2, 0, 1.7, .6); resetXf(ctx);
+    ctx.globalCompositeOperation = 'source-over';
+    const rx = 23 + pulse * 3, ry = rx * .36;
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = .95;
+    ctx.beginPath(); ctx.ellipse(x, fy - 1, rx, ry, 0, 0, TAU);
+    ctx.lineWidth = 6; ctx.strokeStyle = rgba(INK, .5); ctx.stroke();
+    ctx.setLineDash([9, 7]); ctx.lineDashOffset = -FXT * 45;
+    ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = '#fff6c0'; ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+  /* gövde etrafında dönen parıltılar (yarışçının önünde) */
+  function drawPowerSparks(ctx) {
+    const p = localP();
+    if (!pow.on || !p) return;
+    const x = rcx(p), y = rcy(p);
+    if (!inView(x, y, 90)) return;
+    const col = powCol(p);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+      const a = FXT * 2.6 + i * TAU / 3, s = .5 + .5 * Math.sin(FXT * 7 + i * 2.1);
+      const sx = x + Math.cos(a) * 27, sy = y - 6 + Math.sin(a) * 13;
+      ctx.globalAlpha = .5 + .45 * s;
+      spr(ctx, twinkleSprite(i ? '#fff6c0' : col), sx, sy, FXT * 2 + i, .34 + .22 * s);
+    }
+    resetXf(ctx);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  }
+
+  /* ---------- vurulma yönü: oyuncunun etrafında, saldırının geldiği yöne bakan kırmızı yay (ekran katmanı) ---------- */
+  const hits = [];
+  function hitDir(victim, src, ent, strong, col) {
+    const p = localP();
+    if (!p || victim !== p || S.mode !== 'race') return;
+    let sx = null, sy = null;
+    if (ent && isFinite(+ent.x) && isFinite(+ent.y)) { sx = +ent.x; sy = +ent.y; }
+    else if (src && src !== p && isFinite(+src.x)) { sx = rcx(src); sy = rcy(src); }
+    if (sx === null) return;
+    const dx = sx - rcx(p), dy = sy - rcy(p);
+    if (Math.hypot(dx, dy) < 10) return;
+    hits.push({ ang: Math.atan2(dy, dx), t: 0, max: strong ? 1.1 : .8, col: col || AIM_RED, strong: !!strong });
+    if (hits.length > 4) hits.shift();
+  }
+  FM.on('hit', d => { if (d) hitDir(d.victim, d.src, d.ent, false, null); });
+  FM.on('death', d => { if (d && !d.self) hitDir(d.r, d.src, d.ent, true, null); });
+  FM.on('blocked', d => { if (d) hitDir(d.r, d.src, d.ent, false, d.by === 'balloon' ? '#ff5a7a' : '#5ad1ff'); });
+  function updHits(dt) { for (let i = hits.length - 1; i >= 0; i--) { hits[i].t += dt; if (hits[i].t >= hits[i].max) hits.splice(i, 1); } }
+  function drawHitDirs(ctx) {
+    if (!hits.length) return;
+    const p = localP();
+    if (!p) { hits.length = 0; return; }
+    const px = rcx(p) - S.cam.x, py = rcy(p) - S.cam.y;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const h of hits) {
+      const k = clamp(h.t / h.max, 0, 1), a = k < .1 ? k / .1 : 1 - (k - .1) / .9;
+      const r0 = (h.strong ? 66 : 54) + k * 26, half = h.strong ? .8 : .58;
+      const light = mix(h.col, '#ffffff', .6);
+      ctx.globalAlpha = a * .95;
+      ctx.beginPath(); ctx.arc(px, py, r0, h.ang - half, h.ang + half);
+      ctx.lineWidth = 14; ctx.strokeStyle = rgba(INK, .5); ctx.stroke();
+      ctx.lineWidth = 8; ctx.strokeStyle = h.col; ctx.stroke();
+      ctx.lineWidth = 2.4; ctx.strokeStyle = light; ctx.stroke();
+      // kaynağa bakan ok ucu
+      const ca = Math.cos(h.ang), sa = Math.sin(h.ang), ox = px + ca * (r0 + 12), oy = py + sa * (r0 + 12);
+      ctx.beginPath(); ctx.moveTo(ox + ca * 9, oy + sa * 9); ctx.lineTo(ox - ca * 3 - sa * 8, oy - sa * 3 + ca * 8); ctx.lineTo(ox - ca * 3 + sa * 8, oy - sa * 3 - ca * 8); ctx.closePath();
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(INK, .85); ctx.stroke(); ctx.fillStyle = light; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- rüzgâr arkası (draft): bir rakibin hemen arkasında koşarken önde ince hava çizgileri ---------- */
+  function drawDraft(ctx) {
+    const rs = S.racers;
+    if (!rs || !rs.length) return;
+    ctx.lineCap = 'round';
+    for (const r of rs) {
+      if (!r) continue;
+      const d = num(r.draft, 0);
+      if (!(d > 0) || r.dead > 0 || r.off) continue;
+      const face = r.face === -1 ? -1 : 1, cx = rcx(r), w = num(r.w, 28), h = num(r.h, 42), y0 = num(r.y, 0);
+      if (!inView(cx, y0, 120)) continue;
+      const a = clamp(d, 0, 1);
+      for (let i = 0; i < 4; i++) {
+        const ph = (FXT * 2.2 + i * .27) % 1;                       // 0 uzak → 1 yakın
+        const len = 10 + 16 * a, y = y0 + 5 + i * (h - 10) / 3 + Math.sin(FXT * 9 + i * 1.3) * 1.2;
+        const x0 = cx + face * (w / 2 + 8 + (1 - ph) * 34);
+        ctx.globalAlpha = a * .85 * Math.sin(ph * PI);
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + face * len, y);
+        ctx.lineWidth = 4; ctx.strokeStyle = rgba(INK, .35); ctx.stroke();
+        ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- "KUSURSUZ!" (zamanında iniş/zıplama) ve "KIL PAYI!" (tehlikeyi sıyırma) ---------- */
+  FM.on('perfect', d => {
+    const r = d && d.r;
+    if (!r || !isFinite(+r.x) || S.mode === 'demo') return;
+    const x = rcx(r), fy = num(r.y, 0) + num(r.h, 42);
+    if (!inView(x, fy, 120) || !budget()) return;
+    for (let i = 0; i < 8; i++) {
+      const a = -PI / 2 + (rnd() - .5) * 2.4, v = 120 + rnd() * 160;
+      P({ k: i % 2 ? 'star' : 'twinkle', x, y: fy - 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .4 + rnd() * .25, c: i % 3 ? '#5ee07a' : '#eaffef', s: i % 2 ? 3 : 11, g: 420, drag: 1.2, rot: a, add: i % 2 === 0 });
+    }
+    if (FM.fx && FM.fx.ring) FM.fx.ring(x, fy - 2, 34, '#5ee07a', .3, 4);
+    if (r === localP()) P({ k: 'text', x, y: num(r.y, 0) - 30, vx: 0, vy: -44, life: .9, c: '#5ee07a', s: 18, g: 0, str: 'KUSURSUZ!' });
+  });
+  FM.on('nearmiss', d => {
+    const r = d && d.r, p = localP();
+    if (!r || !p || r !== p) return;
+    const x = rcx(r), y = rcy(r);
+    if (!inView(x, y, 120)) return;
+    P({ k: 'text', x, y: num(r.y, 0) - 34, vx: 0, vy: -40, life: 1.0, c: '#ffd23f', s: 20, g: 0, str: 'KIL PAYI!' });
+    if (FM.fx && FM.fx.ring) FM.fx.ring(x, y, 46, '#ffffff', .3, 4);
+    for (let i = 0; i < 6; i++) { const a = rnd() * TAU, v = 60 + rnd() * 120; P({ k: 'twinkle', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: .35 + rnd() * .2, c: '#fff6b0', s: 10 + rnd() * 6, g: 100, add: true, rot: a }); }
+  });
+  FM.on('race:start', () => { hits.length = 0; pow.on = false; pow.t = -9; pow.acc = 0; });
+
+  /* =====================================================================
      ANA ÇİZİM GİRİŞLERİ
      ===================================================================== */
   R.drawEnts = function (ctx) {
@@ -2949,6 +3348,7 @@
       for (const e of L) if (e && e.type === 'saw') drawSaw(ctx, e);
       drawScorches(ctx);
       for (const e of L) if (e && e.type === 'meteor') drawMeteorWarn(ctx, e);
+      drawPowerAura(ctx);
     } finally {
       resetXf(ctx);
       ctx.restore();
@@ -2985,6 +3385,8 @@
       resetXf(ctx);
       drawRings(ctx);
       drawSwirls(ctx);
+      drawDraft(ctx);
+      drawPowerSparks(ctx);
       drawParticleList(ctx);
       drawGhosts(ctx);
       // arayüz benzeri katman: nişangâhlar en üstte
@@ -3015,11 +3417,12 @@
     updRings(dt);
     updSwirls(dt);
     updGhosts(dt);
+    updHits(dt);
     if (S.L) {
       updEnts(dt);
       updTrails(dt);
       updSnaps(dt);
-      try { updMeteors(dt); scanTeleports(); scanVents(dt); scanDrops(); } catch (e) { /* yeni efektler oyunu durdurmasın */ }
+      try { updMeteors(dt); scanTeleports(); scanVents(dt); scanDrops(); updPower(dt); } catch (e) { /* yeni efektler oyunu durdurmasın */ }
     }
     updScreen(dt);
   });

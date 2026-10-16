@@ -5,8 +5,10 @@
   const cxOf = FM.cx, cyOf = FM.cy;
   const G = C.G, JUMP = C.JUMP, DJ = C.DJ, RUN = C.RUN, ACC = C.ACC, AIRACC = C.AIRACC, CLIMB = C.CLIMB, SLAM = C.SLAM, MUSH = C.MUSH, RW = C.RW, RH = C.RH, SH = C.SH;
 
-  // Oyuncu girdisi (klavye/dokunmatik bunları doldurur)
-  FM.input = { jh: false, jp: false, dh: false, dp: false, use: false, ab: false };
+  /* Oyuncu girdisi (klavye/dokunmatik bunları doldurur). jp/dp/use/ab "basıldı" darbeleri (game tüketir), jh/dh basılı tutma.
+     Yönlü atış (docs/TUR5.md §2): aim = null | 'item' | 'ab' (nişan alınıyor), ax/ay = nişan birim vektörü (x sağa +, y aşağı +);
+     (0,0) = varsayılan yön. Bırakınca use/ab = true ve aim = null; ax/ay son yönü tutar, darbe tüketilince sıfırlanır. */
+  FM.input = { jh: false, jp: false, dh: false, dp: false, use: false, ab: false, aim: null, ax: 0, ay: 0 };
 
   const DEATH_ICON = { spikes: '🔺', crush: '⛓️', saw: '⚙️', water: '💧', chocolate: '🍫', icewater: '🧊', lava: '🔥', fall: '💧',
     quicksand: '⏳', plasma: '⚡', neon: '☢️', boulder: '🪨', meteor: '☄️' };
@@ -25,7 +27,25 @@
   const ASSIST_T = 2.5;            // saldırıdan sonra bu süre içinde çevreden ölürse öldürme saldırgana yazılır
   const DYN_MIN = 165, DYN_MAX = 365; // bot dinamiti öndekine bu mesafedeyken atar (yeni atış menziline göre)
   const post = () => S.mode === 'end' || S.mode === 'podium';   // tur bitti: kimse zarar görmez
-  function clearInput() { const I = FM.input; if (I) { I.jp = I.dp = I.use = I.ab = false; } }
+  function clearInput() { const I = FM.input; if (I) { I.jp = I.dp = I.use = I.ab = false; if (!I.aim) I.ax = I.ay = 0; } }
+  /* ---- yönlü atış sabitleri (gerçek varlıklar ve aimPreview AYNI değerleri kullanır) ---- */
+  const AIM_ITEMS = { saw: 1, dyn: 1, trap: 1, net: 1, mis: 1 };           // yönlü eşyalar
+  const AIM_ABS = { TAFTAF: 1, Caner: 1, Kral: 1, baso: 1, Nuss: 1 };      // yönlü özel güçler
+  const SAW_V = 760, DYN_V = 720, DYN_LOB = 240, TRAP_V = 560, TRAP_LOB = 220, NET_V = 900, NET_DEC = 1500;
+  const THROW_INH = .5;            // yönlü atışta atanın ileri hızının bu kadarı varlığa geçer
+  const DYN_FUSE = .95, DASH_V = 2.2;
+  const KRAL_SPREAD = .62, KRAL_NEAR = 90, WAVE_V = 880;
+  const JBUF = .12;                // zıplama tamponu (yere değmeden önce basılan zıplama sayılır)
+  const PERF_WIN = .08, PERF_T = .7, PERF_MUL = 1.1;   // kusursuz iniş/zıplama penceresi ve hız ödülü
+  const DRAFT_MIN = 40, DRAFT_MAX = 160, DRAFT_T = .6, DRAFT_K = .07;   // rüzgâr arkası
+  const NM_CD = 2;                 // kıl payı olayı en sık 2 sn'de bir
+  // nişan yönü: p.ax/p.ay'den birim vektör ya da null (yok / (0,0) → varsayılan davranış)
+  function dirOf(ax, ay) {
+    ax = +ax || 0; ay = +ay || 0;
+    const l = Math.hypot(ax, ay);
+    return l > .05 ? { x: ax / l, y: ay / l } : null;
+  }
+  const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
   /* Ağ (netgame.js): ctrl === 'remote' yarışçı başka bir telefonda simüle edilir → burada fizik/hasar/ölüm UYGULANMAZ.
      curEnt: updateEnts o an hangi varlığı işliyor (hit/death/blocked olaylarına `ent` olarak eklenir → ağda varlık eşitleme). */
   const isRemote = r => !!r && r.ctrl === 'remote';
@@ -41,13 +61,14 @@
       slide: false, slideT: 0, climb: false, blocked: false, slam: false,
       item: null, charge: 0, boost: 0, shield: 0, balloon: false, padT: 0,
       dead: 0, inv: 0, stun: 0, frozen: 0, netted: 0, slowT: 0, pull: 0, inked: 0, ccImm: 0,
-      dash: 0, sled: 0, fly: 0,
+      dash: 0, sled: 0, fly: 0, dashX: 1, dashY: 0, flyMul: 1.3,
+      jbuf: 0, landT: 9, perfT: 0, perfCd: 0, slamPerf: false, draft: 0, draftT: 0, nmCd: 0, nmPend: null,
       onMud: false, onBelt: false, safe: { x: 60, y: 460 },
       finished: false, place: 0, ftime: 0, rp: 0, total: 0, deaths: 0, kills: 0, coins: 0, ph: 0,
       land: 0, jumpT: 0, face: 1, lastHitBy: null, lastHitT: -9, lockMsg: 0,
       abLv: 1, chargeMul: 1, skin: 'klasik', trail: 'dust', plate: 'basic',
-      ctl: { jh: false, jp: false, dh: false, dp: false, use: false, ab: false },
-      ai: { skip: 0, itemT: 1, abT: 0, slideT: 0, wait: 0 }
+      ctl: { jh: false, jp: false, dh: false, dp: false, use: false, ab: false, ax: 0, ay: 0, bx: 0, by: 0 },   // ax/ay eşya, bx/by güç nişanı
+      ai: { skip: 0, itemT: 1, abT: 0, slideT: 0, wait: 0, aimT: 0 }
     };
   }
   function modsFor(id) {
@@ -152,6 +173,7 @@
     S.elimN = 0; S.spec = null; S.dropN = 0;
     S.limitT = null;
     S.meteorT = null; S.meteorQ = []; S.timeUpSent = false;
+    S.aim = null;
     const pure = S.gameMode === 'pure';
     S.racers.forEach((r, i) => {
       const keep = { id: r.id, idx: r.idx, bot: r.bot, total: r.total, abLv: r.abLv, chargeMul: r.chargeMul, startItem: r.startItem, skin: r.skin, trail: r.trail, plate: r.plate,
@@ -430,22 +452,25 @@
     // güç (atılım/kızak/süzülüş) bittiği an tehlikenin üstünde kalınca anında ölmesin: kısa lütuf süresi
     if (wasPow && r.dash <= 0 && r.sled <= 0 && r.fly <= 0 && r.dead <= 0) r.inv = Math.max(r.inv, .35);
     r.land = Math.max(0, r.land - dt * 5); r.jumpT = Math.max(0, r.jumpT - dt * 5);
-    if (r.dead > 0) { r.dead -= dt; if (r.dead <= 0) respawn(r); c.jp = c.dp = c.use = c.ab = false; return; }
+    r.perfT = Math.max(0, (r.perfT || 0) - dt); r.perfCd = Math.max(0, (r.perfCd || 0) - dt); r.landT = (r.landT || 0) + dt;
+    if (r.dead > 0) { r.dead -= dt; if (r.dead <= 0) respawn(r); c.jp = c.dp = c.use = c.ab = false; r.jbuf = 0; return; }
     const running = S.mode === 'race' || S.mode === 'demo';
-    if (running && !r.finished) r.charge = Math.min(100, r.charge + dt * 4 * r.chargeMul * (S.gameMode === 'chaos' ? 2 : 1));
-    if (r.netted > 0) { r.vx = 0; r.vy = 0; c.jp = c.dp = c.use = c.ab = false; return; }
+    if (running && !r.finished) addCharge(r, dt * 4 * r.chargeMul * (S.gameMode === 'chaos' ? 2 : 1));
+    if (r.netted > 0) { r.vx = 0; r.vy = 0; c.jp = c.dp = c.use = c.ab = false; r.jbuf = 0; return; }
     const locked = r.stun > 0 || r.frozen > 0 || !running || r.finished;
     // hedef hız
     let mult = 1;
     if (r.boost > 0) mult *= 1.45;
     if (r.padT > 0) mult *= 1.3;
     if (r.sled > 0) mult *= 1.5;
-    if (r.fly > 0) mult *= 1.3;
+    if (r.fly > 0) mult *= r.flyMul || 1.3;              // Nuss: ileri nişanlı süzülüş biraz daha hızlı
     if (r.slowT > 0) mult *= .5;
     if (r.onMud && r.sled <= 0) mult *= .6;
     if (r.onSand && r.sled <= 0) mult *= .45;          // bataklık kum: çamurdan yavaş
     if (r.onIce) mult *= r.slide ? 1.3 : 1.1;           // buz: kaygan ve hızlı (göbek üstü kayış daha da hızlı)
-    if (r.dash > 0) mult = 2.2;
+    if (r.perfT > 0) mult *= PERF_MUL;                  // kusursuz iniş/zıplama ödülü
+    if (r.draft > 0) mult *= 1 + DRAFT_K * r.draft;     // rüzgâr arkası
+    if (r.dash > 0) mult = DASH_V * (r.dashX == null ? 1 : r.dashX);   // yönlü atılımda yatay pay
     if (r.bot) mult *= 1 + .035 * Math.sin(S.T * .55 + r.idx * 2.1);   // ortalaması 0: yalnızca görsel ayrışma
     let tgt = locked ? 0 : RUN * mult;
     if (r.onBelt && !locked) tgt += 200;
@@ -461,30 +486,46 @@
     if (!r.onGround && r.coy <= 0 && r.jumps === 0) r.jumps = 1;
     // eylemler
     if (!locked) {
-      if (c.jp) {
-        if (r.fly > 0) { r.vy = -420; if (near(r)) FM.fx.puff(cxOf(r), cyOf(r), 4, 'rgba(255,255,255,.9)', 8, 80); FM.emit('flap', { r }); }
-        else if (r.climb) { }
+      // zıplama tamponu: havada zıplama hakkı yokken (ya da kayarken ayağa kalkılamıyorken) basılan zıplama JBUF sn saklanır,
+      // yere değince / kalkabilince kendiliğinden yapılır. Çift zıplama ve kanat çırpma yalnızca gerçek basışla.
+      if (c.jp) r.jbuf = JBUF;
+      if (r.jbuf > 0) {
+        if (r.fly > 0) {
+          if (c.jp) { r.vy = -420; if (near(r)) FM.fx.puff(cxOf(r), cyOf(r), 4, 'rgba(255,255,255,.9)', 8, 80); FM.emit('flap', { r }); }
+          r.jbuf = 0;
+        }
+        else if (r.climb) { r.jbuf = 0; }
         else if (r.coy > 0) {
           if (!(r.slide && !setSlide(r, false))) {
-            r.vy = -JUMP * (r.onSand ? .82 : 1); r.vx *= .96; r.coy = 0; r.jumps = 1; r.onGround = false; r.jumpT = 1;
+            // kusursuz zıplama: inişten hemen sonra (ya da hemen önce basılmış tamponla) zıplayan hız kaybetmez + kısa hız ödülü
+            const age = JBUF - r.jbuf;
+            const perf = S.mode === 'race' && r.onGround && r.landT <= PERF_WIN && age - r.landT <= PERF_WIN && r.landHard && r.perfCd <= 0;
+            r.vy = -JUMP * (r.onSand ? .82 : 1); if (!perf) r.vx *= .96; r.coy = 0; r.jumps = 1; r.onGround = false; r.jumpT = 1; r.jbuf = 0;
             if (near(r)) FM.fx.puff(cxOf(r), r.y + r.h, 4, 'rgba(255,255,255,.8)', 7, 70);
             FM.emit('jump', { r, dbl: false });
+            if (perf) perfect(r, 'jump');
           }
-        } else if (r.jumps < 2) {
+        } else if (c.jp && r.jumps < 2) {
           if (r.slide) setSlide(r, false);
-          r.vy = -DJ; r.vx *= .88; r.jumps = 2; r.slam = false; r.jumpT = 1;
+          r.vy = -DJ; r.vx *= .88; r.jumps = 2; r.slam = false; r.slamPerf = false; r.jumpT = 1; r.jbuf = 0;
           if (near(r)) FM.fx.burst(cxOf(r), r.y + r.h, ['#ffffff', '#bfe9ff'], 7, 110, 300, 'star', 4);
           FM.emit('jump', { r, dbl: true });
         }
       }
       if (c.dp) {
         if (r.onGround && !r.slide) { setSlide(r, true); FM.emit('slide', { r }); }
-        else if (!r.onGround && !r.climb && r.fly <= 0 && r.dash <= 0 && !r.slam) { r.vy = SLAM; r.slam = true; FM.emit('slam', { r }); }
+        else if (!r.onGround && !r.climb && r.fly <= 0 && r.dash <= 0 && !r.slam) {
+          // kusursuz çakılma: düşerken zemine çok yakınken (son an) başlatılan çakılma inişte hız ödülü verir
+          const gy = r.vy > 0 ? groundY(cxOf(r), r.y + r.h) : null;
+          r.slamPerf = S.mode === 'race' && gy !== null && gy - (r.y + r.h) < 64 && r.perfCd <= 0;
+          r.vy = SLAM; r.slam = true; FM.emit('slam', { r });
+        }
       }
-      if (c.use) useItem(r);
-      if (c.ab) useAbility(r);
+      if (c.use) useItem(r, c.ax, c.ay);
+      if (c.ab) useAbility(r, c.bx, c.by);
     }
-    c.jp = c.dp = c.use = c.ab = false;
+    r.jbuf = Math.max(0, r.jbuf - dt);
+    c.jp = c.dp = c.use = c.ab = false; c.ax = c.ay = c.bx = c.by = 0;
     // kayma
     if (r.sled > 0 && r.onGround && !r.slide) setSlide(r, true);
     if (r.slide) {
@@ -502,7 +543,7 @@
     } else if (r.blocked && c.jh && !locked && !r.slide && r.fly <= 0) { r.climb = true; r.slam = false; FM.emit('climb', { r }); }
     // yerçekimi
     if (r.climb) { r.vy = -CLIMB; r.vx = 0; r.jumps = 1; }
-    else if (r.dash > 0) { r.vy = 0; }
+    else if (r.dash > 0) { r.vy = (r.dashY || 0) * RUN * DASH_V; }   // yönlü atılım: dikey pay (yerçekimi yok)
     else {
       let g = G;
       if (L.lowg.length && inLowG(cxOf(r))) g *= LOWG;
@@ -547,11 +588,16 @@
           r.y = s.y - r.h; r.onGround = true; r.jumps = 0;
           if (!was) {
             r.land = clamp(vyBefore / 1300, .25, 1);
+            r.landT = 0; r.landHard = vyBefore > 500;   // kusursuz zıplama penceresi inişten sayılır
             if (near(r) && (vyBefore > 700 || r.slam)) FM.fx.puff(cxOf(r), r.y + r.h, r.slam ? 10 : 5, 'rgba(255,255,255,.85)', r.slam ? 12 : 8, r.slam ? 140 : 70);
-            if (r.slam) { if (r === S.player) FM.fx.shake(.12); FM.emit('slamLand', { r }); }
+            if (r.slam) {
+              if (r === S.player) FM.fx.shake(.12);
+              FM.emit('slamLand', { r });
+              if (r.slamPerf) { r.vx = Math.max(r.vx, RUN * 1.12); perfect(r, 'slam'); }
+            }
             FM.emit('land', { r, hard: vyBefore > 900 });
           }
-          r.slam = false;
+          r.slam = false; r.slamPerf = false;
         } else if (r.vy < 0) { r.y = s.y + s.h; if (r.climb) r.climb = false; }
         r.vy = 0;
       }
@@ -595,18 +641,18 @@
         break;
       }
     }
-    // çevre tehlikeleri
+    // çevre tehlikeleri (çarpışma kutuları görselden birkaç px küçük: "kıl payı" geçişler affedilir)
     const hb = { x: r.x + 5, y: r.y + 5, w: r.w - 10, h: r.h - 7 };
-    for (const s of L.spikes) if (ov(hb, { x: s.x + 5, y: s.y + 8, w: s.w - 10, h: s.h - 8 })) envHit(r, true, 'spikes');
-    for (const k of L.crush) if (ov(hb, k)) envHit(r, true, 'crush');
+    for (const s of L.spikes) if (ov(hb, spikeBox(s))) envHit(r, true, 'spikes');
+    for (const k of L.crush) if (ov(hb, crushBox(k))) envHit(r, true, 'crush');
     for (const s of L.saws) {
       const nx = clamp(s.px, hb.x, hb.x + hb.w), ny = clamp(s.py, hb.y, hb.y + hb.h);
-      if ((nx - s.px) ** 2 + (ny - s.py) ** 2 < (s.r - 4) ** 2) envHit(r, false, 'saw');
+      if ((nx - s.px) ** 2 + (ny - s.py) ** 2 < (s.r - SAW_FORGIVE) ** 2) envHit(r, false, 'saw');
     }
     for (const b of L.boulders) {
       if (b.st !== 2) continue;
       const nx = clamp(b.bx, hb.x, hb.x + hb.w), ny = clamp(b.by, hb.y, hb.y + hb.h);
-      if ((nx - b.bx) ** 2 + (ny - b.by) ** 2 < (b.r - 3) ** 2) envHit(r, true, 'boulder');
+      if ((nx - b.bx) ** 2 + (ny - b.by) ** 2 < (b.r - BOULDER_FORGIVE) ** 2) envHit(r, true, 'boulder');
     }
     // ışınlanma kapısı (uzay): havadaki A'ya giren yerdeki B'den çıkar
     if (r.portCd <= 0 && r.dead <= 0) for (let i = 0; i < L.portals.length; i++) {

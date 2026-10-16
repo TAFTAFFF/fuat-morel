@@ -1245,8 +1245,8 @@
   const KEYS = [
     [['Boşluk', '↑', 'W'], 'Zıpla', 'Havada tekrar bas: çift zıplama. Duvara basılı tut: tırmanma.'],
     [['↓', 'S'], 'Kay / Yere çakıl', 'Yerde kayarsın, havadayken hızla yere çakılırsın.'],
-    [['E', 'Shift'], 'Eşya kullan', 'Kutulardan çıkan eşyayı fırlat ya da kullan.'],
-    [['Q', 'F'], 'Özel güç', 'Güç halkası dolunca karakterinin süper gücü.'],
+    [['E', 'Shift'], 'Eşya kullan', 'Basılı tut + ok tuşlarıyla yönü seç, bırakınca atılır.'],
+    [['Q', 'F'], 'Özel güç', 'Güç dolunca basılı tut + ok tuşlarıyla yönü seç, bırak.'],
     [['Esc', 'P'], 'Duraklat', 'Yarışı durdurur, ayarlara ulaşırsın.']
   ];
   function keysList() {
@@ -1258,8 +1258,8 @@
     return '<div class="tlist">' +
       '<div class="tl"><span class="tl-b tl-jump">' + svg('up') + '</span><span><b>ZIPLA</b> sol alt köşede. Basılı tutarsan duvara tırmanırsın.</span></div>' +
       '<div class="tl"><span class="tl-b tl-slide">' + svg('down') + '</span><span><b>KAY</b> ZIPLA’nın hemen sağında. Havadayken yere çakılırsın.</span></div>' +
-      '<div class="tl"><span class="tl-b tl-item">' + gi('box', 32) + '</span><span><b>EŞYA</b> sağ alt köşede, elindeki eşyayı kullanır.</span></div>' +
-      '<div class="tl"><span class="tl-b tl-pow">' + svg('bolt') + '</span><span><b>GÜÇ</b> EŞYA’nın solunda; halka dolunca parlar, dokun ve kullan.</span></div>' +
+      '<div class="tl"><span class="tl-b tl-item">' + gi('box', 32) + '</span><span><b>EŞYA</b> sağ alt köşede. Dokun: kullan. Yönlü eşyada (testere, dinamit…) <b>basılı tut, sürükle, bırak</b>: o yöne atılır.</span></div>' +
+      '<div class="tl"><span class="tl-b tl-pow">' + svg('bolt') + '</span><span><b>GÜÇ</b> EŞYA’nın solunda; <b>HAZIR!</b> yanınca dokun ya da yönlüyse sürükleyip bırak.</span></div>' +
     '</div>';
   }
   function sliderRow(key, label, icon) {
@@ -1269,11 +1269,19 @@
       '<input class="rng" type="range" min="0" max="100" step="1" value="' + v + '" data-set="' + key + '" aria-label="' + label + '" style="--v:' + v + '%">' +
       '<b class="s-v" data-v="' + key + '">' + v + '</b></div>';
   }
-  function toggleRow(key, label, icon) {
-    const on = (sv().settings || {})[key] !== false;
+  function toggleRow(key, label, icon, act, tip) {
+    const on = !!setting(key);
     return '<div class="srow"><span class="s-ic">' + svg(icon) + '</span><span class="s-l">' + label + '</span>' +
-      '<button class="tgl ' + (on ? 'on' : '') + '" data-act="tgl" data-set="' + key + '" role="switch" aria-checked="' + on + '" aria-label="' + label + '"><i></i><span class="tg-on">AÇIK</span><span class="tg-off">KAPALI</span></button></div>';
+      '<button class="tgl ' + (on ? 'on' : '') + '" data-act="' + (act || 'tgl') + '" data-set="' + key + '" role="switch" aria-checked="' + on + '" aria-label="' + label + '"><i></i><span class="tg-on">AÇIK</span><span class="tg-off">KAPALI</span></button></div>' +
+      (tip ? '<p class="set-tip">' + tip + '</p>' : '');
   }
+  function segRow(key, label, icon, opts) {
+    const cur = String(setting(key));
+    return '<div class="srow"><span class="s-ic">' + svg(icon) + '</span><span class="s-l">' + label + '</span><span class="seg">' +
+      opts.map(o => '<button class="' + (cur === o[0] ? 'on' : '') + '" data-act="segset" data-set="' + key + '" data-v="' + o[0] + '">' + o[1] + '</button>').join('') + '</span></div>';
+  }
+  /** Bildirim izni durumu (tarayıcıdan): 'granted' | 'denied' | 'default' | 'none' */
+  function notifPerm() { try { return ('Notification' in window) ? Notification.permission : 'none'; } catch (e) { return 'none'; } }
   function renderSettings() {
     const s = sv().settings || {};
     const q = s.quality === 'low' ? 'low' : 'high';
@@ -1798,7 +1806,7 @@
       '<div class="tbtn tb-item" data-tc="item" role="button" aria-label="Eşya"><span class="tb-in"><span class="tb-itm"></span><b class="tb-lb">EŞYA</b></span>' + aimMark + '</div>' +
       '<div class="tbtn tb-power" data-tc="power" role="button" aria-label="Özel güç"><span class="tb-ring"></span><span class="tb-in"><span class="tb-pp"></span><b class="tb-lb">GÜÇ</b></span>' + aimMark + '</div>' +
       '<div class="tbtn tb-jump" data-tc="jump" role="button" aria-label="Zıpla"><span class="tb-in">' + svg('up', 'tb-ico') + '<b>ZIPLA</b></span></div>' +
-      '<div class="tc-hint" aria-hidden="true"><span class="th-t">Basılı tut, sürükle, bırak!</span><i class="th-fg"></i></div>' +
+      '<div class="tc-hint" aria-hidden="true"><span class="th-t">Basılı tut, sürükle, bırak!</span></div>' +
     '</div>' +
     '<button class="rbtn b-orange emo-btn" data-act="emotog" aria-label="Emoji gönder" title="Emoji gönder">' + svg('smile') + '</button>' +
     '<div class="emo emo-race">' + ['👍', '😂', '😎', '😡', '🔥', '💀', '👋', 'GG'].map(e => '<button class="emo-b" data-act="emo" data-e="' + e + '">' + e + '</button>').join('') + '</div>' +

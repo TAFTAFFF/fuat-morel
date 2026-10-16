@@ -477,6 +477,7 @@
   }
 
   const PART_BOX = { head: [-38, -46, 40, 30], body: [-28, -36, 28, 14], arm: [-12, -10, 14, 28], leg: [-11, -7, 16, 18], wing: [-15, -10, 17, 42] };
+  const RIM_W = 2.6;   // yerel oyuncu kenar ışığının dış hattan taşma payı (parça birimi; kamera yakınlaşınca birlikte büyür)
   /* ---------- parça önbelleği: bayt bütçeli LRU ----------
      Anahtar: karakter × skin × parça × ifade × dış hat × çözünürlük (m). Son ~1.5 sn'de kullanılan parçalar asla atılmaz
      (çalışma kümesi bütçeyi aşsa bile yeniden üretim döngüsü/takılma olmaz); bütçe aşılınca en eski kullanılanlar atılır
@@ -512,8 +513,11 @@
     const typ = (name === 'armF' || name === 'armB') ? 'arm' : (name === 'legF' || name === 'legB') ? 'leg' : (name === 'wingF' || name === 'wingB') ? 'wing' : name;
     const back = name === 'armB' || name === 'legB' || name === 'wingB';
     const box = (D.box && D.box[typ]) || PART_BOX[typ];
-    const P = pal(id, skin, back);
-    const th = ol ? (D.thick || 2.5) * (typ === 'head' ? 1.08 : typ === 'body' ? 1 : 0.9) : 0;
+    let P = pal(id, skin, back);
+    let th = ol ? (D.thick || 2.5) * (typ === 'head' ? 1.08 : typ === 'body' ? 1 : 0.9) : 0;
+    // kenar ışığı geçişi (ol = 'rim:#renk'): aynı parça, oyuncu renginde ve daha kalın dış hatla — normal figürün ALTINA
+    // çizilir, yalnızca silüetin dışına taşan renkli halka görünür (yerel oyuncu işareti; neon parlaması kapalı)
+    if (typeof ol === 'string' && ol.indexOf('rim:') === 0) { P = Object.assign({}, P, { line: ol.slice(4), neonGlow: false }); th += RIM_W; }
     const fn = typ === 'head' ? (g, PP) => D.head(g, PP, v || 'n')
       : typ === 'body' ? (g, PP) => D.body(g, PP)
       : (g, PP) => D[typ](g, PP, back);
@@ -1387,14 +1391,15 @@
   /** Bir karakteri (yerel ayak koordinatında, sağa bakan) çizer. */
   function drawFig(ctx, id, skin, m, p, t, ol) {
     const D = DEF[id], rg = D.rig, P = pal(id, skin, false);
-    ol = ol === false ? 0 : 1;
+    const rim = typeof ol === 'string';          // kenar ışığı geçişi: yalnızca dış hatlı parçalar (pelerin/göz parlaması yok)
+    ol = ol === false ? 0 : rim ? ol : 1;
     ctx.save();
     const s = rg.scale || 1;
     ctx.scale(s * p.sx, s * p.sy);
     if (p.rot) { ctx.translate(0, -p.pv); ctx.rotate(p.rot); ctx.translate(0, p.pv); }
     ctx.translate(p.bx, -rg.hipY + p.bob);
     if (p.hrot) ctx.rotate(p.hrot);
-    if (D.back) { ctx.save(); ctx.rotate(p.lean); D.back(ctx, P, p, t); ctx.restore(); }
+    if (D.back && !rim) { ctx.save(); ctx.rotate(p.lean); D.back(ctx, P, p, t); ctx.restore(); }
     const wing = p.wing && D.wing;
     ctx.save(); ctx.rotate(p.lean);
     limb(ctx, part(id, skin, wing ? 'wingB' : 'armB', '', m, ol), rg.shB[0], rg.shB[1] + p.shY, wing ? p.wingB : p.armB, p.armBs, m);
@@ -1411,9 +1416,9 @@
     if (p.head) ctx.rotate(p.head);
     ctx.translate(rg.head[0], rg.head[1]);
     if (rg.hs) ctx.scale(rg.hs, rg.hs);
-    if (D.headBack) D.headBack(ctx, P, p, t);
+    if (D.headBack && !rim) D.headBack(ctx, P, p, t);
     blit(ctx, part(id, skin, 'head', p.expr, m, ol), m);
-    if (P.glowEye) eyeGlow(ctx, D, P, p.expr);
+    if (P.glowEye && !rim) eyeGlow(ctx, D, P, p.expr);
     ctx.restore();
     if (!armUp) limb(ctx, part(id, skin, wing ? 'wingF' : 'armF', '', m, ol), rg.shF[0], rg.shF[1] + p.shY, fa, p.armFs, m);
     ctx.restore();
@@ -1497,6 +1502,8 @@
     const p = makePose(id, st, r.ph || 0, a.t, r.vy || 0, o);
     if (st === 'stun' || st === 'frozen') { /* ifade sabit */ }
     else if (r.boost > 0 || r.padT > 0) { if (p.expr === 'n') p.expr = 'f'; }
+    else if (r.inv > 0.9 && r.inv < 100 && p.expr === 'n') p.expr = 'o';                     // yeniden doğuşun ilk anı (inv 1.6 sn): şaşkın yüz
+    else if (r.finished && r.place === 1 && p.expr === 'n') p.expr = 'h';                     // birinci: mutlu
     if (p.expr === 'n' && a.blinkT > 0) p.expr = 'b';
     // esneme / ezilme
     if (r.land > 0 && r.onGround && st !== 'slide' && st !== 'sled') { const l = min(1, r.land); p.sy *= 1 - l * 0.2; p.sx *= 1 + l * 0.15; }
@@ -1712,7 +1719,7 @@
   /* =====================================================================
      DURUM KATMANLARI
      ===================================================================== */
-  function drawShadow(ctx, r) {
+  function drawShadow(ctx, r, isPlayer) {
     if (!FM.game || typeof FM.game.groundY !== 'function' || !FM.S.L || !FM.S.L.solids) return;
     const cx = r.x + r.w / 2, feet = r.y + r.h;
     let gy = null;
@@ -1726,7 +1733,11 @@
     ctx.globalAlpha = (0.2 + 0.8 * k) * (r.stale ? 0.5 : 1);
     ctx.drawImage(s.c, cx - s.ox * ws, gy - s.oy * hs, s.w * ws, s.h * hs);
     ctx.globalAlpha = 1;
-    if (TAGS && h < 160) drawFootRing(ctx, r, gy, clamp(1 - h / 160, 0, 1));
+    // ayak halkası: renk etiketleri açıkken herkese; yerel oyuncuya HER ZAMAN (biraz büyük, nabızlı, işaret renginde)
+    if (h < 160) {
+      if (isPlayer) drawFootRing(ctx, r, gy, clamp(1 - h / 160, 0, 1), focusCol(r), true);
+      else if (TAGS) drawFootRing(ctx, r, gy, clamp(1 - h / 160, 0, 1));
+    }
   }
   function drawSpeedFx(ctx, r, a, fx, fy, onBack) {
     const t = a.t;
@@ -1967,11 +1978,26 @@
         ctx.globalAlpha = 1;
       }
     }
+    // YEREL OYUNCU: yumuşak renkli hale (arkada, lighter) + kenar ışığı (figürün altına oyuncu renginde kalın dış hatlı kopya;
+    // yalnızca silüetten taşan halka görünür). Parçalar önbellekli: karede +~8 drawImage, yalnızca 1 yarışçı için.
+    const fcol = isPlayer ? focusCol(r) : null;
+    if (fcol) {
+      const gs = FM.gfx.glowSprite(rgba(fcol, 0.7), 34);
+      const cy = fy - (p.st === 'slide' || p.st === 'sled' ? 13 : 26) * SC * (D.rig.scale || 1);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (blinkHide ? 0.08 : 0.2) + sin(a.t * 3.4) * 0.05;
+      ctx.drawImage(gs.c, fx - 46, cy - 48, 92, 96);
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    }
     // karakter
     ctx.save();
     if (blinkHide || r.stale) ctx.globalAlpha = (blinkHide ? 0.32 : 1) * (r.stale ? 0.45 : 1);
     ctx.translate(fx + shake, fy);
     ctx.scale(face * SC, SC);
+    if (fcol) {
+      ctx.save(); ctx.globalAlpha *= 0.82 + 0.18 * sin(a.t * 4);
+      try { drawFig(ctx, id, skin, racerM, p, a.t, 'rim:' + fcol); } catch (e) { /* kenar ışığı çizilemedi */ }
+      ctx.restore();
+    }
     drawFig(ctx, id, skin, racerM, p, a.t, true);
     ctx.restore();
     // öndeki efektler
@@ -1982,6 +2008,12 @@
     if (r.stun > 0 && !(r.netted > 0)) drawStunStars(ctx, a, hx, hy - 15, 15);
     if (r.slowT > 0) drawNotes(ctx, a, hx, hy);
     if (r.pull > 0) drawMagnet(ctx, r, a, fx, fy - 26);
+  }
+  /** Öne çıkarılan yarışçının işaret rengi: izleyici kamerası camgöbeği (göz oku ile aynı), ağ/kalabalıkta oyuncu rengi,
+      klasik 4 kişilik görünümde altın (okun rengi) */
+  function focusCol(r) {
+    if (FOCUS_SPEC) return '#3fe0f0';
+    return TAGS ? racerColor(r) : '#ffd23f';
   }
   const PLATE_STYLES = { basic: 1, gold: 1, clan: 1, neon: 1, fire: 1 };
   function racerPlate(r, isPlayer) {
@@ -2015,10 +2047,10 @@
       g.restore();
     });
   }
-  function drawFootRing(ctx, r, gy, k) {
-    const s = footRingSprite(racerColor(r)), cx = r.x + r.w / 2;
-    const ws = (0.75 + 0.25 * k) * (r.slide ? 1.25 : 1);
-    ctx.globalAlpha = (0.35 + 0.6 * k) * (r.stale ? 0.5 : 1);
+  function drawFootRing(ctx, r, gy, k, col, big) {
+    const s = footRingSprite(col || racerColor(r)), cx = r.x + r.w / 2;
+    const ws = (0.75 + 0.25 * k) * (r.slide ? 1.25 : 1) * (big ? 1.12 : 1);
+    ctx.globalAlpha = (0.35 + 0.6 * k) * (r.stale ? 0.5 : 1) * (big ? 0.85 + 0.15 * sin(anim(r).t * 4) : 1);
     ctx.drawImage(s.c, cx - s.ox * ws, gy - s.oy * ws, s.w * ws, s.h * ws);
     ctx.globalAlpha = 1;
   }
@@ -2263,7 +2295,7 @@
     ctx.save();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     racerDarkBg = darkTheme();
-    for (const r of list) drawShadow(ctx, r);
+    for (const r of list) drawShadow(ctx, r, r === pl);
     for (const r of list) {
       try { drawRacer(ctx, r, r === pl); }
       catch (e) { if (errCount++ < 5) console.error('[render-chars]', e); }

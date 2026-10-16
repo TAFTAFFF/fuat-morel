@@ -1556,11 +1556,17 @@ kbd {
 .ly-race.live .rbtn.pz-btn { display: inline-flex !important; }
 .tc { position: absolute; inset: 0; display: none; }
 .ly-race.touch.live .tc { display: block; }
+/* Düğme boyutları: --bs = Ayarlar › Düğme boyutu (S .86 / M 1 / L 1.16). EŞYA ve GÜÇ telefonda en az ~84 px. */
+.ly-race { --bs: 1; --g: calc(2.8vh + 2px); }
+.ly-race.bs-s { --bs: .86; }
+.ly-race.bs-l { --bs: 1.16; }
+.tc { --jz: calc(clamp(86px, 26vh, 152px) * var(--bs)); --sz2: calc(clamp(76px, 21vh, 128px) * var(--bs)); --iz: calc(clamp(88px, 25vh, 142px) * var(--bs)); --pz: calc(clamp(84px, 22.5vh, 128px) * var(--bs)); }
 .tbtn {
   --sz: 100px;
-  --tb: rgba(70, 36, 130, .42);
-  --tbd: rgba(110, 70, 200, .7);
-  --rim: rgba(255, 255, 255, .88);
+  --tb: rgba(70, 36, 130, .62);
+  --tbd: rgba(110, 70, 200, .85);
+  --rim: rgba(255, 255, 255, .92);
+  --ic: #ffd23f;
   position: absolute;
   width: var(--sz);
   height: var(--sz);
@@ -1581,42 +1587,76 @@ kbd {
   justify-content: center;
   gap: 2%;
   background:
-    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .42), rgba(255, 255, 255, .08) 52%, rgba(0, 0, 0, .14) 100%),
+    radial-gradient(circle at 50% 26%, rgba(255, 255, 255, .5), rgba(255, 255, 255, .1) 52%, rgba(0, 0, 0, .22) 100%),
     var(--tb);
-  border: max(3px, .55vh) solid var(--rim);
-  box-shadow: 0 0 0 max(2px, .32vh) rgba(26, 11, 46, .8), inset 0 -.9vh 1.5vh rgba(0, 0, 0, .25), 0 .8vh 1.6vh rgba(0, 0, 0, .3);
-  transition: transform .07s ease, background-color .1s;
+  border: max(3px, .6vh) solid var(--rim);
+  box-shadow: 0 0 0 max(2px, .34vh) rgba(26, 11, 46, .9), inset 0 -.9vh 1.5vh rgba(0, 0, 0, .28), 0 .8vh 1.6vh rgba(0, 0, 0, .38);
+  transition: transform .07s ease, background-color .1s, box-shadow .15s;
   pointer-events: none;
 }
 .tbtn .tb-ico { width: 44%; height: 44%; color: #fff; filter: drop-shadow(0 .3vh 0 rgba(26, 11, 46, .55)); }
 .tbtn b { --o: rgba(26, 11, 46, .95); font: clamp(12px, 2.8vh, 16px)/1 var(--fh); font-weight: 400; letter-spacing: .04em; color: #fff; }
-.tbtn.down .tb-in { transform: scale(.88); background: radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .6), rgba(255, 255, 255, .18) 55%, rgba(0, 0, 0, .1)), var(--tbd); }
-.tb-jump { --sz: clamp(86px, 26vh, 152px); --tb: rgba(46, 176, 76, .48); --tbd: rgba(80, 230, 110, .75); left: calc(3.2vh + var(--sl)); bottom: calc(3.2vh + var(--sb)); } /* kullanıcı isteği: ZIPLA + KAY sol altta */
-.tb-slide { --sz: clamp(78px, 22vh, 130px); --tb: rgba(40, 124, 236, .48); --tbd: rgba(70, 170, 255, .75); left: calc(3.2vh + var(--sl) + clamp(86px, 26vh, 152px) + 1.4vh); bottom: calc(3.2vh + var(--sb) + clamp(86px, 26vh, 152px) * .14); }
-.tb-item { --sz: clamp(70px, 20vh, 116px); --tb: rgba(130, 70, 220, .42); --tbd: rgba(170, 110, 255, .75); right: calc(3.2vh + var(--sr)); bottom: calc(3.2vh + var(--sb)); } /* EŞYA + GÜÇ sağ altta */
-/* GÜÇ: ZIPLA'nın solunda, eskisinden alçakta (koşu yönündeki zemin bandını kapatmasın; kamera dokunmatikte zemini ekranın %60'ına koyar) */
-.tb-power { --sz: clamp(62px, 17vh, 100px); --tb: rgba(232, 128, 30, .42); --tbd: rgba(255, 170, 60, .8); right: calc(3.2vh + var(--sr) + clamp(70px, 20vh, 116px) + 1.4vh); bottom: calc(3.2vh + var(--sb) + clamp(70px, 20vh, 116px) * .3); }
-.tb-itm { width: 54%; height: 54%; display: grid; place-items: center; }
-.tb-gi { width: 100%; height: 100%; }
-.tb-item:not(.has) .tb-in { opacity: .55; }
-.tb-item.has .tb-in { --rim: #fff3a0; box-shadow: 0 0 0 max(2px, .32vh) rgba(26, 11, 46, .8), 0 0 2.2vh rgba(255, 220, 120, .6), inset 0 -.9vh 1.5vh rgba(0, 0, 0, .25); }
-.tb-item.pop .tb-in { animation: tcPop .45s cubic-bezier(.3, 1.8, .5, 1); }
+.tbtn.down .tb-in { transform: scale(.9); background: radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .62), rgba(255, 255, 255, .2) 55%, rgba(0, 0, 0, .1)), var(--tbd); }
+/* ZIPLA + KAY sol altta (kullanıcı isteği), EŞYA + GÜÇ sağ altta; Solak düzende kümeler yer değiştirir */
+.tb-jump { --sz: var(--jz); --tb: rgba(46, 176, 76, .62); --tbd: rgba(80, 230, 110, .85); left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); }
+.tb-slide { --sz: var(--sz2); --tb: rgba(40, 124, 236, .62); --tbd: rgba(70, 170, 255, .85); left: calc(var(--g) + var(--sl) + var(--jz) + 1.2vh); bottom: calc(var(--g) + var(--sb) + var(--jz) * .1); }
+.tb-item { --sz: var(--iz); --tb: rgba(122, 64, 214, .7); --tbd: rgba(170, 110, 255, .88); right: calc(var(--g) + var(--sr)); bottom: calc(var(--g) + var(--sb)); }
+/* GÜÇ: EŞYA'nın solunda ve biraz yukarıda (koşu yönündeki zemin bandını kapatmasın) */
+.tb-power { --sz: var(--pz); --tb: rgba(224, 112, 20, .66); --tbd: rgba(255, 170, 60, .88); right: calc(var(--g) + var(--sr) + var(--iz) + 1.2vh); bottom: calc(var(--g) + var(--sb) + var(--iz) * .16); }
+.lefty .tb-jump { left: auto; right: calc(var(--g) + var(--sr)); }
+.lefty .tb-slide { left: auto; right: calc(var(--g) + var(--sr) + var(--jz) + 1.2vh); }
+.lefty .tb-item { right: auto; left: calc(var(--g) + var(--sl)); }
+.lefty .tb-power { right: auto; left: calc(var(--g) + var(--sl) + var(--iz) + 1.2vh); }
+/* EŞYA: boşken okunur (kesik halka + soluk kutu), doluyken iri net ikon + eşyanın renginde parlak halka */
+.tb-itm { width: 62%; height: 62%; display: grid; place-items: center; margin-top: -2%; }
+.tb-gi { width: 100%; height: 100%; filter: drop-shadow(0 .25vh 0 rgba(26, 11, 46, .8)) drop-shadow(0 0 .5vh rgba(255, 255, 255, .35)); }
+.tb-empty { display: grid; place-items: center; width: 62%; height: 62%; color: rgba(255, 255, 255, .5); opacity: .8; }
+.tb-empty .ico { width: 100%; height: 100%; }
+.tb-item:not(.has) .tb-in { border-style: dashed; border-color: rgba(255, 255, 255, .55); background: radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .18), rgba(0, 0, 0, .25)), rgba(40, 20, 80, .55); }
+.tb-item:not(.has) b { color: rgba(255, 255, 255, .72); }
+.tb-item.has .tb-in { --rim: var(--ic); box-shadow: 0 0 0 max(2px, .34vh) rgba(26, 11, 46, .9), 0 0 2.4vh .5vh color-mix(in srgb, var(--ic) 60%, transparent), inset 0 -.9vh 1.5vh rgba(0, 0, 0, .28); animation: itemGlow 1.1s ease-in-out infinite alternate; }
+.tb-item.has b { font-size: clamp(10px, 2.2vh, 13px); max-width: 94%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .02em; }
+.tb-item.pop .tb-in { animation: tcPop .45s cubic-bezier(.3, 1.8, .5, 1), itemGlow 1.1s .45s ease-in-out infinite alternate; }
+.tb-item.arrive .tb-in { animation: tcArrive .55s cubic-bezier(.3, 1.6, .5, 1); }
+/* GÜÇ: portre + dolum halkası; HAZIR! parlar ve nabız atar */
 .tb-ring {
   position: absolute;
-  inset: -9%;
+  inset: -10%;
   border-radius: 50%;
-  background: conic-gradient(#ffd23f calc(var(--p, 0) * 1%), rgba(255, 255, 255, .16) 0);
-  -webkit-mask-image: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-  mask-image: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  background: conic-gradient(#ffd23f calc(var(--p, 0) * 1%), rgba(255, 255, 255, .26) 0);
+  -webkit-mask-image: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
   pointer-events: none;
 }
-.tb-pp { width: 58%; height: 58%; border-radius: 50%; overflow: hidden; }
+.tb-pp { width: 60%; height: 60%; border-radius: 50%; overflow: hidden; margin-top: -2%; }
 .tb-pp .pt { width: 100%; height: 100%; }
-.tb-power:not(.full) .tb-pp { filter: grayscale(.55) brightness(.85); opacity: .72; }
-.tb-power:not(.full) .tb-in { --rim: rgba(255, 255, 255, .7); }
-.tb-item.has .tb-gi { opacity: .92; }
-.tb-power.full .tb-in { --rim: #fff6b0; background: radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .55), rgba(255, 210, 80, .36) 60%), rgba(255, 150, 0, .46); animation: powFull .7s ease-in-out infinite alternate; }
+.tb-power:not(.full) .tb-pp { filter: grayscale(.5) brightness(.85); opacity: .78; }
+.tb-power:not(.full) .tb-in { --rim: rgba(255, 255, 255, .78); }
+.tb-power.full .tb-in { --rim: #fff6b0; background: radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .6), rgba(255, 210, 80, .4) 60%), rgba(255, 140, 0, .6); box-shadow: 0 0 0 max(2px, .34vh) rgba(26, 11, 46, .9), 0 0 2.6vh .7vh rgba(255, 200, 60, .75), inset 0 -.9vh 1.5vh rgba(0, 0, 0, .25); animation: powFull .6s ease-in-out infinite alternate; }
 .tb-power.full .tb-ring { background: conic-gradient(#fff6a0, #ffd23f, #ff9900, #fff6a0); animation: spin 1.6s linear infinite; }
+.tb-power.full::before { content: ''; position: absolute; inset: -4%; border-radius: 50%; border: .5vh solid rgba(255, 226, 120, .9); pointer-events: none; animation: powRipple 1.15s ease-out infinite; }
+.tb-power.full b { color: #fff7b0; --o: #7a3a00; font-size: clamp(12px, 3vh, 17px); animation: lbPulse .6s ease-in-out infinite alternate; }
+.tb-power.arrive .tb-in { animation: tcArrive .55s cubic-bezier(.3, 1.6, .5, 1); }
+/* nişan alınabilir rozeti (artı işareti): düğmenin sağ üstünde */
+.tb-can { position: absolute; top: -2%; right: -2%; width: 26%; height: 26%; display: none; place-items: center; border-radius: 50%; background: #1a0b2e; border: max(2px, .35vh) solid #ffe27a; color: #ffe27a; padding: 3px; pointer-events: none; z-index: 2; }
+.tb-can .ico { width: 100%; height: 100%; --io: #1a0b2e; }
+.tbtn.can-aim.has .tb-can, .tb-power.can-aim.full .tb-can { display: grid; }
+.tb-power.can-aim:not(.full) .tb-can { display: none; }
+/* nişan oku: düğmenin merkezinden parmağın yönüne (--a açı, --len uzunluk) */
+.tb-aim { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; transform: rotate(var(--a, 0deg)); z-index: 3; }
+.tbtn.aiming.armed .tb-aim { opacity: 1; filter: drop-shadow(0 0 .5vh rgba(0, 0, 0, .85)) drop-shadow(0 0 1.2vh rgba(255, 226, 120, .9)); }
+.am-ln { position: absolute; left: calc(var(--sz) * .3); top: -4px; width: calc(var(--sz) * .2 + var(--len, 0px)); height: 8px; border-radius: 5px; background: linear-gradient(90deg, rgba(255, 226, 120, .15), #fff 35%, #fff); }
+.am-hd { position: absolute; left: calc(var(--sz) * .5 + var(--len, 0px) - 6px); top: -15px; width: 26px; height: 30px; background: #fff; clip-path: polygon(0 0, 100% 50%, 0 100%, 18% 50%); }
+.tbtn.aiming .tb-in { transform: scale(1.06); }
+.tbtn.aiming.dz .tb-in { --rim: #8fe3ff; box-shadow: 0 0 0 max(2px, .34vh) rgba(26, 11, 46, .9), 0 0 2.4vh .6vh rgba(120, 220, 255, .7); }
+.tbtn.aiming.armed .tb-in { --rim: #fff3a0; box-shadow: 0 0 0 max(2px, .34vh) rgba(26, 11, 46, .9), 0 0 2.6vh .8vh rgba(255, 210, 80, .85); }
+.tbtn.aiming { z-index: 5; }
+/* ilk yönlü atış ipucu */
+.tc-hint { position: absolute; bottom: calc(var(--g) + var(--sb) + var(--iz) + 1.6vh); right: calc(var(--g) + var(--sr)); display: none; align-items: center; gap: .6em; padding: .55em .9em; border-radius: 1.1em; background: linear-gradient(180deg, #fff8c4, #ffd23f); color: #4a1d00; font: clamp(13px, 3.1vh, 17px)/1.1 var(--fh); border: .22vh solid #1a0b2e; box-shadow: 0 .5vh 0 #a85200, 0 1vh 2vh rgba(0, 0, 0, .45); pointer-events: none; z-index: 6; white-space: nowrap; }
+.tc-hint.on { display: flex; animation: hintIn .4s cubic-bezier(.2, 1.5, .4, 1) both, tcHintBob .9s .4s ease-in-out infinite alternate; }
+.tc-hint::after { content: ''; position: absolute; bottom: -.9vh; right: calc(var(--iz) * .5 - .9vh); width: 1.8vh; height: 1.8vh; background: #ffd23f; border-right: .22vh solid #1a0b2e; border-bottom: .22vh solid #1a0b2e; transform: rotate(45deg); }
+.lefty .tc-hint { right: auto; left: calc(var(--g) + var(--sl)); }
+.lefty .tc-hint::after { right: auto; left: calc(var(--iz) * .5 - .9vh); }
 
 /* ---------------------------------------------------------------------
    15) TUR SONUCU
@@ -1930,7 +1970,13 @@ kbd {
 @keyframes crownDrop { 0% { opacity: 0; transform: translateY(-6rem) scale(1.4); } 100% { opacity: 1; transform: none; } }
 @keyframes titlePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 @keyframes confFall { 0% { transform: translate3d(0, -8vh, 0) rotate(var(--r)); } 100% { transform: translate3d(var(--sw), 108vh, 0) rotate(calc(var(--r) + 760deg)); } }
-@keyframes powFull { 0% { transform: scale(1); } 100% { transform: scale(1.07); } }
+@keyframes powFull { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+@keyframes itemGlow { 0% { filter: brightness(1); } 100% { filter: brightness(1.14); } }
+@keyframes tcArrive { 0% { transform: scale(1); } 35% { transform: scale(1.28); } 60% { transform: scale(.94); } 100% { transform: scale(1); } }
+@keyframes powRipple { 0% { transform: scale(1); opacity: .95; } 100% { transform: scale(1.45); opacity: 0; } }
+@keyframes lbPulse { 0% { transform: scale(1); } 100% { transform: scale(1.12); } }
+@keyframes hintIn { 0% { opacity: 0; transform: translateY(1.2vh) scale(.8); } 100% { opacity: 1; transform: none; } }
+@keyframes tcHintBob { 0% { translate: 0 0; } 100% { translate: 0 -.7vh; } }
 @keyframes tcPop { 0% { transform: scale(.7); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
 @keyframes flagIn { 0% { opacity: 0; transform: translateY(-3rem) scaleY(.6); } 100% { opacity: 1; transform: none; } }
 @keyframes flagSway { 0%, 100% { transform: rotate(-1.4deg) skewX(.6deg); } 50% { transform: rotate(1.4deg) skewX(-.6deg); } }

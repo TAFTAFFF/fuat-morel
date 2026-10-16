@@ -2447,10 +2447,29 @@
     }
     ctx.globalAlpha = 1;
   }
+  /** Buz bloğundaki çatlaklar (r.iceHits 1..3; 4. basışta game.js buzu kırar): basmak görünür olsun. Önbellekli 3 sprite. */
+  function iceCrackSprite(n) {
+    return FM.gfx.sprite('fmc|icecrack|' + n, 60, 80, 30, 74, g => {
+      const rnd = FM.mulberry32(91 + n * 7), cx = -1, cy = -36;
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      const rays = 3 + n * 2;
+      for (let i = 0; i < rays; i++) {
+        const a = i / rays * TAU + rnd() * .7, len = 9 + n * 6 + rnd() * 8;
+        let x = cx, y = cy;
+        g.beginPath(); g.moveTo(x, y);
+        for (let k = 0; k < 3; k++) { const b = a + (rnd() - .5) * .9, l = len / 3; x = clamp(x + cos(b) * l, -23, 23); y = clamp(y + sin(b) * l, -68, -3); g.lineTo(x, y); }
+        g.lineWidth = 3.2; g.strokeStyle = 'rgba(16,64,120,0.8)'; g.stroke();
+        g.lineWidth = 1.3; g.strokeStyle = 'rgba(255,255,255,0.95)'; g.stroke();
+      }
+      if (n >= 2) { g.beginPath(); g.arc(cx, cy, 2.5 + n, 0, TAU); g.fillStyle = 'rgba(255,255,255,0.85)'; g.fill(); g.lineWidth = 1.4; g.strokeStyle = 'rgba(16,64,120,0.7)'; g.stroke(); }
+    });
+  }
   function drawIce(ctx, r, a, fx, fy) {
     const s = iceSprite(), t = a.t;
     const sx = r.slide ? 1.3 : 1, sy = r.slide ? 0.6 : 1;
-    ctx.drawImage(s.c, fx - s.ox * sx, fy + 2 - s.oy * sy, s.w * sx, s.h * sy);
+    const n = min(3, r.iceHits | 0), jx = n > 0 ? sin(t * 38) * n * 0.5 : 0;   // çatlamış blok hafif titrer
+    ctx.drawImage(s.c, fx + jx - s.ox * sx, fy + 2 - s.oy * sy, s.w * sx, s.h * sy);
+    if (n > 0) { const c = iceCrackSprite(n); ctx.drawImage(c.c, fx + jx - c.ox * sx, fy + 2 - c.oy * sy, c.w * sx, c.h * sy); }
     const tw = twinkleSprite('#bfefff');
     for (let i = 0; i < 2; i++) {
       const ph = (t * 1.3 + i * 0.5) % 1, k = sin(ph * PI);

@@ -2130,51 +2130,53 @@
   const MET = {
     lit: '#eef2f8', mid: '#a7b0c0', dark: '#5d6678', deep: '#353c4c', ol: '#151922'
   };
-  /** Tek diken birimi (36 px); orijin: birimin sol-alt köşesi (zemin hizası) */
-  // Not: yalnızca GÖRSEL büyütüldü — çarpışma kutusu (level.js: 26 yüksek, 36'nın katı geniş) aynı.
+  /** Tek diken birimi (36 px); orijin: birimin sol-alt köşesi (zemin hizası).
+      Çarpışma kutusu (game.js spikeBox: zeminin 15 px üstü, kenarlardan 8 px içeride) DEĞİŞMEDİ — yalnızca görsel:
+      daha uzun, parlak çelik, beyaz-kırmızı uç, kalın koyu dış hat; 8 temada da aynı (zemine karışmaz). */
   function spikeSpr() {
-    return spr('spike2', 42, 48, 3, 43, g => {
-      const T = -39;   // uç yüksekliği (görsel)
-      const whole = new Path2D(); whole.moveTo(2.5, 1); whole.quadraticCurveTo(12, -11, 18, T); whole.quadraticCurveTo(24, -11, 33.5, 1); whole.closePath();
-      const L = new Path2D(); L.moveTo(2.5, 1); L.quadraticCurveTo(12, -11, 18, T); L.lineTo(18, 1); L.closePath();
-      const Rt = new Path2D(); Rt.moveTo(18, T); Rt.quadraticCurveTo(24, -11, 33.5, 1); Rt.lineTo(18, 1); Rt.closePath();
+    return spr('spike3', 44, 56, 4, 51, g => {
+      const T = -47;   // uç yüksekliği (görsel)
+      const whole = new Path2D(); whole.moveTo(1.5, 1); whole.quadraticCurveTo(11, -12, 18, T); whole.quadraticCurveTo(25, -12, 34.5, 1); whole.closePath();
+      const Lf = new Path2D(); Lf.moveTo(1.5, 1); Lf.quadraticCurveTo(11, -12, 18, T); Lf.lineTo(18, 1); Lf.closePath();
+      const Rt = new Path2D(); Rt.moveTo(18, T); Rt.quadraticCurveTo(25, -12, 34.5, 1); Rt.lineTo(18, 1); Rt.closePath();
       g.lineJoin = 'round';
-      g.lineWidth = 6.4; g.strokeStyle = MET.ol; g.stroke(whole);   // kalın dış hat: telefonda uzaktan okunsun
-      // koyu çelik (açık gri metal açık mavi gökyüzü / karda kayboluyordu)
-      g.fillStyle = LG(g, 3, 0, 18, 0, [[0, '#6f7a8e'], [.6, '#b9c2d2'], [1, '#d9dfea']]); g.fill(L);
-      g.fillStyle = LG(g, 18, 0, 33, 0, [[0, '#3b4354'], [1, '#1d222d']]); g.fill(Rt);
+      g.lineWidth = 7.5; g.strokeStyle = MET.ol; g.stroke(whole);   // kalın dış hat: telefonda uzaktan okunsun
+      g.fillStyle = LG(g, 2, 0, 18, 0, [[0, '#8a95aa'], [.5, '#dfe5ee'], [1, '#f6f8fc']]); g.fill(Lf);
+      g.fillStyle = LG(g, 18, 0, 34, 0, [[0, '#5a6478'], [1, '#262c38']]); g.fill(Rt);
       g.save(); g.clip(whole);
-      // kırmızı tehlike ucu (üst ~%45)
-      g.fillStyle = LG(g, 0, T, 0, -14, [[0, '#ffb09a'], [.3, '#ff3a3a'], [.8, '#d0101e'], [1, 'rgba(150,8,18,0)']]); g.fillRect(0, T - 4, 18, 30);
-      g.fillStyle = LG(g, 0, T, 0, -14, [[0, '#e03a3a'], [.45, '#a00a16'], [1, 'rgba(80,0,8,0)']]); g.fillRect(18, T - 4, 18, 30);
-      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, -5, 40, 7);
+      // uç: beyaz-sıcak tepe + kırmızı tehlike bandı (üst ~%45)
+      g.fillStyle = LG(g, 0, T, 0, -16, [[0, '#ffffff'], [.14, '#ffd0c0'], [.3, '#ff3a3a'], [.78, '#c80e1e'], [1, 'rgba(150,8,18,0)']]); g.fillRect(0, T - 4, 18, 36);
+      g.fillStyle = LG(g, 0, T, 0, -16, [[0, '#ffe8e0'], [.14, '#ff9a90'], [.3, '#d82a30'], [.78, '#900a14'], [1, 'rgba(80,0,8,0)']]); g.fillRect(18, T - 4, 18, 36);
+      g.fillStyle = 'rgba(0,0,0,0.32)'; g.fillRect(0, -5, 40, 7);
       g.restore();
-      g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = 1.8; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(9, -5); g.quadraticCurveTo(13.6, -13, 16.6, -31); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = 2; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(8.5, -5); g.quadraticCurveTo(13.4, -14, 16.6, -38); g.stroke();
       g.lineWidth = 2.8; g.strokeStyle = MET.ol; g.stroke(whole);
     });
   }
   function spikeSmallSpr() {
-    return spr('spikeS2', 20, 30, 10, 26, g => {
-      const p = new Path2D(); p.moveTo(-7.5, 1); p.quadraticCurveTo(-2, -7, 0, -23); p.quadraticCurveTo(2, -7, 7.5, 1); p.closePath();
-      g.lineJoin = 'round'; g.lineWidth = 4; g.strokeStyle = MET.ol; g.stroke(p);
-      g.fillStyle = LG(g, -7, 0, 7, 0, [[0, '#6f7a8e'], [.48, '#c9d0dc'], [.52, '#3b4354'], [1, '#1d222d']]); g.fill(p);
-      g.save(); g.clip(p); g.fillStyle = LG(g, 0, -23, 0, -11, [[0, '#ff4a4a'], [1, 'rgba(180,10,20,0)']]); g.fillRect(-8, -24, 16, 13); g.restore();
+    return spr('spikeS3', 22, 34, 11, 30, g => {
+      const p = new Path2D(); p.moveTo(-8, 1); p.quadraticCurveTo(-2.5, -8, 0, -27); p.quadraticCurveTo(2.5, -8, 8, 1); p.closePath();
+      g.lineJoin = 'round'; g.lineWidth = 4.6; g.strokeStyle = MET.ol; g.stroke(p);
+      g.fillStyle = LG(g, -8, 0, 8, 0, [[0, '#8a95aa'], [.48, '#e6ebf3'], [.52, '#4a5468'], [1, '#262c38']]); g.fill(p);
+      g.save(); g.clip(p); g.fillStyle = LG(g, 0, -27, 0, -12, [[0, '#ffffff'], [.25, '#ff4a4a'], [1, 'rgba(180,10,20,0)']]); g.fillRect(-9, -28, 18, 16); g.restore();
     });
   }
-  /** Taban plakası (sarı-siyah tehlike şeritli), genişlik başına önbellek */
+  /** Taban plakası: koyu plaka + kırmızı-beyaz tehlike şeritleri (her temada zeminle zıt), genişlik başına önbellek */
   function spikePlateSpr(pw) {
     pw = Math.round(pw);
-    return spr('spkpl' + pw, pw + 6, 15, 3, 3, g => {
-      const p = new Path2D(); rrp(p, 0, 0, pw, 10, 3.5);
-      g.fillStyle = LG(g, 0, 0, 0, 10, [[0, '#7c8597'], [.45, '#4c5466'], [1, '#262b38']]); g.fill(p);
+    return spr('spkpl3' + pw, pw + 8, 20, 4, 4, g => {
+      const p = new Path2D(); rrp(p, 0, 0, pw, 12, 4);
+      g.lineJoin = 'round'; g.lineWidth = 7; g.strokeStyle = MET.ol; g.stroke(p);
+      g.fillStyle = LG(g, 0, 0, 0, 12, [[0, '#6c7588'], [.4, '#3c4454'], [1, '#1c2029']]); g.fill(p);
       g.save(); g.clip(p);
-      g.fillStyle = '#ffcc22'; g.fillRect(0, 3.2, pw, 4.4);
-      g.fillStyle = '#17141c';
-      for (let x = -8; x < pw + 8; x += 9) { g.beginPath(); g.moveTo(x, 7.6); g.lineTo(x + 4.5, 7.6); g.lineTo(x + 8.9, 3.2); g.lineTo(x + 4.4, 3.2); g.closePath(); g.fill(); }
-      g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(3, 1, pw - 6, 1.3);
+      g.fillStyle = '#ffffff'; g.fillRect(0, 3.5, pw, 5.5);
+      g.fillStyle = '#e8202e';
+      for (let x = -10; x < pw + 10; x += 12) { g.beginPath(); g.moveTo(x, 9); g.lineTo(x + 6, 9); g.lineTo(x + 11.5, 3.5); g.lineTo(x + 5.5, 3.5); g.closePath(); g.fill(); }
+      g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(3, 1, pw - 6, 1.4);
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, 10, pw, 2);
       g.restore();
-      g.lineJoin = 'round'; g.lineWidth = 3; g.strokeStyle = MET.ol; g.stroke(p);
+      g.lineWidth = 3; g.strokeStyle = MET.ol; g.stroke(p);
     });
   }
   function drawSpikes(ctx, L, vx0, vx1) {
@@ -2185,128 +2187,127 @@
       const gy = s.y + s.h, n = Math.max(1, Math.round(s.w / 36)), cx = s.x + s.w / 2;
       // arkada yumuşak kırmızı hale (önbellekli sprite, nabız) + altta koyu gölge
       ctx.save();
-      ctx.globalAlpha = .36 + .12 * Math.sin(tk * 4 + s.x * .01);
-      ctx.drawImage(halo.c, cx - s.w / 2 - 30, gy - 70, s.w + 60, 80);
+      ctx.globalAlpha = .38 + .12 * Math.sin(tk * 4 + s.x * .01);
+      ctx.drawImage(halo.c, cx - s.w / 2 - 32, gy - 78, s.w + 64, 88);
       ctx.restore();
-      E(ctx, cx, gy + 1, s.w / 2 + 14, 4.5, 'rgba(0,0,0,0.32)');
-      for (let i = 0; i <= n; i++) drawS(ctx, sm, s.x + i * 36, gy - 1);
-      for (let i = 0; i < n; i++) drawS(ctx, big, s.x + i * 36, gy - 1);
-      // taban plakası (hitbox'tan 6'şar birim geniş)
-      drawS(ctx, spikePlateSpr(s.w + 12), s.x - 6, gy - 5);
+      E(ctx, cx, gy + 2, s.w / 2 + 16, 5, 'rgba(0,0,0,0.32)');
+      for (let i = 0; i <= n; i++) drawS(ctx, sm, s.x + i * 36, gy - 2);
+      for (let i = 0; i < n; i++) drawS(ctx, big, s.x + i * 36, gy - 2);
+      // taban plakası (hitbox'tan 6'şar birim geniş), dikenler plakanın üstüne oturur
+      drawS(ctx, spikePlateSpr(s.w + 12), s.x - 6, gy - 7);
     }
   }
 
-  /** Ezici başlığı (dişler dahil). Orijin: dişlerin alt ucu (öldüren bölgenin alt kenarı), yatay merkez. */
-  function crushHeadSpr(id, w) {
-    const W = Math.round(w) + 12, H = 92;
-    const stone = id === 'forest' || id === 'castle' || id === 'desert' || id === 'tropic';
-    return spr('crh:' + (stone ? 's' : 'm') + W, W + 10, H + 10, (W + 10) / 2, H + 4, g => {
-      const ol = '#120e18';
-      // dişler
-      const n = Math.max(3, Math.round(W / 15)), tw = W / n;
-      const teeth = new Path2D();
-      for (let i = 0; i < n; i++) { const x = -W / 2 + i * tw; teeth.moveTo(x + 1, -16); teeth.quadraticCurveTo(x + tw * .38, -6, x + tw / 2, 1); teeth.quadraticCurveTo(x + tw * .62, -6, x + tw - 1, -16); teeth.closePath(); }
-      g.lineJoin = 'round'; g.lineWidth = 5.2; g.strokeStyle = ol; g.stroke(teeth);
-      g.fillStyle = LG(g, -W / 2, 0, W / 2, 0, [[0, '#dfe5ee'], [.5, '#9aa3b4'], [1, '#596274']]); g.fill(teeth);
-      g.save(); g.clip(teeth); g.fillStyle = LG(g, 0, -9, 0, 1, [[0, 'rgba(220,30,40,0)'], [1, '#e8202e']]); g.fillRect(-W, -10, W * 2, 12); g.restore();
-      // gövde
-      const b = new Path2D(); rrp(b, -W / 2, -H, W, H - 14, 8);
-      g.fillStyle = stone ? LG(g, 0, -H, 0, -14, [[0, '#b6aec4'], [.5, '#8a829e'], [1, '#5d5674']]) : LG(g, 0, -H, 0, -14, [[0, '#d2d8e2'], [.45, '#98a1b2'], [1, '#596274']]);
-      g.fill(b);
-      g.save(); g.clip(b);
-      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(-W / 2, -H, W * .45, H);
-      g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(W * .2, -H, W * .3, H);
-      // uyarı şeridi
-      const sy = -H * .5 - 8, sh = 15;
-      g.fillStyle = '#ffcc22'; g.fillRect(-W / 2, sy, W, sh);
-      g.fillStyle = '#17141c';
-      for (let x = -W / 2 - 20; x < W / 2 + 10; x += 14) { g.beginPath(); g.moveTo(x, sy + sh); g.lineTo(x + 7, sy + sh); g.lineTo(x + 7 + sh, sy); g.lineTo(x + sh, sy); g.closePath(); g.fill(); }
-      g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(-W / 2, sy, W, 2);
-      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(-W / 2, sy + sh - 2, W, 2);
-      g.strokeStyle = ol; g.lineWidth = 2; g.beginPath(); g.moveTo(-W / 2, sy); g.lineTo(W / 2, sy); g.moveTo(-W / 2, sy + sh); g.lineTo(W / 2, sy + sh); g.stroke();
-      if (stone) {
-        g.strokeStyle = 'rgba(30,20,40,0.55)'; g.lineWidth = 1.3;
-        g.beginPath(); g.moveTo(-W * .3, -H + 4); g.lineTo(-W * .22, -H + 14); g.lineTo(-W * .28, -H + 22); g.moveTo(W * .25, -22); g.lineTo(W * .18, -30); g.lineTo(W * .26, -38); g.stroke();
-        // demir kuşak
-        g.fillStyle = '#3a3646'; g.fillRect(-W / 2, -H + 6, W, 7); g.fillRect(-W / 2, -24, W, 7);
-        for (let x = -W / 2 + 6; x < W / 2 - 3; x += 12) { E(g, x, -H + 9.5, 1.8, 1.8, '#9a94aa'); E(g, x, -20.5, 1.8, 1.8, '#9a94aa'); }
-      } else {
-        g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1.4; g.beginPath(); rrp(g, -W / 2 + 4, -H + 4, W - 8, H - 22, 5); g.stroke();
-        for (const cx of [-W / 2 + 8, W / 2 - 8]) for (const cy of [-H + 8, -22]) { E(g, cx, cy, 2.6, 2.6, '#2a303c'); E(g, cx - .6, cy - .6, 1, 1, '#ffffff'); }
-      }
-      // kızgın gözler
-      const ey = -H + 26;
-      for (const sx of [-1, 1]) {
-        const ex = sx * Math.min(12, W * .18);
-        g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(ex, ey, 5.5, 4.5, 0, 0, TAU); g.fill();
-        g.fillStyle = '#14101c'; g.beginPath(); g.arc(ex - sx * 1, ey + 1, 2.4, 0, TAU); g.fill();
-        g.strokeStyle = '#14101c'; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(ex - sx * 7, ey - 8); g.lineTo(ex + sx * 3, ey - 4); g.stroke();
-      }
-      g.restore();
-      g.lineWidth = 4.2; g.strokeStyle = ol; g.stroke(b);
-    });
+  /* ---- KAYMA ENGELLERİ (ezici + testere makinesi): zemine oturan İSKELE KAPISI — Fun Run gibi "altından KAY" ----
+     İki direk zeminden yükselir, kalın tehlikeli kiriş TAM baş hizasında (diş uçları = öldüren bölgenin alt kenarı,
+     zeminin 26 px üstü), altında açık boşluk: boşluğa KATI HİÇBİR ŞEY çizilmez; zeminde "kayma şeridi" ipucu.
+     Malzeme temaya göre (ahşap, şeker bastonu, buz, taş, kumtaşı, metal). Hepsi önbellekli sprite; karede birkaç drawImage. */
+  const GATE_MAT = {
+    wood: { post: ['#d9a35c', '#9a6430', '#5a3614'], beam: ['#c08a4c', '#7a4a1e'], ol: '#2a1606', kind: 'wood' },
+    candy: { post: ['#fff8fb', '#ff6f8f', '#c82a58'], beam: ['#9a5630', '#4e2612'], ol: '#3a1020', kind: 'cane' },
+    ice: { post: ['#f4fcff', '#a6def8', '#4aa0d8'], beam: ['#d6f1ff', '#6ab8e8'], ol: '#1c3a66', kind: 'ice' },
+    stone: { post: ['#a89ec4', '#766c92', '#463c5e'], beam: ['#6a607e', '#342a46'], ol: '#120a1c', kind: 'stone' },
+    sand: { post: ['#f6dca8', '#d4a262', '#a0702e'], beam: ['#c08a4c', '#7a4a1e'], ol: '#3e1f08', kind: 'wood' },
+    metal: { post: ['#d6dce6', '#8a94a6', '#3a4152'], beam: ['#9aa3b4', '#424a5c'], ol: '#0c0e16', kind: 'metal' }
+  };
+  const GATE_OF = { forest: 'wood', tropic: 'wood', candy: 'candy', snow: 'ice', castle: 'stone', desert: 'sand', space: 'metal', city: 'metal' };
+  const gateKey = id => GATE_OF[id] || 'wood';
+  const gateMat = id => GATE_MAT[gateKey(id)];
+  /** Dikey direk: x merkez, zeminden (y=0) yukarı h, genişlik w; malzeme ayrıntısı (bastonda şerit, metalde perçin...) */
+  function gatePost(g, m, x, h, w) {
+    const p = new Path2D(); rrp(p, x - w / 2, -h, w, h + 4, 3);
+    g.lineJoin = 'round'; g.lineWidth = 5; g.strokeStyle = m.ol; g.stroke(p);
+    g.fillStyle = LG(g, x - w / 2, 0, x + w / 2, 0, [[0, m.post[0]], [.45, m.post[1]], [1, m.post[2]]]); g.fill(p);
+    g.save(); g.clip(p);
+    if (m.kind === 'cane') { g.fillStyle = '#ffffff'; for (let y = -h + 4; y < 4; y += 16) { g.beginPath(); g.moveTo(x - w, y); g.lineTo(x + w, y - 9); g.lineTo(x + w, y - 1); g.lineTo(x - w, y + 8); g.closePath(); g.fill(); } }
+    else if (m.kind === 'wood') { g.strokeStyle = 'rgba(70,35,10,0.5)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x - 2, -h + 6); g.lineTo(x - 1, -10); g.moveTo(x + 3, -h + 20); g.lineTo(x + 3.5, -30); g.stroke(); }
+    else if (m.kind === 'metal') { for (let y = -h + 10; y < -6; y += 22) { E(g, x, y, 2.2, 2.2, '#1c2029'); E(g, x - .6, y - .6, .9, .9, '#ffffff'); } }
+    else if (m.kind === 'stone') { g.strokeStyle = 'rgba(20,10,30,0.5)'; g.lineWidth = 1.4; for (let y = -h + 14; y < -4; y += 26) { g.beginPath(); g.moveTo(x - w / 2, y); g.lineTo(x + w / 2, y + 1.5); g.stroke(); } }
+    else if (m.kind === 'ice') { g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(x - w * .3, -h + 8); g.lineTo(x - w * .3, -14); g.stroke(); }
+    g.fillStyle = 'rgba(255,255,255,0.28)'; g.fillRect(x - w / 2 + 1.5, -h + 1, 2.2, h);
+    g.restore();
+    g.lineWidth = 2.4; g.strokeStyle = m.ol; g.stroke(p);
   }
-  function chainSpr() {
-    return spr('chain', 16, 26, 8, 0, g => {
-      // dikey halka (önde) + yan halka
-      g.lineWidth = 4.4; g.strokeStyle = '#141018';
-      g.beginPath(); g.ellipse(0, 6.5, 4.4, 7.5, 0, 0, TAU); g.stroke();
-      g.lineWidth = 2.6; g.strokeStyle = '#8a8f9c'; g.stroke();
-      g.lineWidth = 1; g.strokeStyle = '#e2e6ee'; g.beginPath(); g.ellipse(0, 6.5, 4.4, 7.5, 0, 3.6, 4.6); g.stroke();
-      g.fillStyle = '#141018'; g.fillRect(-2.2, 12.5, 4.4, 14);
-      g.fillStyle = '#6a6f7c'; g.fillRect(-1.1, 13, 2.2, 13);
+  /** Tehlikeli kiriş: x0..x1 arası, diş uçları yb'de (öldüren bölgenin alt kenarı), gövde kalınlığı th (dişlerin 15 px üstünde);
+      tx0..tx1 arası aşağı bakan çelik dişler (kırmızı uç). tx1 <= tx0 → dişsiz (testere makinesinin üst kirişi). */
+  function gateBeam(g, m, x0, x1, yb, th, tx0, tx1) {
+    const teethH = tx1 > tx0 ? 15 : 0, yB = yb - teethH, yT = yB - th;
+    const p = new Path2D(); rrp(p, x0, yT, x1 - x0, th, 5);
+    g.lineJoin = 'round'; g.lineWidth = 6; g.strokeStyle = m.ol; g.stroke(p);
+    g.fillStyle = LG(g, 0, yT, 0, yB, [[0, m.beam[0]], [1, m.beam[1]]]); g.fill(p);
+    g.save(); g.clip(p);
+    // kırmızı-beyaz tehlike şeridi (kirişin ortasında; her temada aynı tehlike dili)
+    const sh = Math.min(12, th - 10), sy = yT + (th - sh) / 2;
+    g.fillStyle = '#ffffff'; g.fillRect(x0, sy, x1 - x0, sh);
+    g.fillStyle = '#e8202e';
+    for (let x = x0 - 14; x < x1 + 14; x += 16) { g.beginPath(); g.moveTo(x, sy + sh); g.lineTo(x + 8, sy + sh); g.lineTo(x + 8 + sh, sy); g.lineTo(x + sh, sy); g.closePath(); g.fill(); }
+    g.strokeStyle = m.ol; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, sy); g.lineTo(x1, sy); g.moveTo(x0, sy + sh); g.lineTo(x1, sy + sh); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x0, yT + 1.5, x1 - x0, 2);
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x0, yB - 4, x1 - x0, 4);
+    g.restore();
+    g.lineWidth = 3; g.strokeStyle = m.ol; g.stroke(p);
+    if (teethH) {
+      const n = Math.max(3, Math.round((tx1 - tx0) / 15)), tw = (tx1 - tx0) / n;
+      const teeth = new Path2D();
+      for (let i = 0; i < n; i++) { const x = tx0 + i * tw; teeth.moveTo(x + 1, yB - 1); teeth.quadraticCurveTo(x + tw * .38, yb - 6, x + tw / 2, yb); teeth.quadraticCurveTo(x + tw * .62, yb - 6, x + tw - 1, yB - 1); teeth.closePath(); }
+      g.lineWidth = 5; g.strokeStyle = MET.ol; g.stroke(teeth);
+      g.fillStyle = LG(g, tx0, 0, tx1, 0, [[0, '#e6ebf3'], [.5, '#9aa3b4'], [1, '#596274']]); g.fill(teeth);
+      g.save(); g.clip(teeth); g.fillStyle = LG(g, 0, yb - 11, 0, yb, [[0, 'rgba(232,32,46,0)'], [1, '#ff2a36']]); g.fillRect(tx0 - 5, yb - 12, tx1 - tx0 + 10, 13); g.restore();
+    }
+  }
+  /** Kayma şeridi ipucu (ortak: ezici, testere): engel altındaki boşlukta zeminde açık şerit + akan sarı "kay" okları + gölge.
+      Boşluğun kendisine katı hiçbir şey çizilmez (ok çizgileri yarı saydam). */
+  function slideLane(ctx, x0, x1, ground) {
+    const pulse = .55 + .45 * Math.sin(tk * 5 + x0 * .02);
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    E(ctx, (x0 + x1) / 2, ground + 1, (x1 - x0) / 2 + 4, 4.5, 'rgba(0,0,0,0.28)');
+    ctx.globalAlpha = .3 + .12 * pulse; ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); rrp(ctx, x0, ground - 4, x1 - x0, 4, 2); ctx.fill();
+    const off = (tk * 36) % 22, ay = ground - 13;
+    ctx.beginPath();
+    for (let x = x0 + 6 + off; x < x1 - 4; x += 22) { ctx.moveTo(x - 4, ay - 5); ctx.lineTo(x + 2, ay); ctx.lineTo(x - 4, ay + 5); }
+    ctx.globalAlpha = (.5 + .4 * pulse) * .6; ctx.strokeStyle = '#3a1a00'; ctx.lineWidth = 6; ctx.stroke();   // koyu taban
+    ctx.globalAlpha = .5 + .4 * pulse; ctx.strokeStyle = '#fff2a0'; ctx.lineWidth = 3.2; ctx.stroke();        // sarı ok
+    ctx.restore();
+  }
+  const GATE_H = 340;   // ezici iskelesinin sprite yüksekliği (zeminden); öldüren bölge 300 px, direkler karede ekran dışına uzatılır
+  /** Ezici iskele kapısı: direkler + üstte kapalı kafes (zıplayarak geçilmez) + baş hizasında dişli kiriş. Genişlik 4'e yuvarlanır. */
+  function crushGateSpr(id, w) {
+    const W = Math.round(w / 4) * 4, m = gateMat(id);
+    const px = W / 2 + 16, PW = 16, SW = W + 64;
+    return spr('cgate:' + gateKey(id) + ':' + W, SW, GATE_H + 10, SW / 2, GATE_H + 4, g => {
+      // üst kafes: direkler arasında çapraz destekler + yatay raylar (yarı saydam, kirişten hafif)
+      g.save(); g.beginPath(); g.rect(-px, -GATE_H, px * 2, GATE_H - 70); g.clip();
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      const lat = new Path2D();
+      for (let y = -GATE_H + 10; y < -70; y += 64) { lat.moveTo(-px, y); lat.lineTo(px, y + 64); lat.moveTo(px, y); lat.lineTo(-px, y + 64); lat.moveTo(-px, y); lat.lineTo(px, y); }
+      g.lineWidth = 9; g.strokeStyle = rgba(m.ol, .55); g.stroke(lat);
+      g.lineWidth = 5; g.strokeStyle = rgba(m.post[1], .8); g.stroke(lat);
+      g.lineWidth = 1.2; g.strokeStyle = rgba(m.post[0], .5); g.stroke(lat);
+      g.restore();
+      gatePost(g, m, -px, GATE_H, PW); gatePost(g, m, px, GATE_H, PW);
+      // tehlikeli kiriş: diş uçları zeminin 26 px üstünde (= öldüren bölgenin alt kenarı); dişler öldüren genişlikte
+      gateBeam(g, m, -px - PW / 2 + 1, px + PW / 2 - 1, -26, 34, -W / 2, W / 2);
     });
   }
   function drawCrush(ctx, L, vx0, vx1, vy0) {
-    const id = pal().id;
-    const ch = chainSpr();
+    const id = pal().id, m = gateMat(id);
     for (const k of L.crush) {
-      if (k.x > vx1 + 40 || k.x + k.w < vx0 - 40) continue;
-      const cx = k.x + k.w / 2, bot = k.y + k.h, ground = bot + 26;
-      // zemindeki gölge (oyuncu okuyabilsin)
-      const shd = G.glowSprite('rgba(10,0,16,0.55)', 32);
-      ctx.drawImage(shd.c, cx - k.w / 2 - 16, ground - 6, k.w + 32, 13);
-      // TEHLİKE İPUCU: zeminde nabız atan kırmızı bant + dişlerin altındaki boşlukta akan "kay →" okları
-      // (ezici sabittir, altından KAYARAK geçilir; okunaklılık: tehlike dili kırmızı, geçiş yönü sarı)
-      {
-        const pulse = .55 + .45 * Math.sin(tk * 5 + k.x * .02);
-        ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.globalAlpha = .22 + .18 * pulse; ctx.fillStyle = '#ff2a2a';
-        ctx.beginPath(); rrp(ctx, k.x - 10, ground - 4, k.w + 20, 4.5, 2); ctx.fill();
-        const off = (tk * 36) % 22, ay = ground - 12;
-        ctx.beginPath();
-        for (let x = k.x - 14 + off; x < k.x + k.w + 6; x += 22) { ctx.moveTo(x - 4, ay - 5); ctx.lineTo(x + 2, ay); ctx.lineTo(x - 4, ay + 5); }
-        ctx.globalAlpha = (.45 + .4 * pulse) * .6; ctx.strokeStyle = '#3a1a00'; ctx.lineWidth = 6; ctx.stroke();   // koyu taban
-        ctx.globalAlpha = .45 + .4 * pulse; ctx.strokeStyle = '#fff2a0'; ctx.lineWidth = 3.2; ctx.stroke();        // sarı ok
-        ctx.restore();
+      if (k.x > vx1 + 50 || k.x + k.w < vx0 - 50) continue;
+      const cx = k.x + k.w / 2, ground = k.y + k.h + 26, W = Math.round(k.w / 4) * 4, px = W / 2 + 16;
+      // direklerin ekran dışına uzantısı (sprite 340 px'e kadar; üstü düz)
+      const top = Math.min(ground - GATE_H, vy0 - 20), ext = ground - GATE_H - top + 2;
+      if (ext > 2) for (const sx of [-1, 1]) {
+        const x = cx + sx * px;
+        ctx.fillStyle = m.ol; ctx.fillRect(x - 10.5, top, 21, ext);
+        ctx.fillStyle = m.post[1]; ctx.fillRect(x - 8, top, 16, ext);
+        ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x - 6.5, top, 2.2, ext);
       }
-      // zincir(ler): tavan braketinden ekran dışına
-      const chains = k.w > 70 ? [cx - k.w * .28, cx + k.w * .28] : [cx];
-      const top = Math.min(k.y - 6, vy0 - 30);
-      for (const x of chains) for (let y = k.y - 22; y > top - 26; y -= 24) drawS(ctx, ch, x, y);
-      // braket
-      ctx.save(); ctx.translate(cx, k.y);
-      ctx.beginPath(); rrp(ctx, -k.w / 2 - 7, -6, k.w + 14, 20, 5);
-      ctx.fillStyle = cg(ctx, 'crush:br', g => LG(g, 0, -6, 0, 14, [[0, '#6c7386'], [1, '#2c3140']])); ctx.fill();
-      ctx.lineWidth = 2.6; ctx.strokeStyle = '#120e18'; ctx.stroke();
-      for (let x = -k.w / 2 - 1; x <= k.w / 2 + 1; x += Math.max(10, (k.w + 2) / 3)) { E(ctx, x, 4, 2, 2, '#1a1e28'); E(ctx, x - .5, 3.5, .8, .8, '#e2e6ee'); }
-      // piston mili
-      const sw = Math.max(14, k.w * .34), ht = bot - 92 + 4 - (k.y + 14);
-      if (ht > 0) {
-        ctx.save(); ctx.translate(-sw / 2, 14); ctx.scale(sw, 1);
-        ctx.fillStyle = cg(ctx, 'crush:shaft', g => LG(g, 0, 0, 1, 0, [[0, '#3c4252'], [.3, '#c9d0dc'], [.45, '#f4f7fb'], [.7, '#8c95a6'], [1, '#353b4a']]));
-        ctx.fillRect(0, 0, 1, ht);
-        ctx.restore();
-        ctx.strokeStyle = '#120e18'; ctx.lineWidth = 2.4;
-        ctx.beginPath(); ctx.moveTo(-sw / 2, 14); ctx.lineTo(-sw / 2, 14 + ht); ctx.moveTo(sw / 2, 14); ctx.lineTo(sw / 2, 14 + ht); ctx.stroke();
-        for (let y = 30; y < ht - 6; y += 46) { ctx.fillStyle = 'rgba(20,16,30,0.5)'; ctx.fillRect(-sw / 2, 14 + y, sw, 3); }
-      }
-      ctx.restore();
-      // başlık
-      drawS(ctx, crushHeadSpr(id, k.w), cx, bot);
-      // yanıp sönen uyarı lambası
+      slideLane(ctx, cx - px - 6, cx + px + 6, ground);
+      drawS(ctx, crushGateSpr(id, k.w), cx, ground);
+      // kirişte yanıp sönen uyarı lambası
       const on = Math.sin(tk * 7 + k.x * .01) > 0;
-      const ly2 = bot - 92 + 12, lx = cx + k.w / 2 - 2;
+      const lx = cx + W / 2 + 6, ly2 = ground - 26 - 15 - 34 + 7;
       E(ctx, lx, ly2, 5, 5, '#120e18');
       E(ctx, lx, ly2, 3.6, 3.6, on ? '#ff3a3a' : '#7a1218');
       if (on) {
@@ -2346,59 +2347,34 @@
       E(g, 0, 0, 8, 8, '#2a303c'); E(g, 0, 0, 5.5, 5.5, '#c81e2a'); E(g, -1.4, -1.4, 2, 2, '#ff9a9a');
     });
   }
+  const SAW_H = 150;   // testere iskelesinin yüksekliği (zeminden üst kirişe)
+  /** Testere iskelesi: iki direk + tehlike şeritli üst kiriş; bıçak askı koluyla kirişten sarkar (karede çizilir) */
+  function sawGateSpr(id) {
+    const m = gateMat(id), px = 46, PW = 14;
+    return spr('sgate:' + gateKey(id), 130, SAW_H + 36, 65, SAW_H + 30, g => {
+      gatePost(g, m, -px, SAW_H, PW); gatePost(g, m, px, SAW_H, PW);
+      gateBeam(g, m, -px - PW / 2 + 1, px + PW / 2 - 1, -SAW_H, 22, 0, 0);
+    });
+  }
   function drawSaws(ctx, L, vx0, vx1) {
-    const bl = sawBladeSpr(), sawHalo = G.glowSprite('rgba(255,60,40,0.62)', 40);
+    const id = pal().id, m = gateMat(id);
+    const bl = sawBladeSpr(), sawHalo = G.glowSprite('rgba(255,60,40,0.62)', 40), gate = sawGateSpr(id);
     for (const s of L.saws) {
-      if (s.cx < vx0 - 70 || s.cx > vx1 + 70) continue;
-      const px = s.px != null ? s.px : s.cx, py = s.py != null ? s.py : s.cy;
-      const top = s.cy - s.amp - s.r - 12, bot = s.cy + 80;
-      // evre (game.js ile aynı: seviye saati S.lt): phs −1 tepe … +1 dip; dphs > 0 → bıçak aşağı iniyor
-      const lt = (S.lt || 0) * s.sp + s.ph, phs = Math.sin(lt), dphs = Math.cos(lt);
-      const lowK = (phs + 1) * .5;
-      // TEHLİKE İPUCU: inişte (ve dipteyken) rayın alt yarısı kırmızı yanar, zeminde tehlike halkası belirir; çıkışta hızla söner
-      const warn = dphs > 0 ? .25 + .75 * lowK : Math.max(0, lowK - .4) * 1.2;
-      if (warn > .02) {
-        const pulse = .7 + .3 * Math.sin(tk * 9);
-        ctx.save();
-        ctx.globalAlpha = warn;
-        ctx.translate(s.cx - 22, s.cy - s.amp - s.r); ctx.scale(44, bot - 4 - (s.cy - s.amp - s.r));
-        ctx.fillStyle = cg(ctx, 'saw:warn2', g => LG(g, 0, 0, 0, 1, [[0, 'rgba(255,40,40,0)'], [.45, 'rgba(255,40,40,0.3)'], [1, 'rgba(255,70,40,0.7)']]));
-        ctx.fillRect(0, 0, 1, 1);
-        ctx.restore();
-        ctx.save(); ctx.globalAlpha = warn * pulse;
-        E(ctx, s.cx, bot - 2, s.r + 20, 6.5, 'rgba(255,40,40,0.4)');
-        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,80,60,0.95)'; ctx.beginPath(); ctx.ellipse(s.cx, bot - 2, s.r + 20, 6.5, 0, 0, TAU); ctx.stroke();
-        ctx.restore();
-      }
-      ctx.save(); ctx.translate(s.cx, 0);
-      // ray plakası
-      ctx.beginPath(); rrp(ctx, -9, top, 18, bot - top + 2, 7);
-      ctx.save(); ctx.translate(-9, 0); ctx.scale(18, 1);
-      ctx.fillStyle = cg(ctx, 'saw:rail', g => LG(g, 0, 0, 1, 0, [[0, '#2c3140'], [.3, '#8a93a6'], [.5, '#c9d0dc'], [.75, '#5a6274'], [1, '#262b38']]));
-      ctx.fill();
-      ctx.restore();
-      ctx.lineWidth = 2.6; ctx.strokeStyle = MET.ol; ctx.stroke();
-      ctx.beginPath(); rrp(ctx, -3, top + 10, 6, bot - top - 20, 3); ctx.fillStyle = '#0c0e14'; ctx.fill();
-      for (let y = top + 14; y < bot - 10; y += 26) { E(ctx, -6, y, 1.6, 1.6, '#1a1e28'); E(ctx, 6, y + 13, 1.6, 1.6, '#1a1e28'); }
-      // üst gövde
-      ctx.beginPath(); rrp(ctx, -15, top - 12, 30, 20, 6);
-      ctx.fillStyle = '#ffcc22'; ctx.fill();
-      ctx.save(); ctx.clip();
-      ctx.fillStyle = '#17141c';
-      for (let x = -30; x < 20; x += 10) { ctx.beginPath(); ctx.moveTo(x, top + 8); ctx.lineTo(x + 5, top + 8); ctx.lineTo(x + 25, top - 12); ctx.lineTo(x + 20, top - 12); ctx.closePath(); ctx.fill(); }
-      ctx.restore();
-      ctx.beginPath(); rrp(ctx, -15, top - 12, 30, 20, 6);
-      ctx.lineWidth = 2.6; ctx.strokeStyle = MET.ol; ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(-11, top - 10, 22, 1.6);
-      // taban
-      ctx.beginPath(); ctx.moveTo(-22, bot + 3); ctx.lineTo(-13, bot - 12); ctx.lineTo(13, bot - 12); ctx.lineTo(22, bot + 3); ctx.closePath();
-      ctx.fillStyle = '#4a5162'; ctx.fill(); ctx.lineWidth = 2.6; ctx.strokeStyle = MET.ol; ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(-12, bot - 10, 24, 2);
-      // taşıyıcı
-      ctx.beginPath(); rrp(ctx, -11, py - 9, 22, 18, 5); ctx.fillStyle = '#3c4252'; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = MET.ol; ctx.stroke();
-      ctx.restore();
+      if (s.cx < vx0 - 80 || s.cx > vx1 + 80) continue;
+      const px = s.px != null ? s.px : s.cx, py = s.py != null ? s.py : s.cy + (s.off || 0);
+      const ground = s.cy + 80;   // game.js ile aynı: makine zemine oturur, bıçak baş hizasında, altından kayılır
+      slideLane(ctx, s.cx - 44, s.cx + 44, ground);
+      drawS(ctx, gate, s.cx, ground);
+      // askı kolu: üst kirişten bıçak merkezine (bıçağın arkasında)
+      const armTop = ground - SAW_H + 1, armH = Math.max(0, py - armTop);
+      ctx.fillStyle = m.ol; ctx.fillRect(px - 6.5, armTop, 13, armH);
+      ctx.save(); ctx.translate(px - 4.5, armTop);
+      ctx.fillStyle = cg(ctx, 'saw:arm', g => LG(g, 0, 0, 9, 0, [[0, '#3c4252'], [.35, '#c9d0dc'], [.6, '#8c95a6'], [1, '#353b4a']]));
+      ctx.fillRect(0, 0, 9, armH); ctx.restore();
+      // taşıyıcı göbek
+      ctx.beginPath(); rrp(ctx, px - 11, py - 9, 22, 18, 5); ctx.fillStyle = '#3c4252'; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = MET.ol; ctx.stroke();
       // bıçak + hareket bulanıklığı (hız: seviye saatinden — game.js ile aynı evre)
-      const vy = dphs * s.amp * s.sp;
+      const lt = (S.lt || 0) * s.sp + s.ph, vy = Math.cos(lt) * s.amp * s.sp;
       const ang = tk * 13;
       // tehlike halesi (önbellekli, source-over: açık gökte de okunur), hafif nabız
       ctx.save(); ctx.globalAlpha = .42 + .14 * Math.sin(tk * 8 + s.cx * .01);

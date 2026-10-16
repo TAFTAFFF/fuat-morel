@@ -2468,10 +2468,10 @@
     ctx.scale(face * SC, SC);
     if (fcol) {
       ctx.save(); ctx.globalAlpha *= 0.82 + 0.18 * sin(a.t * 4);
-      try { drawFig(ctx, id, skin, racerM, p, a.t, 'rim:' + fcol); } catch (e) { /* kenar ışığı çizilemedi */ }
+      try { drawFig(ctx, id, skin, racerM, p, a.t, 'rim:' + fcol, hat); } catch (e) { /* kenar ışığı çizilemedi */ }
       ctx.restore();
     }
-    drawFig(ctx, id, skin, racerM, p, a.t, true);
+    drawFig(ctx, id, skin, racerM, p, a.t, true, hat);
     ctx.restore();
     // öndeki efektler
     if (!blinkHide) drawSkinFx(ctx, skin, a, fx, fy, SC);

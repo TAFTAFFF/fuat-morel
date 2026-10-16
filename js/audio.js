@@ -6,7 +6,8 @@
      unlock()                     → ilk kullanıcı etkileşiminde ses bağlamını açar (kendisi de pointerup/touchend/click/keydown dinler;
                                     dokunmatikte touchstart/pointerdown etkinleştirme sayılmaz, orada beklenir)
      play(name, opts)             → efekt çalar. opts: {vol, pan, rate, when, r (yarışçı → otomatik ses/pan), x,y (dünya konumu), exact}
-     music(id | null, opts)       → 'forest'|'candy'|'snow'|'castle'|'menu'|'podium'|0..3|tema nesnesi|null — çapraz geçişli
+     music(id | null, opts)       → 'forest'|'candy'|'snow'|'castle'|'desert'|'space'|'city'|'tropic'|'menu'|'lobby'|'podium'|
+                                    tema indeksi|tema nesnesi (bilinmeyen tema → theme.base)|null — çapraz geçişli
      setVolume('music'|'sfx', v)  → 0..1, FM.save.settings'e yazar
      click(), hover()             → arayüz sesleri
      duck(amount, dur), mute(on), names(), songs(), ready, current, enabled
@@ -394,6 +395,43 @@
     roundbass(dst, t, f, d, v) {
       T(dst, { w: 'sine', f, t, a: 0.006, d: d + 0.06, g: v, sus: 0.8, rel: 0.06 });
       T(dst, { w: 'triangle', f: f * 2, t, a: 0.006, d: Math.min(d, 0.2) + 0.04, g: v * 0.16 });
+    },
+    // —— yeni temalar (çöl, uzay, şehir, tropik, lobi)
+    oud(dst, t, f, d, v) {     // ud / saz: tel çekişi — hafif aşağıdan kayarak oturan perde, hızla kararan tını
+      T(dst, { w: 'sawtooth', f: f * 0.982, f2: f, pt: 0.035, t, a: 0.002, d: Math.min(0.95, d + 0.35), g: v * 0.42, lp: Math.min(6000, f * 7), lp2: f * 1.6, ft: 0.28, lq: 1.4 });
+      T(dst, { w: 'triangle', f, t, a: 0.002, d: Math.min(0.7, d + 0.2), g: v * 0.45 });
+    },
+    ney(dst, t, f, d, v) {     // ney / flüt: nefesli, yavaş açılan, gecikmeli vibrato
+      T(dst, { w: 'sine', f, t, a: 0.06, d: d + 0.12, g: v * 0.85, sus: 0.85, rel: 0.12, vib: d > 0.25 ? 5.2 : 0, vd: f * 0.011, vdl: 0.18 });
+      T(dst, { w: 'triangle', f: f * 2, t, a: 0.05, d: d + 0.1, g: v * 0.07, sus: 0.8, rel: 0.1 });
+      N(dst, { k: 'pink', t, a: 0.04, d: d + 0.1, g: v * 0.16, bp: Math.min(9000, f * 2), bq: 2.5, sus: 0.55, rel: 0.1 });
+    },
+    steel(dst, t, f, d, v) {   // çelik davul (steel pan): FM gövde + 2. ve 3. kısmi
+      FMt(dst, { t, f, ratio: 2, idx: 1.1, idxD: 0.09, idxEnd: 0.12, d: Math.min(1.1, d + 0.45), g: v * 0.9 });
+      T(dst, { w: 'sine', f: f * 2.005, t, a: 0.002, d: 0.32, g: v * 0.22 });
+      T(dst, { w: 'sine', f: f * 3.01, t, a: 0.001, d: 0.09, g: v * 0.08 });
+    },
+    synL(dst, t, f, d, v) {    // synthwave lead: iki kaymış testere, açılan filtre, gecikmeli vibrato
+      T(dst, { w: 'sawtooth', f, t, a: 0.012, d: d + 0.08, g: v * 0.42, sus: 0.8, rel: 0.09, lp: f * 2, lp2: Math.min(5200, f * 5), ft: 0.07, det: -9, vib: d > 0.28 ? 5.5 : 0, vd: f * 0.007, vdl: 0.2 });
+      T(dst, { w: 'sawtooth', f, t, a: 0.012, d: d + 0.08, g: v * 0.32, sus: 0.8, rel: 0.09, lp: f * 2, lp2: Math.min(5200, f * 4.5), ft: 0.08, det: 10 });
+    },
+    clav(dst, t, f, d, v) {    // funk klavinet: kısa, keskin, kapanan filtre
+      T(dst, { w: 'p12', f, t, a: 0.002, d: Math.min(0.2, d + 0.04), g: v, lp: Math.min(7000, f * 9), lp2: f * 2.2, ft: 0.09, lq: 2, hp: 180 });
+    },
+    arpS(dst, t, f, d, v) {    // synth arpej: kare, kapanan filtre (uzay / şehir)
+      T(dst, { w: 'sq', f, t, a: 0.002, d: 0.16, g: v * 0.85, lp: 3200, lp2: 900, ft: 0.12 });
+    },
+    slapbass(dst, t, f, d, v) { // funk bas: perkütif testere + temel sinüs
+      T(dst, { w: 'sawtooth', f, t, a: 0.003, d: d + 0.04, g: v * 0.5, sus: 0.55, rel: 0.05, lp: 2400, lp2: 480, ft: 0.07, lq: 3 });
+      T(dst, { w: 'sine', f, f2: f, t, a: 0.003, d: d + 0.04, g: v * 0.62, sus: 0.85, rel: 0.05 });
+    },
+    synbass(dst, t, f, d, v) { // uzay: yumuşak darbe bas, açılıp kapanan filtre
+      T(dst, { w: 'p25', f, t, a: 0.004, d: d + 0.04, g: v * 0.45, sus: 0.7, rel: 0.05, lp: 1600, lp2: 380, ft: 0.15, lq: 2 });
+      T(dst, { w: 'sine', f, t, a: 0.004, d: d + 0.04, g: v * 0.6, sus: 0.9, rel: 0.05 });
+    },
+    glass(dst, t, f, d, v) {   // uzay: cam çan (uzun, parlak)
+      FMt(dst, { t, f, ratio: 3.5, idx: 0.9, idxD: 0.2, idxEnd: 0.05, d: Math.min(1.8, d + 0.9), g: v });
+      T(dst, { w: 'sine', f: f * 2, t, a: 0.003, d: 0.5, g: v * 0.1 });
     }
   };
 
@@ -439,6 +477,17 @@
       N(dst, { t, a: 0.001, d: 0.02, g: v * 0.12, bp: 3000, bq: 2 });
     },
     t(dst, t, v, kit, chr) {
+      if (kit && kit.darb) {                              // darbuka: düm (l) / tek (h) / ka (m) / hayalet (g)
+        if (chr === 'l') {
+          T(dst, { w: 'sine', f: 128, f2: 82, pt: 0.12, t, a: 0.002, d: 0.32, g: v * 0.85 });
+          N(dst, { t, a: 0.001, d: 0.03, g: v * 0.1, lp: 1600 });
+        } else {
+          const f = chr === 'm' ? 520 : 640;
+          T(dst, { w: 'triangle', f, f2: f * 0.86, pt: 0.03, t, a: 0.001, d: 0.07, g: v * 0.3 });
+          N(dst, { t, a: 0.001, d: chr === 'g' ? 0.03 : 0.06, g: v * 0.42, bp: chr === 'm' ? 2600 : 3400, bq: 1.6 });
+        }
+        return;
+      }
       const f = chr === 'h' ? 215 : chr === 'm' ? 165 : 122;
       T(dst, { w: 'sine', f, f2: f * 0.62, pt: 0.2, t, a: 0.002, d: 0.3, g: v * 0.7 });
       N(dst, { t, a: 0.001, d: 0.04, g: v * 0.07, lp: 1300 });
@@ -909,6 +958,164 @@
     [76, 79, 84].forEach(m => INS.bell(v.out, t + 0.2, mtof(m), 0.6, 0.04));
   });
 
+  /* ---------- yeni harita öğeleri ---------- */
+  def('portal', 2, 2, 0.15, 0.95, 0.35, (v, t, k) => {        // ışınlanma: içe çeken girdap + çıkış parıltısı
+    T(v.out, { w: 'sine', f: 260 * k, f2: 1500 * k, pt: 0.32, t, a: 0.01, d: 0.4, g: 0.24, vib: 19, vd: 40, vdl: 0.05 });
+    T(v.out, { w: 'triangle', f: 520 * k, f2: 3000 * k, pt: 0.32, t, a: 0.01, d: 0.34, g: 0.05, vib: 19, vd: 80, vdl: 0.05 });
+    N(v.out, { k: 'pink', t, a: 0.12, d: 0.4, g: 0.2, bp: 3000, bp2: 400, bq: 2.2, ft: 0.35 });
+    FMt(v.out, { t: t + 0.3, f: 1568 * k, ratio: 1.5, idx: 1.2, idxD: 0.2, d: 0.6, g: 0.07 });
+    [88, 91, 95].forEach((m, i) => T(v.out, { w: 'sine', f: mtof(m) * k, t: t + 0.32 + i * 0.05, a: 0.002, d: 0.25, g: 0.04 }));
+  });
+  def('vent', 2, 2, 0.25, 0.8, 0.12, (v, t, k) => {           // rüzgâr bacası: yukarı üfleyen hava
+    N(v.out, { k: 'pink', t, a: 0.08, d: 0.7, g: 0.42, bp: 300 * k, bp2: 1500 * k, bq: 0.9, ft: 0.6 });
+    N(v.out, { t, a: 0.1, d: 0.55, g: 0.06, hp: 3000, hp2: 6000, ft: 0.5 });
+    T(v.out, { w: 'sine', f: 170 * k, f2: 420 * k, pt: 0.5, t, a: 0.05, d: 0.55, g: 0.07 });
+  });
+  def('geyser', 2, 2, 0.2, 1.1, 0.2, (v, t, k) => {           // gayzer: fokurtu + su fışkırması
+    bloops(v, t, 4, 140, 320, 0.12, 0.045);
+    const tb = t + 0.14;
+    N(v.out, { t: tb, a: 0.01, d: 0.8, g: 0.36, bp: 900 * k, bp2: 2800 * k, bq: 0.8, ft: 0.3 });
+    N(v.out, { k: 'brown', t: tb, a: 0.01, d: 0.6, g: 0.65, lp: 700, lp2: 220 });
+    N(v.out, { k: 'pink', t: tb + 0.2, a: 0.1, d: 0.65, g: 0.12, hp: 2500 });        // damlalar / sprey
+    crackle(v.out, tb + 0.15, 0.6, 10, 0.08, { bp: 3500, bq: 1 });
+  });
+  def('tramp', 2, 2, 0.08, 0.7, 0.1, (v, t, k) => {           // trambolin: yaylı "boyiing"
+    T(v.out, { w: 'sine', f: 150 * k, f2: 600 * k, pt: 0.16, t, a: 0.003, d: 0.55, g: 0.42, vib: 22, vd: 45, vdl: 0.1 });
+    T(v.out, { w: 'triangle', f: 300 * k, f2: 1200 * k, pt: 0.16, t, a: 0.003, d: 0.3, g: 0.06, vib: 22, vd: 90, vdl: 0.1 });
+    FMt(v.out, { t, f: 820 * k, ratio: 2.71, idx: 1.4, idxD: 0.08, d: 0.25, g: 0.06 });   // yay gerilmesi
+    N(v.out, { k: 'pink', t, a: 0.002, d: 0.06, g: 0.14, lp: 1200 });
+  });
+  def('iceSlide', 1, 2, 0.12, 0.6, 0.25, (v, t, k) => {        // buzda kayma: ince sürtünme + kristal şıngırtı
+    N(v.out, { t, a: 0.02, d: 0.5, g: 0.16, bp: 5200 * k, bp2: 3600 * k, bq: 2.2, sus: 0.6, rel: 0.15 });
+    N(v.out, { k: 'pink', t, a: 0.02, d: 0.4, g: 0.12, bp: 1800, bq: 1 });
+    for (let i = 0; i < 3; i++) FMt(v.out, { t: t + 0.05 + i * rnd(0.08, 0.13), f: rnd(2000, 3000) * k, ratio: 3.5, idx: 0.6, idxD: 0.05, d: 0.22, g: 0.03 });
+  });
+  def('rumble', 2, 2, 0.4, 1.1, 0.15, (v, t) => {             // kaya kapısı sarsılıyor: gürleme + dökülen taşlar
+    N(v.out, { k: 'brown', t, a: 0.15, d: 0.95, g: 0.95, lp: 260, lp2: 160, sus: 0.85, rel: 0.25 });
+    T(v.out, { w: 'sine', f: 52, f2: 44, pt: 0.9, t, a: 0.15, d: 0.95, g: 0.3, vib: 9, vd: 5 });
+    crackle(v.out, t + 0.1, 0.8, 12, 0.16, { bp: 1400, bq: 0.8 });
+  });
+  def('roll', 1, 3, 0.15, 0.35, 0.05, (v, t, k) => {          // kaya yuvarlanıyor: her turda bir gümleme
+    T(v.out, { w: 'sine', f: 78 * k, f2: 52 * k, pt: 0.14, t, a: 0.006, d: 0.28, g: 0.55 });
+    N(v.out, { k: 'brown', t, a: 0.01, d: 0.3, g: 0.6, lp: 420, lp2: 200 });
+    crackle(v.out, t, 0.25, 4, 0.1, { bp: 1800, bq: 0.9 });
+  });
+  def('boulderCrash', 3, 2, 0.15, 1.2, 0.3, (v, t, k) => {    // kaya parçalandı
+    N(v.out, { t, a: 0.002, d: 0.5, g: 0.5, lp: 4000, lp2: 300, ft: 0.4 });
+    N(v.out, { k: 'brown', t, a: 0.004, d: 0.9, g: 1.0, lp: 600, lp2: 140 });
+    T(shaper(v.out), { w: 'sine', f: 92 * k, f2: 34 * k, pt: 0.4, t, a: 0.002, d: 0.55, g: 0.6 });
+    crackle(v.out, t + 0.03, 0.7, 20, 0.24, { bp: 2400, bq: 0.8 });
+  });
+  def('meteorAlarm', 3, 1, 1.5, 1.3, 0.2, (v, t) => {          // meteor yağmuru başlıyor: iki tonlu siren
+    for (let i = 0; i < 2; i++) {
+      const tt = t + i * 0.55;
+      T(v.out, { w: 'sawtooth', f: 620, f2: 940, pt: 0.25, lin: 1, t: tt, a: 0.02, d: 0.5, g: 0.09, lp: 2400, sus: 0.85, rel: 0.12 });
+      T(v.out, { w: 'sine', f: 620, f2: 940, pt: 0.25, lin: 1, t: tt, a: 0.02, d: 0.5, g: 0.16, sus: 0.85, rel: 0.12 });
+    }
+    N(v.out, { k: 'brown', t, a: 0.3, d: 1.2, g: 0.35, lp: 200 });
+  });
+  def('meteorWarn', 2, 4, 0.12, 2.6, 0.15, (v, t, k, o) => {   // hedef işareti "bip-bip" + gökten düşen ıslık (o.fall sn sonra)
+    T(v.out, { w: 'sq', f: 1320, t, a: 0.003, d: 0.06, g: 0.05, lp: 3000 });
+    T(v.out, { w: 'sine', f: 1320, t, a: 0.003, d: 0.07, g: 0.1 });
+    T(v.out, { w: 'sine', f: 1320, t: t + 0.12, a: 0.003, d: 0.07, g: 0.1 });
+    const tf = t + clamp(num(o.fall, 0.6), 0, 1.9);
+    T(v.out, { w: 'sine', f: 1500 * k, f2: 300 * k, pt: 0.62, t: tf, a: 0.05, d: 0.62, g: 0.12 });
+    N(v.out, { k: 'pink', t: tf, a: 0.4, d: 0.62, g: 0.3, bp: 500, bp2: 2600, bq: 1.4, ft: 0.6 });
+  });
+  def('meteorHit', 3, 3, 0.06, 1.0, 0.25, (v, t, k) => {      // meteor çarptı: kaya parçaları + alev cızırtısı (patlama sesi ayrıca çalar)
+    crackle(v.out, t + 0.02, 0.6, 18, 0.22, { bp: 2200, bq: 0.8 });
+    N(v.out, { t, a: 0.01, d: 0.8, g: 0.12, bp: 2800, bq: 0.7, sus: 0.5, rel: 0.3 });
+    T(v.out, { w: 'sine', f: 70 * k, f2: 30 * k, pt: 0.4, t, a: 0.003, d: 0.5, g: 0.45 });
+  });
+
+  /* ---------- modlar: eleme, altın avı ---------- */
+  def('gatePass', 3, 1, 0.3, 0.8, 0.3, (v, t) => {            // eleme kapısından geçtin
+    N(v.out, { k: 'pink', t, a: 0.03, d: 0.25, g: 0.18, bp: 700, bp2: 3000, bq: 1 });
+    [79, 84, 88, 91].forEach((m, i) => INS.bellS(v.out, t + 0.04 + i * 0.06, mtof(m), 0.12, 0.13));
+    T(v.out, { w: 'triangle', f: mtof(96), t: t + 0.26, a: 0.002, d: 0.35, g: 0.04 });
+  });
+  def('elimSelf', 3, 1, 1, 2.2, 0.3, (v, t) => {               // ELENDİN: üzgün trombon "vah vah vaah"
+    const ns = [[67, 0, 0.32], [66, 0.36, 0.32], [65, 0.72, 0.32], [64, 1.08, 0.9]];
+    for (const [m, o, d] of ns) {
+      const last = d > 0.5;
+      T(v.out, { w: 'sawtooth', f: mtof(m), f2: last ? mtof(m) * 0.94 : null, pt: d, t: t + o, a: 0.03, d, g: 0.13, sus: 0.8, rel: 0.12, lp: 1400, lp2: last ? 500 : 1100, ft: d, vib: last ? 6 : 0, vd: 6, vdl: 0.15 });
+      T(v.out, { w: 'sine', f: mtof(m - 12), t: t + o, a: 0.03, d, g: 0.16, sus: 0.8, rel: 0.12 });
+    }
+    T(v.out, { w: 'sine', f: 110, f2: 45, pt: 0.25, t, a: 0.002, d: 0.3, g: 0.35 });
+  });
+  def('elimOther', 2, 2, 0.25, 0.6, 0.15, (v, t, k) => {       // başka biri elendi: "puf" + inen bip
+    N(v.out, { k: 'pink', t, a: 0.01, d: 0.3, g: 0.25, bp: 1200, bp2: 400, bq: 0.9 });
+    T(v.out, { w: 'sq', f: 620 * k, f2: 240 * k, pt: 0.3, t, a: 0.004, d: 0.32, g: 0.05, lp: 1600 });
+    T(v.out, { w: 'triangle', f: 620 * k, f2: 240 * k, pt: 0.3, t, a: 0.004, d: 0.32, g: 0.16 });
+  });
+  def('clock', 3, 1, 0.3, 0.3, 0.05, (v, t, k, o) => {        // Altın Avı son 10 sn: tik-tak (son 3'te zil)
+    const tak = !!o.alt, f = tak ? 1250 : 1750;
+    T(v.out, { w: 'triangle', f, f2: f * 0.85, pt: 0.02, t, a: 0.001, d: 0.045, g: 0.2 });
+    N(v.out, { t, a: 0.001, d: 0.025, g: 0.16, bp: tak ? 2200 : 3200, bq: 2 });
+    if ((o.n | 0) <= 3) { T(v.out, { w: 'sine', f: 1568, t, a: 0.003, d: 0.2, g: 0.13 }); T(v.out, { w: 'sine', f: 3136, t, a: 0.002, d: 0.08, g: 0.03 }); }
+  });
+  def('timeup', 3, 1, 1, 1.4, 0.25, (v, t) => {               // süre doldu: korna
+    for (const [f, g] of [[196, 0.1], [207.7, 0.08], [392, 0.03]]) T(v.out, { w: 'sawtooth', f, t, a: 0.01, d: 0.85, g, sus: 0.9, rel: 0.15, lp: 2000 });
+    T(v.out, { w: 'sine', f: 98, t, a: 0.01, d: 0.85, g: 0.25, sus: 0.9, rel: 0.15 });
+    DRUM.crash(v.out, t, 0.5);
+  });
+  def('coinsDrop', 2, 2, 0.15, 1.0, 0.2, (v, t, k, o) => {     // öldü, altın saçıldı: düşen şıngırtılar
+    const n = clamp(o.n | 0 || 5, 3, 8);
+    for (let i = 0; i < n; i++) {
+      const f = mtof(93 - i * 2 + (Math.random() * 3 | 0)), tt = t + i * rnd(0.05, 0.09);
+      T(v.out, { w: 'sine', f, t: tt, a: 0.002, d: 0.14, g: 0.09 });
+      T(v.out, { w: 'sine', f: f * 1.335, t: tt + 0.03, a: 0.002, d: 0.18, g: 0.06 });
+    }
+    N(v.out, { t, a: 0.01, d: 0.4, g: 0.05, bp: 6500, bq: 2 });
+  });
+  def('coinsPick', 2, 3, 0.03, 0.6, 0.15, (v, t, k, o) => {    // yere düşmüş altını aldın (değerli): parlak çift ding
+    const f = mtof(79 + COIN_STEPS[clamp(o.combo | 0, 0, COIN_STEPS.length - 1)]);
+    T(v.out, { w: 'sine', f, t, a: 0.002, d: 0.1, g: 0.18 });
+    T(v.out, { w: 'sine', f: f * 1.335, t: t + 0.05, a: 0.002, d: 0.32, g: 0.2 });
+    T(v.out, { w: 'sine', f: f * 2, t: t + 0.1, a: 0.002, d: 0.3, g: 0.07 });
+    N(v.out, { t: t + 0.04, a: 0.02, d: 0.25, g: 0.03, bp: 7500, bq: 2 });
+  });
+  def('coinsBonus', 3, 1, 0.5, 1.4, 0.3, (v, t, k, o) => {     // bitiş bonusu +15 altın: şelale + akor
+    SFX.reward.fn(v, t, k, o);
+    const tc = t + 0.42;
+    [72, 76, 79, 84].forEach(m => INS.bell(v.out, tc, mtof(m), 0.6, 0.045));
+    N(v.out, { t: tc, a: 0.1, d: 0.6, g: 0.035, bp: 7000, bq: 2 });
+  });
+
+  /* ---------- çok oyunculu ---------- */
+  def('mpJoin', 2, 2, 0.25, 0.7, 0.25, (v, t) => {             // biri odaya katıldı: kapı zili
+    INS.bellS(v.out, t, mtof(76), 0.1, 0.14); INS.bellS(v.out, t + 0.1, mtof(83), 0.1, 0.14);
+    N(v.out, { t, a: 0.001, d: 0.03, g: 0.08, bp: 1600, bq: 1 });
+  });
+  def('mpLeave', 2, 2, 0.25, 0.6, 0.2, (v, t) => {             // biri ayrıldı: inen iki nota
+    INS.bellS(v.out, t, mtof(79), 0.1, 0.11); INS.bellS(v.out, t + 0.11, mtof(72), 0.1, 0.11);
+  });
+  def('mpReady', 2, 2, 0.12, 0.5, 0.15, (v, t, k, o) => {      // hazır: onay "tık-ding" (kendi hazırın daha parlak)
+    const me = !!o.me;
+    T(v.out, { w: 'triangle', f: 900, f2: 1300, pt: 0.04, t, a: 0.002, d: 0.06, g: 0.14 });
+    INS.pluck(v.out, t + 0.05, mtof(me ? 84 : 81), 0.2, me ? 0.17 : 0.12);
+    if (me) INS.pluck(v.out, t + 0.12, mtof(91), 0.2, 0.12);
+  });
+  def('mpStart', 3, 1, 1, 1.3, 0.3, (v, t) => {                // ev sahibi başlattı: yükselen nefes + parlak akor
+    N(v.out, { k: 'pink', t, a: 0.34, d: 0.4, g: 0.25, bp: 400, bp2: 4000, bq: 1.5, ft: 0.38 });
+    const tc = t + 0.38;
+    [67, 72, 76, 79].forEach(m => INS.brass(v.out, tc, mtof(m), 0.4, 0.05));
+    INS.chipbass(v.out, tc, mtof(48), 0.4, 0.28);
+    DRUM.k(v.out, tc, 0.8); DRUM.crash(v.out, tc, 0.55);
+  });
+  def('emoji', 2, 3, 0.08, 0.3, 0.1, (v, t, k) => {            // emoji balonu "pop"
+    T(v.out, { w: 'sine', f: 520 * k, f2: 1250 * k, pt: 0.05, t, a: 0.002, d: 0.09, g: 0.26 });
+    N(v.out, { t, a: 0.001, d: 0.025, g: 0.2, bp: 1800, bq: 1.2 });
+    T(v.out, { w: 'sine', f: 1700 * k, t: t + 0.06, a: 0.002, d: 0.12, g: 0.06 });
+  });
+  def('mpDrop', 3, 1, 1.2, 0.9, 0.15, (v, t) => {              // bağlantı koptu: bozulan, inen bip'ler
+    [880, 660, 440].forEach((f, i) => {
+      T(v.out, { w: 'sq', f, f2: f * 0.94, pt: 0.12, t: t + i * 0.15, a: 0.003, d: 0.13, g: 0.06, lp: 2200 });
+      T(v.out, { w: 'sine', f, f2: f * 0.94, pt: 0.12, t: t + i * 0.15, a: 0.003, d: 0.13, g: 0.12 });
+    });
+    crackle(v.out, t + 0.05, 0.55, 14, 0.12, { bp: 3000, bq: 0.8 });
+  });
+
   /* ---------- arayüz ---------- */
   def('click', 3, 2, 0.06, 0.1, 0, (v, t) => {
     T(v.out, { w: 'sine', f: 1000, f2: 620, pt: 0.035, t, a: 0.002, d: 0.06, g: 0.2 });
@@ -969,7 +1176,11 @@
     splash_chocolate: 6.5, back: 0.5, freeze: 7.5, notify: 2, ab_ertan: 11, balloon: 5, splash_water: 10, slowed: 7, slam: 6.5,
     saw: 8, blockShield: 7, finishOther: 3.5, open: 2, climb: 3, buy: 9, killConfirm: 7.5, ab_Nuss: 12.5, gem: 6.5,
     zap: 11, respawn: 5.5, splash_icewater: 10, speed: 11, toggle: 2.5, tab: 2.5, hitConfirm: 5.5, clang: 3.5, pad: 12.5,
-    ice: 9, trap: 9, ab_Caner: 16.5, dyn: 13, slide: 11.5, net: 12, flap: 8.5, star: 8, whoosh: 7
+    ice: 9, trap: 9, ab_Caner: 16.5, dyn: 13, slide: 11.5, net: 12, flap: 8.5, star: 8, whoosh: 7,
+    // yeni sesler (mp-audio ajanı: aynı ölçüm, uzun seslerde ortak kaymaya göre düzeltildi)
+    portal: 7.5, vent: 5, geyser: 5.5, tramp: 6.5, iceSlide: 8.5, rumble: -8, roll: 3.5, boulderCrash: 0, meteorAlarm: -4,
+    meteorWarn: 4, meteorHit: 4.5, gatePass: 5.5, elimSelf: 0.5, elimOther: 10, clock: -3, timeup: -3.5, coinsDrop: 9.5, coinsPick: 7.5,
+    coinsBonus: 4, mpJoin: 7, mpLeave: 6, mpReady: 5.5, mpStart: -3.5, emoji: 8, mpDrop: 5.5
   };
   let trimOn = true;
 
@@ -1068,6 +1279,7 @@
   /* =====================================================================
      play()
      ===================================================================== */
+  const playN = {};          // geliştirici: hangi ses kaç kez çaldı (_dev.counts)
   function playNow(name, o, force) {
     if (!E) return false;
     if (hasOwn(ALIAS, name)) name = ALIAS[name];
@@ -1098,6 +1310,7 @@
     E.last[key] = now;
     const v = newVoice(name, d, vol, pan, d.verb * num(o.verb, 1), num(o.when, 0));
     if (!v) return false;
+    playN[name] = (playN[name] || 0) + 1;
     const k = num(o.rate, 1) * (o.exact ? 1 : rnd(0.97, 1.03));
     curV = v;
     try { d.fn(v, v.t, k, o); } finally { curV = null; }
@@ -1155,7 +1368,26 @@
     drive2: { k: 'X.x.X...X.x.X...', s: '....X.......X...', c: '....x.......x...', h: 'x.xxx.xxx.xxx.xx' },
     lounge: { k: 'X......x..X.....', r: '....x.......x...', h: 'x.x.x.x.x.x.x.x.', s: '.......g.......g' },
     lounge2: { k: 'X......x..X..x..', s: '....x.......x...', h: 'xgx.xgx.xgx.xgx.', o: '..............x.' },
-    march: { k: 'X...X...X...X...', s: '....X.......X.gg', h: 'x.x.x.x.x.x.x.x.', c: '....x.......x...' }
+    march: { k: 'X...X...X...X...', s: '....X.......X.gg', h: 'x.x.x.x.x.x.x.x.', c: '....x.......x...' },
+    // çöl: maqsum darbuka ritmi (düm-tek-.-tek-düm-.-tek-.) + def zilleri
+    desertI: { t: 'l.....h.l...h...', j: '..x...x...x...x.' },
+    desert: { k: 'X.......X.......', t: 'l.h.g.h.l.g.h.g.', j: 'x.gxx.gxx.gxx.gx' },
+    desert2: { k: 'X.....x.X.......', s: '....x.......X...', t: 'l.hgg.h.l.gghgh.', j: 'xgxgxgxgxgxgxgxg', o: '..............x.' },
+    // uzay: dörtlük elektro
+    spaceI: { k: 'X.......X.......', h: '..x...x...x...x.' },
+    space: { k: 'X...X...X...X...', c: '....X.......X...', h: '..x...x...x...x.', j: 'gxgxgxgxgxgxgxgx' },
+    space2: { k: 'X...X...X...X.x.', c: '....X.......X...', s: '....x.......x..g', h: 'xxXxxxXxxxXxxxXx', o: '..x.......x.....' },
+    // şehir: funk (hayalet trampetler, 16'lık ziller)
+    cityI: { k: 'X.....x...x.....', h: 'x.x.x.x.x.x.x.x.' },
+    city: { k: 'X.....x...x..x..', s: '....X..g.g..X...', h: 'xgxgxgxgxgxgxgxg', o: '..............x.' },
+    city2: { k: 'X...X...X...X...', s: '....X.......X...', c: '....x.......x...', h: 'x.x.x.x.x.x.x.x.', o: '..x...x...x...x.' },
+    // tropik: kalipso / soka (tresillo kenar vuruşu, shaker)
+    tropI: { k: 'X.......X.......', j: 'xgxgxgxgxgxgxgxg' },
+    trop: { k: 'X...X...X...X...', r: '...x..x....x..x.', j: 'xgxgxgxgxgxgxgxg', h: '..x...x...x...x.' },
+    trop2: { k: 'X..xX...X..xX...', s: '....X.......X...', r: '...x..x....x..x.', j: 'xgxgxgxgxgxgxgxg', o: '..x...x...x...x.' },
+    // lobi: yumuşak, seyrek
+    lobby: { k: 'X.........X.....', r: '....x.......x...', h: 'x.g.x.g.x.g.x.g.' },
+    lobby2: { k: 'X......x..X.....', r: '....x.......x...', h: 'xgx.xgx.xgx.xgx.', j: '..............g.' }
   };
   const FILL = {
     snare: { k: '........X.......', s: '........x.x.xxXX', h: '................', o: '................', c: '................', j: '................' },
@@ -1170,13 +1402,21 @@
     gallop: 'R.RRR.RRR.RRO.5A',
     snow: 'R-----5-O-----5-',
     walk: 'R-----5-O---..A-',
-    podium: 'R.R.O.R.5.R.O.5.'
+    podium: 'R.R.O.R.5.R.O.5.',
+    desert: 'R-.R..5-R-..O-5.',
+    pulse: 'R.rrR.rrR.rrO.r5',
+    funk: 'R..R..O.R.5..RA.',
+    tresillo: 'R--R--R-5--5--A-',
+    soft: 'R-------5---3---'
   };
   const CP = {
     off: '..x...x...x...x.',
     skank: 'x..x..x...x..x..',
     chug: 'x.x.x.x.x.x.x.x.',
-    ep: 'X-----x---x-----'
+    ep: 'X-----x---x-----',
+    funk: 'x.xx..x..x.x..x.',
+    qanun: 'X.x.x.X.x.x.X.x.',
+    pad8: 'X-------x-------'
   };
   // kanal: [ad, düzey, yankı, eko, pan]
   const CHN = [
@@ -1324,6 +1564,140 @@
         }
       }
     },
+    /* Kum Fırtınası Çölü — Re hicaz (Re Mib Fa# Sol La Sib Do), darbuka maqsum, ud + ney */
+    desert: {
+      bpm: 126, key: 2, minor: 1, swing: 0.06, lead: 'oud', harm: 'oud', comp: 'harpsi', bass: 'roundbass', pad: 'pad', arp: 'pluckS', orn: 'bellS', verb: 1.2,
+      kit: { kf: 140, kf2: 46, kd: 0.3, darb: 1, jingle: 1 },
+      mix: { ld: 1.25, hm: 0.8, cp: 0.55, dr: 1.0, hh: 0.7 },
+      form: ['I', 'A', 'B', 'A2', 'C'], loop: 1,
+      sec: {
+        I: { ch: 'D | Eb', dr: 'desertI', bs: 'long', pad: 1, fill: 'tom' },
+        A: {
+          ch: 'D | Eb | D | Cm | D | Eb | Gm,Cm | D',
+          mel: 'd5:2 eb5:2 f#5:2 g5:2 a5:4 g5:2 f#5:2 | g5:2 f#5:2 eb5:4 f#5:2 eb5:2 d5:4 | a5:3 bb5:1 a5:2 g5:2 f#5:2 g5:2 a5:4 | g5:2 eb5:2 c5:2 eb5:2 d5:8 | ' +
+            'd6:4 c6:2 bb5:2 a5:4 bb5:2 a5:2 | g5:3 a5:1 bb5:2 g5:2 f#5:4 eb5:4 | d5:2 g5:2 bb5:2 a5:2 g5:2 eb5:2 c5:4 | d5:4 f#5:2 eb5:2 d5:4 r:4',
+          dr: 'desert', bs: 'desert', cp: 'qanun', pad: 1, crash: 1, fill: 'tom'
+        },
+        B: {
+          ch: 'Gm | Cm | D | D | Gm | Eb | Cm,D | D',
+          mel: 'bb5:6 a5:2 g5:8 | c6:6 bb5:2 a5:4 g5:4 | a5:4 f#5:4 eb5:4 f#5:4 | d5:12 r:4 | ' +
+            'd6:6 c6:2 bb5:4 d6:4 | eb6:6 d6:2 c6:4 bb5:4 | c6:4 bb5:2 a5:2 bb5:2 a5:2 g5:2 f#5:2 | a5:8 d5:4 r:4',
+          lead: 'ney', dr: 'desert2', bs: 'eights', cp: 'off', pad: 1, crash: 1, fill: 'tom'
+        },
+        A2: { from: 'A', harm: 1, dr: 'desert2', arp: 'up' },
+        C: {
+          ch: 'Gm | D | Cm | D | Gm | D | Eb | D',
+          mel: 'g5:8 bb5:8 | a5:8 f#5:8 | g5:8 eb5:8 | f#5:4 eb5:4 d5:8 | bb5:8 d6:8 | c6:4 bb5:4 a5:8 | bb5:4 g5:4 eb6:8 | d6:4 c6:4 a5:4 f#5:4',
+          lead: 'ney', dr: 'desertI', bs: 'long', pad: 1, arp: 'ud', build: 1
+        }
+      }
+    },
+    /* Yıldız Üssü — Mi minör, 16'lık arpej, cam çanlar, synth lead */
+    space: {
+      bpm: 120, key: 4, minor: 1, swing: 0, vol: 1.1, lead: 'glass', harm: 'arpS', comp: 'arpS', bass: 'synbass', pad: 'pad', arp: 'arpS', orn: 'glass', verb: 1.6,
+      kit: { kf: 135, kf2: 40, kd: 0.38 },
+      mix: { ld: 1.35, ar: 0.75, pd: 1.25, hm: 0.7, cp: 0.6 },
+      form: ['I', 'A', 'B', 'A2', 'C'], loop: 1,
+      sec: {
+        I: { ch: 'Em | Cmaj7', dr: 'spaceI', bs: 'long', pad: 1, arp: 'up', fill: 'snare' },
+        A: {
+          ch: 'Em | Cmaj7 | G | D | Em | Cmaj7 | Am7 | B7',
+          mel: 'e5:3 g5:3 b5:2 e6:4 d6:2 b5:2 | c6:3 b5:3 g5:2 e5:8 | d5:3 g5:3 b5:2 d6:4 c6:2 b5:2 | a5:3 f#5:3 d5:2 a5:8 | ' +
+            'e5:3 g5:3 b5:2 e6:4 f#6:2 g6:2 | e6:3 d6:3 b5:2 g5:4 e5:4 | c6:3 b5:3 a5:2 e5:4 g5:4 | f#5:4 d#5:4 b4:4 r:4',
+          dr: 'space', bs: 'pulse', pad: 1, arp: 'up', crash: 1, fill: 'snare'
+        },
+        B: {
+          ch: 'Cmaj7 | D | Bm7 | Em | Am7 | D | G,Em | Bsus4,B7',
+          mel: 'g5:2 b5:2 e6:4 d6:2 b5:2 g5:4 | f#5:2 a5:2 d6:4 c6:2 a5:2 f#5:4 | d5:2 f#5:2 b5:4 a5:2 f#5:2 d5:4 | e5:6 g5:2 b5:8 | ' +
+            'c6:2 b5:2 a5:4 e6:4 c6:4 | d6:2 c6:2 a5:4 f#6:4 d6:4 | b5:4 d6:4 g6:4 e6:4 | e6:6 d#6:2 f#6:8',
+          lead: 'synL', dr: 'space2', bs: 'pulse', cp: 'off', pad: 1, arp: 'ud', crash: 1, fill: 'tom'
+        },
+        A2: { from: 'A', harm: 1, dr: 'space2', arp: 'ud', lead: 'synL', harmI: 'glass' },
+        C: {
+          ch: 'Am | Em | C | D | Am | Em | C | B7',
+          mel: 'a5:8 c6:8 | b5:8 g5:8 | g5:8 e6:8 | d6:8 f#6:8 | e6:8 c6:8 | b5:8 e6:8 | g6:8 e6:8 | f#6:4 d#6:4 b5:8',
+          lead: 'glass', dr: 'half', bs: 'long', pad: 1, arp: 'up', build: 1
+        }
+      }
+    },
+    /* Neon Şehir — La minör (dorian renkli), gece funk'ı + synthwave nakarat */
+    city: {
+      bpm: 112, key: 9, minor: 1, swing: 0.1, lead: 'synL', harm: 'p12', comp: 'clav', bass: 'slapbass', pad: 'pad', arp: 'arpS', orn: 'bellS', verb: 1.1,
+      kit: { kf: 145, kf2: 44, kd: 0.28, sf: 2000, st: 210 },
+      mix: { ld: 1.05, cp: 0.85, bs: 1.1, ar: 0.6 },
+      form: ['I', 'A', 'B', 'A2', 'C'], loop: 1,
+      sec: {
+        I: { ch: 'Am7 | D9', dr: 'cityI', bs: 'funk', cp: 'funk', fill: 'snare' },
+        A: {
+          ch: 'Am7 | D9 | Am7 | D9 | Fmaj7 | Em7 | Dm7 | E7',
+          mel: 'a5:2 r:1 a5:1 c6:2 a5:2 g5:2 e5:2 g5:4 | f#5:2 r:1 f#5:1 a5:2 f#5:2 e5:2 d5:2 e5:4 | a5:2 r:1 a5:1 c6:2 d6:2 e6:3 d6:1 c6:4 | d6:2 c6:2 a5:2 f#5:2 a5:8 | ' +
+            'c6:3 a5:3 f5:2 e5:2 f5:2 a5:4 | b5:3 g5:3 e5:2 d5:2 e5:2 g5:4 | a5:2 c6:2 f6:2 e6:2 d6:2 c6:2 a5:4 | g#5:4 b5:4 e6:4 r:4',
+          lead: 'square', dr: 'city', bs: 'funk', cp: 'funk', crash: 1, fill: 'snare'
+        },
+        B: {
+          ch: 'Fmaj7 | G | Em7 | Am7 | Fmaj7 | G | Esus4,E7 | Am7',
+          mel: 'a5:6 g5:2 e5:4 c5:4 | b5:6 a5:2 g5:4 d5:4 | g5:4 b5:4 d6:4 e6:4 | c6:12 r:4 | ' +
+            'a5:2 c6:2 e6:4 f6:2 e6:2 c6:4 | b5:2 d6:2 g6:4 f6:2 d6:2 b5:4 | a5:4 b5:4 g#5:4 b5:4 | a5:8 e5:4 r:4',
+          dr: 'city2', bs: 'eights', cp: 'off', compI: 'stab', pad: 1, arp: 'up', crash: 1, fill: 'tom'
+        },
+        A2: { from: 'A', harm: 1, dr: 'city', arp: 'up', lead: 'synL' },
+        C: {
+          ch: 'Dm7 | Em7 | Fmaj7 | G | Dm7 | Em7 | Fmaj7 | E7',
+          mel: 'f5:8 a5:8 | g5:8 b5:8 | a5:8 c6:8 | b5:8 d6:8 | d6:8 f6:8 | e6:8 g6:8 | f6:8 e6:8 | e6:4 d6:4 b5:4 g#5:4',
+          dr: 'half', bs: 'long', pad: 1, arp: 'ud', build: 1
+        }
+      }
+    },
+    /* Palmiye Koyu — Sol majör, çelik davul + kalipso / reggae "bubble" org */
+    tropic: {
+      bpm: 116, key: 7, swing: 0.08, lead: 'steel', harm: 'steel', comp: 'bubble', bass: 'roundbass', pad: 'pad', arp: 'pluckS', orn: 'bellS', verb: 1.2,
+      kit: { kf: 150, kf2: 50, kd: 0.26 },
+      mix: { ld: 1.3, hm: 0.85, cp: 0.8, bs: 1.1 },
+      form: ['I', 'A', 'B', 'A2', 'C'], loop: 1,
+      sec: {
+        I: { ch: 'G | D', dr: 'tropI', bs: 'tresillo', cp: 'off', fill: 'snare' },
+        A: {
+          ch: 'G | C | D | G | G | C | Am,D | G',
+          mel: 'b5:3 d6:3 b5:2 g5:3 a5:3 b5:2 | c6:3 e6:3 c6:2 g5:4 e5:4 | a5:3 f#5:3 a5:2 d6:3 c6:3 a5:2 | b5:4 g5:4 d5:4 r:4 | ' +
+            'b5:3 d6:3 b5:2 g6:3 f#6:3 e6:2 | e6:3 g6:3 e6:2 c6:4 e6:4 | c6:3 b5:3 a5:2 f#5:3 a5:3 d6:2 | b5:6 a5:2 g5:4 r:4',
+          dr: 'trop', bs: 'tresillo', cp: 'off', crash: 1, fill: 'snare'
+        },
+        B: {
+          ch: 'Em | C | G | D | Em | C | Am | D7',
+          mel: 'g5:2 b5:2 e6:4 d6:2 b5:2 g5:4 | e5:2 g5:2 c6:4 b5:2 g5:2 e5:4 | d5:2 g5:2 b5:4 a5:2 g5:2 d5:4 | f#5:6 e5:2 d5:8 | ' +
+            'b5:2 e6:2 g6:4 f#6:2 e6:2 b5:4 | c6:2 e6:2 g6:4 e6:2 c6:2 g5:4 | a5:2 c6:2 e6:4 d6:2 c6:2 a5:4 | f#5:4 a5:4 c6:4 d6:4',
+          lead: 'mallet', dr: 'trop2', bs: 'eights', cp: 'skank', pad: 1, crash: 1, fill: 'tom'
+        },
+        A2: { from: 'A', harm: 1, dr: 'trop2', arp: 'up' },
+        C: {
+          ch: 'C | D | Bm | Em | C | D | Am | D7',
+          mel: 'e6:8 c6:8 | f#6:8 d6:8 | d6:8 b5:8 | e6:8 b5:8 | g6:8 e6:8 | a6:8 f#6:8 | e6:8 c6:8 | d6:4 c6:4 a5:4 f#5:4',
+          dr: 'half', bs: 'long', pad: 1, arp: 'ud', build: 1
+        }
+      }
+    },
+    /* Lobi — Fa majör, sakin bekleme müziği (elektrik piyano, yumuşak tokmak) */
+    lobby: {
+      bpm: 96, key: 5, swing: 0.12, lead: 'mallet', harm: 'bellS', comp: 'ep', bass: 'roundbass', pad: 'pad', arp: 'pluckS', orn: 'bellS', verb: 1.3,
+      kit: { kf: 125, kf2: 44, kd: 0.3 },
+      mix: { ld: 1.5, hm: 0.8, cp: 1.0, dr: 0.75, hh: 0.7, sn: 0.8 },
+      form: ['A', 'B', 'A2'], loop: 0,
+      sec: {
+        A: {
+          ch: 'Fmaj7 | Dm7 | Bbmaj7 | C7 | Fmaj7 | Am7 | Gm7 | C7',
+          mel: 'a5:4 c6:2 a5:2 e5:8 | f5:4 a5:2 f5:2 c5:8 | d5:2 f5:2 a5:4 g5:2 f5:2 d5:4 | e5:8 r:8 | ' +
+            'c6:4 a5:2 c6:2 e6:8 | e6:4 c6:2 a5:2 g5:8 | f5:2 g5:2 bb5:4 a5:2 g5:2 f5:4 | g5:8 r:8',
+          dr: 'lobby', bs: 'soft', cp: 'ep', pad: 1, fill: 'snare'
+        },
+        B: {
+          ch: 'Bbmaj7 | Am7 | Gm7 | Fmaj7 | Bbmaj7 | Am7 | Gm7 | C7sus4',
+          mel: 'd6:6 c6:2 a5:8 | c6:6 a5:2 e5:8 | bb5:4 a5:4 g5:4 f5:4 | a5:12 r:4 | ' +
+            'f5:2 a5:2 d6:4 c6:2 a5:2 f5:4 | e5:2 a5:2 c6:4 g5:2 a5:2 e5:4 | d5:2 g5:2 bb5:4 a5:2 g5:2 f5:4 | g5:8 r:8',
+          lead: 'celesta', dr: 'lobby2', bs: 'walk', cp: 'ep', pad: 1, arp: 'up', fill: 'tom'
+        },
+        A2: { from: 'A', harm: 1, dr: 'lobby2', arp: 'ud' }
+      }
+    },
     /* Kürsü — Do majör, kutlama döngüsü */
     podium: {
       bpm: 126, key: 0, swing: 0, lead: 'pulse', harm: 'bell', comp: 'stab', bass: 'chipbass', pad: 'pad', arp: 'pluckS', orn: 'bellS',
@@ -1465,9 +1839,9 @@
     const s = { id, def, c, fi: 0, bar: 0, step: 0, next: 0, sd: 60 / def.bpm / 4, ch: {}, nodes: [], voi: null, chCur: null, stopping: false, end: Infinity, loops: 0 };
     s.fade = e.G(0, e.musicIn); s.fadeV = e.G(0, e.musicVerbIn); s.fadeD = e.G(0, e.dlyIn);
     s.nodes.push(s.fade, s.fadeV, s.fadeD);
-    const vm = num(def.verb, 1), mix = def.mix || {};
+    const vm = num(def.verb, 1), mix = def.mix || {}, sv = num(def.vol, 1);
     for (const [name, lvl, verb, dly, pan] of CHN) {
-      const g = e.G(lvl * num(mix[name], 1));
+      const g = e.G(lvl * num(mix[name], 1) * sv);
       s.nodes.push(g);
       if (pan && e.hasPan) { const p = ac.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(s.fade); s.nodes.push(p); }
       else g.connect(s.fade);
@@ -1597,11 +1971,15 @@
   let want = null, wantOpts = null, dirty = false;
   function normId(id) {
     if (id == null || id === false || id === '') return null;
-    if (typeof id === 'number') { const th = FM.THEMES && FM.THEMES[((id % FM.THEMES.length) + FM.THEMES.length) % FM.THEMES.length]; return th ? th.id : 'forest'; }
-    if (typeof id === 'object') return id.id && hasOwn(SONGS, id.id) ? id.id : null;
+    if (typeof id === 'number') { const th = FM.THEMES && FM.THEMES[((id % FM.THEMES.length) + FM.THEMES.length) % FM.THEMES.length]; return (th && normId(th)) || 'forest'; }
+    if (typeof id === 'object') {
+      if (id.id && hasOwn(SONGS, id.id)) return id.id;
+      return id.base && hasOwn(SONGS, id.base) ? id.base : null;          // bilinmeyen yeni tema → temel temanın müziği
+    }
     id = String(id);
     if (hasOwn(SONGS, id)) return id;
     const n = +id; if (isFinite(n) && FM.THEMES) return normId(n);
+    if (FM.THEMES) for (const th of FM.THEMES) if (th && th.id === id) return th.base && hasOwn(SONGS, th.base) ? th.base : null;
     return null;
   }
   function music(id, opts) {
@@ -1776,7 +2154,7 @@
   function hook(ev, fn) { FM.on(ev, d => { if (!live()) return; try { fn(d || {}); } catch (e) { fail(e); } }); }
   const HIT_SND = { stun: 'stun', freeze: 'freeze', net: 'zap', knock: 'knock', slow: 'slowed', pull: 'pulled', ink: 'splat' };
   const LIQ = { water: 1, chocolate: 1, icewater: 1, lava: 1 };
-  let combo = 0, lastCoin = -9, climbT = 0, climbAlt = false, lastTick = null, goPlayed = false;
+  let combo = 0, lastCoin = -9, climbT = 0, climbAlt = false, lastTick = null, goPlayed = false, iceT = 0, lastClock = null;
 
   hook('jump', d => play(d.dbl ? 'jump2' : 'jump', { r: d.r, vol: isP(d.r) ? 1 : 0.5 }));
   hook('land', d => {
@@ -1784,21 +2162,49 @@
     if (isP(r)) play(d.hard ? 'landHard' : 'land', { r });
     else if (d.hard) play('landHard', { r, vol: 0.4 });
   });
-  hook('slide', d => play('slide', { r: d.r, vol: isP(d.r) ? 1 : 0.45 }));
+  hook('slide', d => {
+    const r = d.r;
+    if (r && r.onIce && r.onGround) { play('iceSlide', { r, vol: isP(r) ? 1 : 0.45 }); if (isP(r)) iceT = 0.55; }
+    else play('slide', { r, vol: isP(r) ? 1 : 0.45 });
+  });
   hook('slam', d => play('slam', { r: d.r, vol: isP(d.r) ? 1 : 0.45 }));
   hook('slamLand', d => play('slamLand', { r: d.r, vol: isP(d.r) ? 1 : 0.5 }));
   hook('climb', d => { if (isP(d.r)) { play('climb', { r: d.r }); climbT = 0.12; } });
   hook('vault', d => play('vault', { r: d.r, vol: isP(d.r) ? 0.8 : 0.3 }));
   hook('flap', d => play('flap', { r: d.r, vol: isP(d.r) ? 1 : 0.5 }));
   hook('pad', d => play('pad', { r: d.r, vol: isP(d.r) ? 1 : 0.45 }));
-  hook('mush', d => play('mush', { r: d.r, vol: isP(d.r) ? 1 : 0.5 }));
+  hook('mush', d => play(d.kind === 'tramp' ? 'tramp' : 'mush', { r: d.r, vol: isP(d.r) ? 1 : 0.5 }));
+  // yeni harita öğeleri
+  hook('portal', d => play('portal', { r: d.r, vol: isP(d.r) ? 1 : 0.5 }));
+  hook('vent', d => play(d.kind === 'burst' ? 'geyser' : 'vent', { r: d.r, vol: isP(d.r) ? 1 : 0.45 }));
+  hook('meteor:shower', () => { if (!demo()) play('meteorAlarm', { exact: true }); });
+  hook('meteor:warn', d => {
+    if (demo()) return;
+    const x = num(d.x, 0), y = num(d.y, 0);
+    play('meteorWarn', { x, y, fall: Math.max(0, num(d.t, 1.2) - 0.62) });
+  });
+  hook('meteor', d => { if (!demo()) play('meteorHit', { x: num(d.x, 0), y: num(d.y, 0) }); });
+  // modlar
+  hook('gate', d => { if (isP(d.r) && !demo()) play('gatePass', { exact: true }); });
+  hook('eliminated', d => {
+    if (demo()) return;
+    if (isP(d.r)) { play('elimSelf', { exact: true }); duck(0.4, 2); }
+    else play('elimOther', { vol: 0.85 });
+  });
+  hook('coins:drop', d => {
+    if (demo()) return;
+    if (d.r) play('coinsDrop', { r: d.r, vol: isP(d.r) ? 1 : 0.55, n: d.n });
+    else if (d.x != null) play('coinsDrop', { x: num(d.x, 0), y: num(d.y, 0), n: d.n });
+  });
+  hook('coins:bonus', d => { if (isP(d.r) && !demo()) play('coinsBonus', { exact: true, when: 0.35 }); });
+  hook('timeup', () => { if (!demo()) { play('timeup', { exact: true }); duck(0.4, 1.4); } });
   hook('box', d => play('box', isP(d.r) ? { r: d.r, got: !!d.item } : { r: d.r, vol: 0.35, got: false }));
   hook('coin', d => {
     if (!isP(d.r) || demo()) return;
     const now = LIVE.ac.currentTime;
     combo = now - lastCoin < 0.7 ? Math.min(combo + 1, COIN_STEPS.length - 1) : 0;
     lastCoin = now;
-    play('coin', { combo, exact: true });
+    play(d.drop ? 'coinsPick' : 'coin', { combo, exact: true });   // düşen (değerli) altın: daha parlak
   });
   hook('item:use', d => {
     const r = d.r, it = d.item; if (!r || !it) return;
@@ -1858,15 +2264,65 @@
   safeOn('race:start', d => {
     const th = d.theme || (FM.S.L && FM.S.L.theme);
     const goIn = FM.S.mode === 'count' ? Math.max(0, num(FM.S.countT, 3.6) - 0.6) : 0;
-    music(th && th.id ? th.id : 'forest', { goIn, fadeOut: 0.8, fade: 0.25 });
+    music(th && th.id ? th : 'forest', { goIn, fadeOut: 0.8, fade: 0.25 });
   });
-  safeOn('ui:menu', () => music('menu', { fadeOut: 0.9, fade: 0.8 }));
+  /** Çok oyunculu lobide miyiz (yarış/sonuç değil)? Lobi müziği menüye dönüşte de korunur. */
+  function inLobby() {
+    try {
+      const ng = FM.netgame, st = ng && typeof ng.state === 'function' ? ng.state() : null;
+      return !!(st && st.phase === 'lobby' && FM.net && typeof FM.net.inRoom === 'function' && FM.net.inRoom());
+    } catch (e) { return false; }
+  }
+  safeOn('ui:menu', () => music(inLobby() ? 'lobby' : 'menu', { fadeOut: 0.9, fade: 0.8 }));
+  safeOn('mp:lobby', () => music('lobby', { fadeOut: 0.9, fade: 0.9 }));
+  safeOn('ui:lobby', () => { if (inLobby()) music('lobby', { fadeOut: 0.9, fade: 0.9 }); });
+  safeOn('mp:left', () => { if (want === 'lobby') music('menu', { fadeOut: 0.9, fade: 0.8 }); });
   safeOn('race:end', () => { if (live() && LIVE.cur) { const saved = E; E = LIVE; try { fadeTo(LIVE.cur, 0.5, 1.2); } finally { E = saved; } } });
   safeOn('ui:podium', d => music('podium', { delay: d && d.playerRank === 0 ? 2.5 : 1.9, fadeOut: 0.5, fade: 0.8 }));
   safeOn('boot', () => { if (!want && !(FM.DEV && FM.params && FM.params.scene && FM.params.scene !== 'menu')) want = 'menu'; });
 
+  /* ---------- çok oyunculu: lobi farkları (katıldı / ayrıldı / hazır), başlatma, emoji, kopma ---------- */
+  let plPrev = null;                                     // pid → {ready, off}; odaya ilk girişte mevcutlar için ses yok
+  safeOn('net:players', d => {
+    const pl = Array.isArray(d.players) ? d.players : null; if (!pl) return;
+    const me = FM.net && typeof FM.net.pid === 'function' ? FM.net.pid() : null;
+    const cur = new Map();
+    for (const p of pl) if (p && typeof p.pid === 'string') cur.set(p.pid, { ready: !!p.ready, off: !!p.off });
+    const prev = plPrev; plPrev = cur;
+    if (!prev || !live()) return;
+    const racing = FM.S.mode === 'race' || FM.S.mode === 'count';   // yarışta kopma/dönüş sesini mp:drop/mp:back verir
+    let join = 0, leave = 0, ready = 0, readyMe = false;
+    for (const [pid, s] of cur) {
+      const o = prev.get(pid);
+      if (pid === me) { if (o && !o.ready && s.ready) readyMe = true; continue; }
+      if (!o) { if (!s.off) join++; continue; }
+      if (!racing && o.off !== s.off) { if (s.off) leave++; else join++; }
+      if (!o.ready && s.ready) ready++;
+    }
+    for (const [pid, o] of prev) if (pid !== me && !cur.has(pid) && !o.off) leave++;
+    const vol = racing ? 0.5 : 1;
+    if (join) play('mpJoin', { vol, exact: true });
+    else if (leave) play('mpLeave', { vol, exact: true });
+    if (readyMe) play('mpReady', { me: true, exact: true, when: join || leave ? 0.15 : 0 });
+    else if (ready) play('mpReady', { vol: 0.75, exact: true, when: join || leave ? 0.15 : 0 });
+  });
+  safeOn('mp:left', () => { plPrev = null; });
+  safeOn('net:status', s => { if (!s || !s.phase) plPrev = null; });
+  hook('mp:lobby', d => { if (!d.back) play('mpJoin', { exact: true }); });
+  hook('net:start', d => { if (!d.late) play('mpStart', { exact: true }); });
+  hook('mp:emote', d => play('emoji', { vol: d.me ? 0.9 : 0.6 }));
+  hook('mp:drop', () => play('mpDrop', { vol: 0.6, exact: true }));
+  hook('mp:back', () => play('mpJoin', { vol: 0.6, exact: true }));
+  hook('mp:left', d => { if (d.reason && d.reason !== 'left') play('mpDrop', { exact: true }); });
+  hook('net:kicked', () => play('mpDrop', { exact: true }));
+  hook('net:error', d => {
+    const c = d.code;
+    if (c === 'conn' || c === 'dup' || c === 'kicked') play('mpDrop', { exact: true });
+    else if (c && c !== 'nows') play('deny', { exact: true });
+  });
+
   /* ---------- oyun durumunu izleyen döngü (tırmanma tıkırtısı, füze kilidi, süre sayacı, testere sekmesi) ---------- */
-  const misSeen = new WeakMap(), sawSeen = new WeakMap();
+  const misSeen = new WeakMap(), sawSeen = new WeakMap(), bldSeen = new WeakMap();
   function watch(dt) {
     if (!live()) return;
     const S = FM.S, p = S.player;
@@ -1908,6 +2364,40 @@
       const sec = Math.ceil(S.endTimer);
       if (sec !== lastTick) { lastTick = sec; play('tick', { n: sec, exact: true }); }
     } else lastTick = null;
+    // Altın Avı: son 10 saniye saat tik-takı (son 3'te zil)
+    const tl = S.limitT && FM.game && typeof FM.game.timeLeft === 'function' ? FM.game.timeLeft() : null;
+    if (S.mode === 'race' && tl != null && tl > 0 && tl <= 10.05) {
+      const sec = Math.ceil(tl);
+      if (sec !== lastClock) { lastClock = sec; play('clock', { n: sec, alt: sec % 2 === 0, exact: true }); }
+    } else lastClock = null;
+    // buzda kayma (kayış sürdükçe yenilenir)
+    if (p.onIce && p.slide && p.onGround && p.dead <= 0) {
+      iceT -= dt;
+      if (iceT <= 0) { play('iceSlide', { r: p, vol: 0.8 }); iceT = 0.55; }
+    } else iceT = 0;
+    // kayalar (çöl): kapı sarsılınca gürleme, yuvarlanırken gümleme, sonunda parçalanma
+    const L = S.L, bs = L && L.boulders;
+    if (bs && bs.length) {
+      for (let i = 0; i < bs.length; i++) {
+        const b = bs[i]; if (!b) continue;
+        let st = bldSeen.get(b);
+        if (!st) { bldSeen.set(b, { s: b.st, t: 0 }); continue; }
+        const r = num(b.r, 30), by = num(b.by, num(b.y, 0) - r);
+        if (b.st !== st.s) {
+          if (b.st === 1) play('rumble', { x: num(b.x1, 0) + r, y: by });
+          else if (b.st === 2) st.t = 0;
+          else if (st.s === 2) play('boulderCrash', { x: num(b.x0, 0), y: by });
+          st.s = b.st;
+        }
+        if (b.st === 2) {
+          st.t -= dt;
+          if (st.t <= 0) {
+            play('roll', { x: num(b.bx, 0), y: by });
+            st.t = clamp(2 * Math.PI * r / Math.max(1, num(b.sp, 400)), 0.22, 0.5);
+          }
+        }
+      }
+    }
   }
   if (FM.R && Array.isArray(FM.R.updaters)) FM.R.updaters.push(watch);
 
@@ -1987,6 +2477,7 @@
         });
       },
       stats,
+      counts: () => Object.assign({}, playN),
       trim(on) { trimOn = !!on; return Object.assign({}, TRIM); },
       state() { return { want, unlocked, disabled, ctx: LIVE ? LIVE.ac.state : null, songs: LIVE ? LIVE.songs.map(s => s.id + (s.stopping ? '(sönüyor)' : '')) : [], voices: LIVE ? LIVE.voices.filter(v => !v.killed).length : 0, voicesAll: LIVE ? LIVE.voices.length : 0 }; },
       tick

@@ -5,11 +5,18 @@
 // eşya olayları karşıya geçiyor mu, tur sonucu ve final herkeste aynı mı, konsol hatası var mı; iki ekranın görüntüsünü kaydeder.
 // 10 kişilik oda: node dev/mp-browser.js 8 classic 0 1 10
 // YAVAŞ MOD: en fazla 2 Chrome; iş bitince tüm Chrome'lar ve hayaletler kapatılır.
+// --yerel: dev/broker.js yerel aracısını başlatır (sayfalara ?brokerUrl=, hayaletlere de aynı aracı). NET_BROKER=ws://.../mqtt de olur.
+// --tur5: TUR5 akışı (2 tarayıcı, dev kancaları + FM.net/FM.netgame API'leri; arayüz düğmelerine tıklamaz):
+//   varlık listesi + profil kartları, ikisi HAZIR → 5 sn geri sayım → yarış, hazırı geri alma iptali, yarış ortasında katılan sayfayı
+//   YENİDEN YÜKLER (otomatik geri dönüş, aynı yarışçı kaldığı yerden), turlar arası otomatik geçiş (üyede autoLeft), final → ikisi de
+//   AYNI odada lobide (hazırlar sıfır), lobide yeniden yükleme → otomatik geri dönüş. Örn: node dev/mp-browser.js --yerel --tur5
 'use strict';
 try { require('os').setPriority(0, require('os').constants.priority.PRIORITY_LOW); } catch (e) { }
 const fs = require('fs'), path = require('path'), os = require('os');
 const { spawn } = require('child_process');
-const { ghost, sleep, waitFor, endSig } = require('./mp-bots.js');
+const { ghost, sleep, waitFor, endSig, setBroker } = require('./mp-bots.js');
+let BURL = process.env.NET_BROKER || null, LOCAL = null;
+const TUR5 = process.argv.includes('--tur5');
 const root = path.resolve(__dirname, '..');
 const chromePath = [process.env.CHROME, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p => p && fs.existsSync(p));
 if (!chromePath) { console.error('Chrome/Edge bulunamadı'); process.exit(1); }
@@ -40,9 +47,15 @@ function cdp(wsUrl) {
   return api;
 }
 const procs = [];
+const pageUrl = query => 'file:///' + root.split(path.sep).join('/') + '/index.html?' + query + (BURL ? '&brokerUrl=' + encodeURIComponent(BURL) : '');
+// olay kaydı sayfa betiklerinden ÖNCE kurulur (açılışta otomatik geri dönüş gibi erken olaylar kaçmasın; her yüklemede yeniden)
+const CAPTURE = `(function w() { if (!(window.FM && FM.on)) { setTimeout(w, 4); return; } if (window.__mp) return; window.__mp = [];
+  for (const e of ["mp:start","mp:end","mp:final","mp:lobby","mp:host","mp:waiting","mp:drop","net:error","mp:countdown","mp:rejoining","mp:left","net:came"])
+    FM.on(e, d => { let x = null; try { x = (e === "mp:end" || e === "mp:final" || e === "mp:countdown" || e === "mp:left" || e === "net:came" || e === "mp:rejoining" || e === "net:error") ? JSON.parse(JSON.stringify(d)) : null; } catch (er) { } __mp.push({e, t: Date.now(), d: x}); });
+})();`;
 async function openPage(name, query) {
   const profile = path.join(os.tmpdir(), 'fm-mpb-' + name + '-' + process.pid);
-  const url = 'file:///' + root.split(path.sep).join('/') + '/index.html?' + query;
+  const url = pageUrl(query);
   const ch = spawn(chromePath, ['--headless=new', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []), '--disable-gpu', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-allow-origins=*',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--user-data-dir=' + profile, '--window-size=844,390', url], { stdio: 'ignore' });
   procs.push({ ch, profile });
@@ -58,8 +71,9 @@ async function openPage(name, query) {
     if (m.method === 'Runtime.consoleAPICalled' && (m.params.type === 'error' || m.params.type === 'assert')) page.errs.push('console.' + m.params.type + ': ' + m.params.args.map(a => a.value || a.description || '').join(' ').slice(0, 400));
   });
   await page.send('Runtime.enable'); await page.send('Page.enable');
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: CAPTURE });
   await waitFor(() => page.eval('!!(window.FM && FM.netgame && FM.S && FM.S.mode !== "boot")'), 25000, name + ' oyun yüklendi');
-  await page.eval('window.__mp = []; for (const e of ["mp:start","mp:end","mp:final","mp:lobby","mp:host","mp:waiting","mp:drop","net:error"]) FM.on(e, d => __mp.push({e, t: Date.now(), d: (e === "mp:end" || e === "mp:final") ? JSON.parse(JSON.stringify(d)) : null})); true');
+  await page.eval(CAPTURE + ' true');
   page.name = name;
   return page;
 }
@@ -98,6 +112,118 @@ async function lateFlow(pass, fail, ghosts) {
   if (!errs.length) pass('konsol hatası yok'); else { fail(errs.length + ' hata'); for (const e of errs.slice(0, 10)) console.log('      ' + e.slice(0, 300)); }
   A.close(); B.close();
 }
+/* ---- TUR5: geri sayım, kalıcı lobi, yeniden yüklemede geri dönüş, varlık (2 tarayıcı) ---- */
+async function tur5Flow(pass, fail) {
+  const q = 'dev=1&mobile=1';
+  const step = async (name, fn) => { try { await fn(); } catch (e) { fail(name + ' — ' + (e && e.message)); } };
+  const A = await openPage('evsahibi', q + '&mp=host&want=99&wait=99999&mode=classic&theme=0&rounds=2&fill=3&mpauto=6');
+  await waitFor(() => A.eval('FM.net.inRoom()'), 30000, 'ev sahibi odayı kurdu');
+  const code = await A.eval('FM.net.code()');
+  const B = await openPage('katilan', q + '&mp=join&room=' + code);
+  await waitFor(async () => (await B.eval('FM.net.inRoom()')) && (await A.eval('FM.net.players().length')) === 2, 30000, 'katılan odada');
+  const pidB = await B.eval('FM.net.pid()');
+  console.log(`oda ${code} (${await A.eval('FM.net.status().brokerName')}) — TUR5 akışı, katılan ${pidB}`);
+  const evs = (P, e) => P.eval('__mp.filter(x => x.e === ' + JSON.stringify(e) + ')');
+  const cdSeq = async P => (await evs(P, 'mp:countdown')).map(x => x.d.left === null ? 'x(' + (x.d.reason || '') + ')' : x.d.left).join(',');
+  const reloadB = async () => {
+    await B.send('Page.navigate', { url: pageUrl(q) });             // mp/room kancası YOK → açılıştaki otomatik geri dönüş
+    await sleep(400);
+    await waitFor(() => B.eval('!!(window.FM && FM.netgame && FM.S && FM.S.mode !== "boot" && window.__mp)'), 25000, 'katılan yeniden yüklendi');
+  };
+
+  await step('varlık', async () => {
+    await waitFor(async () => (await A.eval('FM.net.online().length')) === 2 && (await B.eval('FM.net.online().length')) === 2, 12000, 'iki tarayıcı birbirini çevrimiçi görür');
+    const oa = await A.eval('FM.net.online().map(x => ({me: x.me, st: x.st, code: x.code, n: x.n}))');
+    const pr = await A.eval('FM.net.profiles().find(x => !x.me)');
+    const ps = await A.eval('FM.net.presence()');
+    if (oa.every(x => x.st === 'lobby' && x.code === code && x.n === 2) && pr && pr.online && typeof pr.lvl === 'number' && typeof pr.play === 'number' && ps.shared)
+      pass(`varlık: iki tarayıcı birbirini "Lobide · ${code} · 2/10" görüyor, profil kartı (seviye ${pr.lvl}, oynama ${pr.play} sn, kupa ${pr.tr}) geldi; oda bağlantısı paylaşılıyor`);
+    else fail('varlık: ' + JSON.stringify({ oa, pr, ps }));
+  });
+
+  await step('geri sayım', async () => {
+    await A.eval('FM.net.setReady(true)'); await B.eval('FM.net.setReady(true)');
+    await waitFor(async () => (await A.eval('FM.netgame.countdown()')) != null && (await B.eval('FM.netgame.countdown()')) != null, 4000, 'geri sayım iki tarafta');
+    await sleep(1300);
+    await A.shot(path.join(OUT, 'tur5-gerisayim-evsahibi.png')); await B.shot(path.join(OUT, 'tur5-gerisayim-katilan.png'));
+    await B.eval('FM.net.setReady(false)');
+    await waitFor(async () => /x\(unready\)$/.test(await cdSeq(A)) && /x\(unready\)$/.test(await cdSeq(B)), 4000, 'iptal iki tarafta');
+    await sleep(6000);
+    if ((await A.eval('FM.netgame.state().phase')) !== 'lobby') throw new Error('iptalden sonra yarış başladı');
+    pass('ikisi HAZIR → geri sayım iki tarayıcıda; katılan hazırı geri alınca iki tarafta iptal (unready), yarış başlamadı (' + await cdSeq(B) + ')');
+    await A.eval('__mp = __mp.filter(x => x.e !== "mp:countdown"); true'); await B.eval('__mp = __mp.filter(x => x.e !== "mp:countdown"); true');
+    const t0 = Date.now();
+    await B.eval('FM.net.setReady(true)');
+    await waitFor(async () => (await A.eval('FM.netgame.state().phase')) === 'race' && (await B.eval('FM.netgame.state().phase')) === 'race', 12000, 'yarış kendiliğinden başladı');
+    const dt = (Date.now() - t0) / 1000, sb = await cdSeq(B), sa = await cdSeq(A);
+    if (dt > 4.2 && dt < 8 && /^5,4,3,2,1,x\(start\)$/.test(sb) && /^5,4,3,2,1,x\(start\)$/.test(sa)) pass(`geri sayım 5…1 iki tarafta, ${dt.toFixed(1)} sn sonra yarış KENDİLİĞİNDEN başladı`);
+    else fail(`sayım: ev sahibi ${sa} | katılan ${sb} | ${dt.toFixed(1)} sn`);
+    await A.eval('FM.netgame.autopilot = true; if (FM.S.player) FM.S.player.bot = true; true');
+    await B.eval('FM.netgame.autopilot = true; if (FM.S.player) FM.S.player.bot = true; true');
+  });
+
+  await step('yarış ortasında yeniden yükleme', async () => {
+    await waitFor(async () => (await B.eval('FM.S.mode === "race" && FM.S.raceT > 9')), 30000, 'yarış ilerledi');
+    const xB = await B.eval('Math.round(FM.S.player.x)');
+    await reloadB();
+    await waitFor(async () => (await B.eval('FM.netgame.state().phase')) === 'race', 15000, 'geri dönen yarışta');
+    await B.eval('FM.netgame.autopilot = true; if (FM.S.player && FM.S.player.ctrl === "local") FM.S.player.bot = true; true');
+    const st = await B.eval('({rej: __mp.filter(x => x.e === "mp:rejoining").map(x => x.d.code), spec: FM.netgame.state().spectating, ctrl: FM.S.player.ctrl, pid: FM.S.player.pid, x: Math.round(FM.S.player.x)})');
+    await waitFor(async () => A.eval(`(() => { const r = FM.netgame.racer(${JSON.stringify(pidB)}); return !!r && !r.off && !r.out; })()`), 10000, 'ev sahibinde geri geldi');
+    await sleep(2500);
+    await B.shot(path.join(OUT, 'tur5-geridonus-katilan.png'));
+    if (st.rej[0] === code && !st.spec && st.ctrl === 'local' && st.pid === pidB && st.x > 600 && Math.abs(st.x - xB) < 1500) pass(`yarışta sayfa yenilendi → otomatik geri dönüş (mp:rejoining ${code}), AYNI yarışçı kaldığı yerden (önce x=${xB}, sonra x=${st.x}); ev sahibinde "koptu" kalktı`);
+    else fail('geri dönüş: ' + JSON.stringify(st) + ' önce x=' + xB);
+  });
+
+  await step('turlar arası otomatik geçiş', async () => {
+    await waitFor(async () => (await evs(A, 'mp:end')).length >= 1 && (await evs(B, 'mp:end')).length >= 1, 150000, 'tur 1 sonu');
+    await sleep(400);
+    const al = [await A.eval('FM.netgame.autoLeft()'), await B.eval('FM.netgame.autoLeft()')];
+    const t0 = Date.now();
+    await sleep(1600);
+    await B.shot(path.join(OUT, 'tur5-kursu-katilan.png'));
+    await waitFor(async () => (await A.eval('FM.netgame.state().round')) === 2 && (await B.eval('FM.netgame.state().round')) === 2 && (await B.eval('FM.netgame.state().phase')) === 'race', 20000, 'tur 2');
+    const s = (Date.now() - t0) / 1000 + 0.4;
+    if (al.every(v => v >= 5 && v <= 9) && s > 5.5 && s < 10.5) pass(`tur sonu: autoLeft ev sahibi ${al[0]} / katılan ${al[1]}; ${s.toFixed(1)} sn sonra tur 2 kendiliğinden başladı`);
+    else fail('otomatik geçiş: autoLeft ' + JSON.stringify(al) + ', ' + s.toFixed(1) + ' sn');
+    await A.eval('if (FM.S.player) FM.S.player.bot = true; true'); await B.eval('if (FM.S.player) FM.S.player.bot = true; true');
+  });
+
+  await step('maç sonu → lobi', async () => {
+    await waitFor(async () => (await evs(A, 'mp:final')).length >= 1 && (await evs(B, 'mp:final')).length >= 1, 160000, 'final');
+    await sleep(1500);
+    await B.shot(path.join(OUT, 'tur5-final-katilan.png'));
+    const al = await B.eval('FM.netgame.autoLeft()');
+    await waitFor(async () => (await A.eval('FM.netgame.state().phase')) === 'lobby' && (await B.eval('FM.netgame.state().phase')) === 'lobby', 16000, 'iki taraf lobide');
+    await sleep(1200);
+    const sa = await A.eval('({code: FM.net.code(), n: FM.net.players().length, rd: FM.net.players().map(p => p.ready), R: FM.net._dbg.R.ready, ui: FM.ui && FM.ui.state ? FM.ui.state() : null, left: __mp.filter(x => x.e === "mp:left").length})');
+    const sb = await B.eval('({code: FM.net.code(), R: FM.net._dbg.R.ready, ui: FM.ui && FM.ui.state ? FM.ui.state() : null, left: __mp.filter(x => x.e === "mp:left").length})');
+    await A.shot(path.join(OUT, 'tur5-lobi-evsahibi.png')); await B.shot(path.join(OUT, 'tur5-lobi-katilan.png'));
+    if (sa.code === code && sb.code === code && sa.n === 2 && !sa.R && !sb.R && sa.rd.every(r => !r) && !sa.left && !sb.left && al >= 7 && al <= 10)
+      pass(`final (katılanda "lobiye ${al} sn") → ikisi de AYNI odada (${code}) lobide, hazırlar sıfır, menüye atılmadı (arayüz: ${JSON.stringify(sa.ui)} / ${JSON.stringify(sb.ui)})`);
+    else fail('lobiye dönüş: ' + JSON.stringify({ sa, sb, al }));
+  });
+
+  await step('lobide yeniden yükleme', async () => {
+    const cameBefore = (await evs(A, 'net:came')).length;
+    await reloadB();
+    await waitFor(async () => (await B.eval('FM.net.inRoom() && FM.netgame.state().phase === "lobby"')), 15000, 'katılan lobiye geri döndü');
+    await waitFor(async () => (await A.eval('FM.net.players().length')) === 2 && (await A.eval('FM.net.online().length')) === 2, 12000, 'ev sahibi 2 oyuncu + çevrimiçi');
+    await sleep(1500);
+    const sb = await B.eval('({code: FM.net.code(), rej: __mp.filter(x => x.e === "mp:rejoining").map(x => x.d.code), lobby: __mp.filter(x => x.e === "mp:lobby").length, pid: FM.net.pid(), ui: FM.ui && FM.ui.state ? FM.ui.state() : null})');
+    const came = (await evs(A, 'net:came')).length - cameBefore;
+    await B.shot(path.join(OUT, 'tur5-yenileme-lobi-katilan.png'));
+    if (sb.code === code && sb.rej[0] === code && sb.lobby >= 1 && sb.pid === pidB && came === 0) pass(`lobide sayfa yenilendi → aynı kimlikle (${pidB}) aynı odaya otomatik dönüldü, mp:lobby; ev sahibinde "çevrimiçi oldu" bildirimi YOK (kısa kesinti)`);
+    else fail('lobide geri dönüş: ' + JSON.stringify({ sb, came }));
+  });
+
+  const errs = A.errs.concat(B.errs);
+  if (!errs.length) pass('konsol hatası yok (iki tarayıcı, yeniden yüklemeler dahil)'); else { fail(errs.length + ' konsol hatası'); for (const e of errs.slice(0, 10)) console.log('      ' + e.slice(0, 300)); }
+  const caught = (await A.eval('FM.net.log().filter(l => l.indexOf("HATA") >= 0)')).concat(await B.eval('FM.net.log().filter(l => l.indexOf("HATA") >= 0)'));
+  if (caught.length) fail('net.js yakalanan hata: ' + caught.slice(0, 3).join(' | '));
+  A.close(); B.close();
+}
 function killAll() {
   for (const p of procs) { try { p.ch.kill(); } catch (e) { } }
   setTimeout(() => { for (const p of procs) { try { fs.rmSync(p.profile, { recursive: true, force: true }); } catch (e) { } } }, 800);
@@ -110,7 +236,10 @@ process.on('exit', killAll);
   const ghosts = [];
   const t00 = Date.now();
   try {
+    if (process.argv.includes('--yerel') && !BURL) { LOCAL = await require('./broker.js').start({ port: 0 }); BURL = LOCAL.url; console.log('Yerel aracı: ' + BURL); }
+    if (BURL) setBroker(BURL);
     main: {
+    if (TUR5) { await tur5Flow(pass, fail); break main; }
     if (LATE) { await lateFlow(pass, fail, ghosts); break main; }
     const want = 2 + NG;
     const A = await openPage('evsahibi', `dev=1&mp=host&mobile=1&want=${want}&wait=90&mode=${MODE}&theme=${THEME}&rounds=${ROUNDS}&fill=${FILL}&mpauto=6`);
@@ -197,5 +326,6 @@ process.on('exit', killAll);
   for (const g of ghosts) g.stop();
   console.log(`\nSonuç: ${ok.length} geçti, ${bad.length} kaldı (${((Date.now() - t00) / 1000).toFixed(0)} sn). Ekran görüntüleri: ${OUT}`);
   killAll();
+  if (LOCAL) LOCAL.close();
   setTimeout(() => process.exit(bad.length ? 1 : 0), 1200);
 })();

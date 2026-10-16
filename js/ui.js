@@ -157,7 +157,11 @@
     shirt: [['f', 'M8.2 3 3 5.6l1.9 4.8 2.4-.9v11.2h9.4V9.5l2.4.9L21 5.6 15.8 3c-.6 1.6-2.1 2.6-3.8 2.6S8.8 4.6 8.2 3z']],
     pad2: [['f', 'M7 6.6h10c2.8 0 4.6 2.7 5 6.3.3 2.9-.6 4.7-2.2 4.7-1.4 0-2.3-1.2-3.3-2.7H7.5c-1 1.5-1.9 2.7-3.3 2.7-1.6 0-2.5-1.8-2.2-4.7.4-3.6 2.2-6.3 5-6.3z'], ['d', 'M6.2 9.6h1.6v1.5h1.5v1.6H7.8v1.5H6.2v-1.5H4.7v-1.6h1.5z'], ['a', circ(16.4, 10.4, 1.2)], ['a', circ(18.6, 12.6, 1.2)]],
     chart: [['f', 'M3.5 14h3.6v6.5H3.5zM10.2 10.5h3.6v10h-3.6zM16.9 6.5h3.6v14h-3.6z'], ['sa', 'M3.4 10.4 9 5.6l3.4 2.6 6.8-5.2M15.6 3h3.6v3.6']],
-    halo: [['sa', 'M6.5 4.2c0-1 2.5-1.8 5.5-1.8s5.5.8 5.5 1.8-2.5 1.8-5.5 1.8-5.5-.8-5.5-1.8z'], ['f', circ(12, 14, 7.6)], ['d', circ(9.4, 13, 1.1)], ['d', circ(14.6, 13, 1.1)], ['ds', 'M9.2 16.6c1.6 1.4 4 1.4 5.6 0', 'stroke-width="1.8"']]
+    copy: [['f', 'M8.4 2.6h10.2c1 0 1.8.8 1.8 1.8v11.4h-3V5.6H8.4z'], ['f', 'M4.6 7.4h10.2c1 0 1.8.8 1.8 1.8v10.4c0 1-.8 1.8-1.8 1.8H4.6c-1 0-1.8-.8-1.8-1.8V9.2c0-1 .8-1.8 1.8-1.8z']],
+    share: [['s', 'M5 12.6v6.2c0 1 .8 1.8 1.8 1.8h10.4c1 0 1.8-.8 1.8-1.8v-6.2'], ['f', 'M12 1.8l6 6h-4v7.4h-4V7.8H6z']],
+    smile: [['a', circ(12, 12, 9.8)], ['d', ell(8.7, 9.6, 1.4, 1.8)], ['d', ell(15.3, 9.6, 1.4, 1.8)], ['ds', 'M7.4 13.6c1.1 2.3 2.7 3.5 4.6 3.5s3.5-1.2 4.6-3.5', 'stroke-width="2.3"']],
+    wifi: [['s', 'M2.6 9.2a13.4 13.4 0 0 1 18.8 0M5.9 12.6a8.6 8.6 0 0 1 12.2 0M9.2 16a3.9 3.9 0 0 1 5.6 0'], ['f', circ(12, 19.4, 1.9)]],
+    halo: [['sa','M6.5 4.2c0-1 2.5-1.8 5.5-1.8s5.5.8 5.5 1.8-2.5 1.8-5.5 1.8-5.5-.8-5.5-1.8z'], ['f', circ(12, 14, 7.6)], ['d', circ(9.4, 13, 1.1)], ['d', circ(14.6, 13, 1.1)], ['ds', 'M9.2 16.6c1.6 1.4 4 1.4 5.6 0', 'stroke-width="1.8"']]
   };
   /* emoji -> vektör ikon (görev / geliştirme / ödül satırları) */
   const EMO = {
@@ -165,6 +169,7 @@
     '🏁': ['r', 'flag'], '🧨': ['r', 'dyn'], '🪚': ['r', 'saw'], '🚀': ['r', 'mis'], '🛡': ['r', 'shield'],
     '🎈': ['r', 'balloon'], '💥': ['r', 'x_boom'], '☠': ['r', 'x_boom'], '🕸': ['r', 'net'], '🧲': ['r', 'mag'],
     '❄': ['r', 'ice'], '🦑': ['r', 'ink'], '👟': ['r', 'speed'], '🪤': ['r', 'trap'], '🌩': ['r', 'bolt'], '⏱': ['r', 'clock'],
+    '🚪': ['r', 'x_gate'], '☄': ['r', 'x_meteor'],
     '🥇': ['m', 1], '🥈': ['m', 2], '🥉': ['m', 3], '🏅': ['m', 4],
     '⏩': ['s', 'pad', 'c-steel'], '📦': ['s', 'box', 'c-wood'], '🍄': ['s', 'mush', 'c-mush'], '🎁': ['s', 'gift', 'c-gift'],
     '⚡': ['s', 'bolt', 'c-gold'], '🌟': ['s', 'star', 'c-gold'], '⭐': ['s', 'star', 'c-gold'], '✨': ['s', 'sparkle', 'c-gold'],
@@ -748,7 +753,8 @@
     view: 'none', screen: null,
     tabs: { shop: 'up', missions: 'daily', help: 'controls' },
     cview: null, modal: null, onOk: null, pausedByRot: false, dailyShown: false,
-    lastMatch: { rounds: 3 }, flashKey: null, resData: null, quitArm: 0, lastCur: null, devForce: false
+    lastMatch: { rounds: 3 }, flashKey: null, resData: null, quitArm: 0, lastCur: null, devForce: false,
+    mpEmo: {}, mpCode: '', fakeLobby: null, nickThen: null, mpRaced: false, imp: null
   };
   function showLayer(name, on) { Ls[name].classList.toggle('on', !!on); }
   function selChar() { const s = sv(); return FM.CH[s.selChar] ? s.selChar : 'TAFTAF'; }
@@ -850,14 +856,14 @@
       th += '<button class="btn tile ' + t[3] + '" data-act="go" data-to="' + t[0] + '" style="--d:' + (.18 + i * .05).toFixed(2) + 's">' +
         '<span class="t-ic">' + svg(t[2]) + '</span><span class="t-lb">' + t[1] + '</span>' + (t[4] ? '<i class="badge">' + t[4] + '</i>' : '') + '</button>';
     });
-    let rd = '';
-    for (const n of [1, 3, 5]) rd += '<button class="rd ' + (n === rounds ? 'on' : '') + '" data-act="rounds" data-n="' + n + '" aria-label="' + n + ' tur">' + n + '</button>';
+    void rounds;
+    const inR = mpInRoom();
     return '<div class="mm">' +
       '<section class="mm-l">' +
         '<div class="logo-wrap"><canvas class="logo" data-art="logo" aria-label="Fuat Morel"></canvas></div>' +
         '<div class="play-row">' +
           '<span class="play-wrap"><span class="pl-glow"></span><button class="btn b-gold btn-play" data-act="play"><span class="shine"></span><span class="pl-ic">' + svg('play') + '</span><span class="pl-t">OYNA</span></button></span>' +
-          '<div class="rounds"><span class="rd-t">TUR</span><span class="rd-o">' + rd + '</span></div>' +
+          '<button class="btn b-green btn-friends" data-act="' + (inR ? 'golobby' : 'go') + '" data-to="friends"><span class="bf-ic">' + svg('users') + '</span><span class="bf-t"><b>ARKADAŞLARLA</b><em>' + (inR ? 'Odaya dön' : 'Oda kur · Katıl') + '</em></span></button>' +
         '</div>' +
         '<nav class="tiles">' + th + '</nav>' +
       '</section>' +
@@ -918,7 +924,7 @@
       sk += '<button class="sk ' + (eq ? 'eq ' : '') + (own ? 'own' : '') + '" data-act="skin" data-id="' + esc(s.id) + '" data-ch="' + esc(v) + '" data-k="sk:' + esc(s.id) + '" title="' + esc(s.n) + '">' +
         '<span class="sk-pt">' + pt(v, 80, { skin: s.id }) + '</span>' +
         '<span class="sk-n">' + esc(s.n) + '</span>' +
-        (eq ? '<span class="sk-s s-eq">' + svg('check') + '</span>' : own ? '<span class="sk-s s-own">KUŞAN</span>' : '<span class="sk-s s-pr">' + coinI(20, 'bi') + fmtN(s.price) + '</span>') +
+        (eq ? '<span class="sk-s s-eq">' + svg('check') + '</span>' : own ? '<span class="sk-s s-own">KUŞAN</span>' : '<span class="sk-s s-pr">' + curIcon(cosCur('skins', s.id), 20, 'bi') + fmtN(s.price) + '</span>') +
       '</button>';
     }
     let stats = '';
@@ -959,8 +965,17 @@
     const eq = equipped(type, ch) === id, own = owns(type, id, ch);
     if (eq) return '<span class="tag-eq">' + svg('check') + 'KUŞANILDI</span>';
     if (own) return '<button class="btn sm b-blue" data-act="equip" data-type="' + type + '" data-id="' + esc(id) + '" data-ch="' + esc(ch) + '">KUŞAN</button>';
-    return priceBtn('buycos', 'data-type="' + type + '" data-id="' + esc(id) + '" data-ch="' + esc(ch) + '"', { cur: 'coins', n: price });
+    return priceBtn('buycos', 'data-type="' + type + '" data-id="' + esc(id) + '" data-ch="' + esc(ch) + '"', { cur: cosCur(type, id), n: price });
   }
+  /** Kozmetiğin para birimi (elmaslı kozmetikler: meta.currency / COSMETICS.cur) */
+  function cosCur(type, id) {
+    const c = mcall('currency', type, id);
+    if (c === 'gems' || c === 'coins') return c;
+    const it = cosItem(type, id);
+    return it && it.cur === 'gems' ? 'gems' : 'coins';
+  }
+  const curAmt = cur => (cur === 'gems' ? gems() : coins());
+  const curIcon = (cur, css, cls) => (cur === 'gems' ? gemI(css, cls) : coinI(css, cls));
   /** Hazine paketleri için büyüyen altın yığını / sandık kompozisyonu */
   function packArt(i) {
     const c = k => coinI(64, 'pa-c pa-c' + k);
@@ -1227,8 +1242,15 @@
         (fsOK() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran</span><button class="btn sm b-blue" data-act="full">' + (fs ? 'KAPAT' : 'AÇ') + '</button></div>' : '') +
         toggleRow('shake', 'Ekran sarsıntısı', 'shake') +
       '</div>';
+    const prof = '<div class="set-card"><h4>' + svg('user') + 'PROFİL</h4>' +
+        '<div class="srow"><span class="s-ic">' + svg('user') + '</span><span class="s-l">Takma ad</span><b class="s-nick">' + esc(myNick()) + '</b><button class="btn sm b-purple" data-act="nick">DEĞİŞTİR</button></div>' +
+      '</div>';
+    const save = '<div class="set-card"><h4>' + svg('chest') + 'KAYIT KODU</h4>' +
+        '<p class="set-tip">İlerlemen bu cihazda otomatik kaydedilir. Başka cihaza geçerken kodla taşı.</p>' +
+        '<div class="srow sv-row"><button class="btn sm b-blue" data-act="svexp">' + svg('share') + '<span>KODUMU AL</span></button><button class="btn sm b-green" data-act="svimp">' + svg('down') + '<span>KOD GİR</span></button></div>' +
+      '</div>';
     // telefonda en önemli ayarlar (kalite, tam ekran) üstte; klavye kısayolları yalnızca klavyeli cihazda
-    const left = (touchMode ? view + sound : sound + view) +
+    const left = prof + save + pwaCard() + (touchMode ? view + sound : sound + view) +
       '<div class="set-card danger"><h4>' + svg('reset') + 'İLERLEME</h4><div class="srow"><span class="s-l s-wide">Tüm ilerlemeni sil ve baştan başla.</span><button class="btn sm b-red" data-act="reset">SIFIRLA</button></div></div>';
     const right = touchMode
       ? '<div class="set-card ctl-card"><h4>' + svg('hand') + 'DOKUNMATİK</h4>' + touchList() + '</div>'
@@ -1296,7 +1318,225 @@
     return panel('NASIL OYNANIR', tabsBar('help', tabs, tab) + '<div class="tab-body scroll" data-sk="help-' + tab + '">' + body + '</div>', 'pnl-help', 'rb-purple');
   }
 
-  const SCREENS = { menu: renderMenu, chars: renderChars, shop: renderShop, missions: renderMissions, clan: renderClan, settings: renderSettings, help: renderHelp };
+  /* =====================================================================
+     15b) TEK OYUNCULU KURULUM (mod + harita + tur + rakip) ve ARKADAŞLARLA ekranları
+     ===================================================================== */
+  const MODES = () => (Array.isArray(FM.MODES) && FM.MODES.length ? FM.MODES : [{ id: 'classic', n: 'Klasik Yarış', ic: '🏁', d: 'Bitişe ilk varan kazanır.' }]);
+  function modeOf(id) { return MODES().find(m => m.id === id) || MODES()[0]; }
+  function mapList() { return ['random'].concat((FM.THEMES || []).map(t => t.id)); }
+  function themeOf(id) { return (FM.THEMES || []).find(t => t.id === id) || null; }
+  function mapName(id) { const t = themeOf(id); return t ? t.n : 'Rastgele'; }
+  function mapMech(id) { const t = themeOf(id); return t ? (t.mech || '') : 'Her tur farklı bir harita'; }
+  function mapBg(id) {
+    const t = themeOf(id);
+    if (!t || !Array.isArray(t.sky)) return '--m1:#ff5a6e;--m2:#8a4dff;--m3:#3fb0ff';
+    return '--m1:' + esc(t.sky[0]) + ';--m2:' + esc(t.sky[1]) + ';--m3:' + esc(t.sky[2]);
+  }
+  const firstSentence = s => { s = String(s || ''); const i = s.indexOf('. '); return i > 0 ? s.slice(0, i + 1) : s; };
+  function soloSel() {
+    const s = sv();
+    return { mode: modeOf(s.mode).id, map: mapList().indexOf(s.map) >= 0 ? s.map : 'random', rounds: roundsSel(), rivals: clamp(Math.round(+s.rivals || 3), 1, 9) };
+  }
+  function renderSolo() {
+    const o = soloSel();
+    let mh = '';
+    MODES().forEach((m, i) => {
+      mh += '<button class="mcard ' + (m.id === o.mode ? 'on' : '') + '" data-act="smode" data-v="' + esc(m.id) + '" style="--d:' + (i * .04).toFixed(2) + 's">' +
+        '<span class="mc-ic">' + anyIcon(m.ic, 40) + '</span><span class="mc-m"><b>' + esc(m.n) + '</b><span>' + esc(firstSentence(m.d)) + '</span></span>' +
+        (m.id === o.mode ? '<i class="mc-ck">' + svg('check') + '</i>' : '') + '</button>';
+    });
+    let ph = '';
+    mapList().forEach((id, i) => {
+      ph += '<button class="mapc ' + (id === o.map ? 'on ' : '') + (id === 'random' ? 'rnd' : '') + '" data-act="smap" data-v="' + esc(id) + '" style="' + mapBg(id) + ';--d:' + (i * .03).toFixed(2) + 's">' +
+        '<i class="mp-hill"></i>' + (id === 'random' ? '<i class="mp-q">?</i>' : '') + '<b>' + esc(mapName(id)) + '</b></button>';
+    });
+    let rd = '';
+    for (const n of [1, 3, 5]) rd += '<button class="rd ' + (n === o.rounds ? 'on' : '') + '" data-act="rounds" data-n="' + n + '" aria-label="' + n + ' tur">' + n + '</button>';
+    return panel('TEK OYUNCULU',
+      '<div class="so-wrap">' +
+        '<div class="so-col so-c1"><h4 class="so-h">' + svg('flag') + 'MOD</h4><div class="so-modes scroll" data-sk="so-m">' + mh + '</div></div>' +
+        '<div class="so-col so-c2"><h4 class="so-h">' + svg('star') + 'HARİTA</h4><div class="so-maps">' + ph + '</div><p class="so-mech">' + svg('info') + '<span>' + esc(mapMech(o.map)) + '</span></p></div>' +
+        '<div class="so-col so-side">' +
+          '<div class="so-opt"><span class="so-l">TUR</span><span class="rd-o">' + rd + '</span></div>' +
+          '<div class="so-opt"><span class="so-l">RAKİP</span><span class="stp"><button class="rd" data-act="rivals" data-d="-1" aria-label="Azalt">−</button><b class="stp-v">' + o.rivals + '</b><button class="rd" data-act="rivals" data-d="1" aria-label="Artır">+</button></span></div>' +
+          '<span class="so-pt">' + pt(selChar(), 64, { skin: equipped('skins', selChar()) }) + '<em>' + esc(selChar()) + '</em></span>' +
+          '<button class="btn b-gold btn-go" data-act="solostart"><span class="shine"></span>' + svg('play') + '<span>BAŞLA</span></button>' +
+        '</div>' +
+      '</div>', 'pnl-solo', 'rb-gold');
+  }
+
+  /* ---------- çok oyunculu yardımcılar (FM.net / FM.netgame yoksa güvenli) ---------- */
+  function NET() { try { return FM.net && typeof FM.net.available === 'function' && FM.net.available() ? FM.net : null; } catch (e) { return null; } }
+  function NGM() { return FM.netgame || null; }
+  function ncall(name) {
+    const n = NET(); if (!n || typeof n[name] !== 'function') return undefined;
+    try { return n[name].apply(n, Array.prototype.slice.call(arguments, 1)); } catch (e) { console.error('[ui] net.' + name, e); return undefined; }
+  }
+  function gcall(name) {
+    const g = NGM(); if (!g || typeof g[name] !== 'function') return undefined;
+    try { return g[name].apply(g, Array.prototype.slice.call(arguments, 1)); } catch (e) { console.error('[ui] netgame.' + name, e); return undefined; }
+  }
+  function mpInRoom() { return !!(ncall('inRoom')); }
+  function mpBusy() { return !!(ncall('busy')); }
+  function mpHost() { return !!(ncall('isHost')); }
+  /** Ağ maçı ekranda mı (duraklatma yok, odadan ayrıl menüsü) */
+  function mpLive() { return !!(S.netRole && gcall('live')); }
+  function mpActive() { return !!gcall('active'); }
+  function myNick() { return ncall('nick') || sv().nick || selChar(); }
+  function normCfg(c) {
+    const g = NGM();
+    if (g && typeof g.normCfg === 'function') { try { return g.normCfg(c); } catch (e) { /* aşağıdaki yedek */ } }
+    c = c || {};
+    return { mode: modeOf(c.mode).id, map: mapList().indexOf(c.map) >= 0 ? c.map : 'random', rounds: +c.rounds || 3, bots: c.bots !== false, fill: +c.fill || 4, autoNext: 20 };
+  }
+  function lastCfg() {
+    let c = null;
+    try { c = JSON.parse(lsGet('fm-mpcfg') || 'null'); } catch (e) { c = null; }
+    if (!c || typeof c !== 'object') c = gcall('defaultCfg') || { mode: sv().mode || 'classic', map: 'random', rounds: 3, bots: true };
+    return normCfg(c);
+  }
+  function renderFriends() {
+    if (!NET()) return panel('ARKADAŞLARLA', emptyBox('info', 'Bu tarayıcı çok oyunculuyu desteklemiyor', 'Oyunu Chrome ya da Safari ile aç.'), 'pnl-fr', 'rb-green');
+    return panel('ARKADAŞLARLA',
+      '<div class="fr-wrap">' +
+        '<div class="frc frc-host">' +
+          '<span class="frc-art">' + svg('crown', 'gold') + '</span>' +
+          '<b class="frc-t">ODA KUR</b>' +
+          '<span class="frc-d">Odayı sen kur, linki arkadaşlarına at. <b>10 kişiye</b> kadar herkes kendi telefonundan aynı yarışta!</span>' +
+          '<button class="btn b-gold frc-btn" data-act="mpcreate">' + svg('users') + '<span>ODA KUR</span></button>' +
+        '</div>' +
+        '<div class="frc frc-join">' +
+          '<span class="frc-art">' + svg('door') + '</span>' +
+          '<b class="frc-t">KODLA KATIL</b>' +
+          '<span class="frc-d">Arkadaşının oda kodunu yaz. Attığı linke dokunman da yeterli.</span>' +
+          '<div class="code-in"><input class="cin" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="60" placeholder="KOD" aria-label="Oda kodu" data-enter="mpjoin" value="' + esc(st.mpCode || '') + '">' +
+          '<button class="btn b-blue frc-btn" data-act="mpjoin">' + svg('play') + '<span>KATIL</span></button></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="fr-nick"><span class="frn-pt">' + pt(selChar(), 48, { skin: equipped('skins', selChar()) }) + '</span><span class="frn-l">Takma adın</span><b class="frn-n">' + esc(myNick()) + '</b>' +
+        '<button class="btn sm b-purple" data-act="nick">DEĞİŞTİR</button></div>',
+      'pnl-fr', 'rb-green');
+  }
+
+  /* ---------- LOBİ (üst çubuksuz tam ekran; parçalar ayrı ayrı ve yalnızca değişince yenilenir) ---------- */
+  const PCOL = ['#ffd23f', '#ff5a6e', '#4fb3ff', '#5ee07a', '#c084fc', '#ff9f43', '#22d3e6', '#ff6ec7', '#a3e635', '#f2f2f7'];
+  function pColor(i) { const R = FM.R; return (R && Array.isArray(R.PLAYER_COLORS) && R.PLAYER_COLORS[i % 10]) || PCOL[i % 10]; }
+  const EMOJIS = ['👍', '😂', '😎', '😡', '🔥', '💀', '👋', 'GG'];
+  function lobbyData() {
+    if (st.fakeLobby) return st.fakeLobby;
+    if (!NET()) return null;
+    const lob = ncall('lobby') || null, pl = ncall('players') || [], stt = ncall('status') || {};
+    return { lob, pl: Array.isArray(pl) ? pl.filter(Boolean) : [], stt };
+  }
+  function pingHtml(ms) {
+    const lv = ms == null ? 0 : ms < 140 ? 3 : ms < 300 ? 2 : 1;
+    return '<span class="png l' + lv + '"><i></i><i></i><i></i>' + (ms != null ? '<em>' + Math.round(ms / 10) * 10 + '</em>' : '') + '</span>';
+  }
+  function renderLobby() {
+    return '<div class="lb">' +
+      '<div class="lb-top">' +
+        '<button class="rbtn b-red lb-back" data-act="lbleave" aria-label="Odadan ayrıl" title="Odadan ayrıl">' + svg('back') + '</button>' +
+        '<div class="lb-code" data-act="copylink" title="Linki kopyala"></div>' +
+        '<button class="btn b-green lb-share" data-act="share">' + svg('share') + '<span>LİNKİ PAYLAŞ</span></button>' +
+        '<button class="rbtn b-steel lb-copy" data-act="copylink" aria-label="Linki kopyala" title="Linki kopyala">' + svg('copy') + '</button>' +
+        '<div class="tb-sp"></div>' +
+        '<div class="lb-conn"></div>' +
+      '</div>' +
+      '<div class="lb-main">' +
+        '<div class="pnl lb-pl"><div class="lb-pl-in scroll" data-sk="lb-pl"></div></div>' +
+        '<div class="pnl lb-set"></div>' +
+      '</div>' +
+      '<div class="lb-foot"></div>' +
+      '<div class="emo lb-emo">' + EMOJIS.map(e => '<button class="emo-b" data-act="emo" data-e="' + esc(e) + '">' + esc(e) + '</button>').join('') + '</div>' +
+    '</div>';
+  }
+  function lobbyCode(d) {
+    const code = String((d.lob && d.lob.code) || ncall('code') || '·····');
+    return '<span class="lc-l">ODA KODU</span><b class="lc-c">' + code.split('').map(c => '<i>' + esc(c) + '</i>').join('') + '</b>';
+  }
+  function lobbyConn(d) {
+    const s = d.stt || {};
+    const ok = s.conn === 'open', wait = s.conn === 'connecting' || s.conn === 'reconnecting';
+    const txt = ok ? 'Bağlı' + (s.rtt != null ? ' · ' + Math.round(s.rtt) + ' ms' : '') : (ncall('statusText') || (wait ? 'Bağlanıyor…' : 'Bağlantı yok'));
+    const cnt = d.pl.filter(p => !p.off).length;
+    return '<span class="lcn ' + (ok ? 'ok' : wait ? 'wait' : 'bad') + '">' + svg('wifi') + '<span>' + esc(txt) + '</span></span>' +
+      '<span class="lct">' + svg('users') + '<b>' + cnt + '</b><em>/' + ((d.lob && d.lob.max) || 10) + '</em></span>';
+  }
+  function lobbyPlayers(d) {
+    const cfg = normCfg(d.lob && d.lob.cfg);
+    const list = d.pl.slice(0, 10);
+    const t = nowMs();
+    let h = '';
+    list.forEach((p, i) => {
+      const ch = FM.CH[p.char] ? p.char : 'TAFTAF';
+      const dim = p.off || (!p.alive && !p.me);
+      const em = st.mpEmo[p.pid];
+      h += '<div class="pc ' + (p.me ? 'me ' : '') + (dim ? 'off ' : '') + (p.host ? 'host ' : '') + (p.ready ? 'rdy' : '') + '" style="--pc:' + pColor(i) + '">' +
+        '<span class="pc-pt">' + pt(ch, 48, { skin: p.skin }) + (p.host ? '<i class="pc-crown">' + svg('crown', 'gold') + '</i>' : '') + '</span>' +
+        '<span class="pc-m"><b class="pc-n"><span>' + esc(p.nick || ch) + '</span>' + (p.me ? '<em class="you">SEN</em>' : '') + '</b>' +
+          '<span class="pc-c">' + esc(ch) + (p.waiting ? ' · izliyor' : '') + (dim ? ' · bağlantı yok' : '') + '</span></span>' +
+        '<span class="pc-r">' + (p.host ? '<span class="pc-tag t-host">EV SAHİBİ</span>' : p.ready ? '<span class="pc-tag t-rdy">' + svg('check') + 'HAZIR</span>' : '<span class="pc-tag t-wait">BEKLİYOR</span>') +
+          pingHtml(p.ping) + '</span>' +
+        (em && t - em.t < 3200 ? '<span class="pc-emo">' + esc(em.e) + '</span>' : '') +
+      '</div>';
+    });
+    const n = list.length;
+    const bots = cfg.bots ? clamp((cfg.fill || 4) - n, 0, 10 - n) : 0;
+    for (let i = 0; i < bots; i++) h += '<div class="pc bot"><span class="pc-pt">' + svg('user') + '</span><span class="pc-m"><b class="pc-n"><span>Bot</span></b><span class="pc-c">Yarışta boş yeri doldurur</span></span></div>';
+    for (let i = n + bots; i < 10; i++) h += '<div class="pc empty" data-act="share" role="button" tabindex="0"><span class="pc-pt">' + svg('users') + '</span><span class="pc-m"><b class="pc-n"><span>Boş yer</span></b><span class="pc-c">Dokun, arkadaşını davet et</span></span></div>';
+    return h;
+  }
+  function lobbySet(d) {
+    const host = !!(d.lob && d.lob.isHost);
+    const cfg = normCfg(d.lob && d.lob.cfg);
+    const m = modeOf(cfg.mode);
+    const arr = k => host
+      ? ['<button class="rbtn b-dark ls-a" data-act="lcfg" data-k="' + k + '" data-d="-1" aria-label="Önceki">' + svg('chevL') + '</button>', '<button class="rbtn b-dark ls-a" data-act="lcfg" data-k="' + k + '" data-d="1" aria-label="Sonraki">' + svg('chevR') + '</button>']
+      : ['', ''];
+    const a = arr('mode'), b = arr('map');
+    let rd = '';
+    for (const n of [1, 3, 5]) rd += '<button class="rd ' + (n === cfg.rounds ? 'on' : '') + '" ' + (host ? 'data-act="lcfg" data-k="rounds" data-v="' + n + '"' : 'disabled') + ' aria-label="' + n + ' tur">' + n + '</button>';
+    return '<h4 class="ls-h">' + svg('gear') + '<span>ODA AYARLARI</span>' + (host ? '' : '<em>ev sahibi seçer</em>') + '</h4>' +
+      '<div class="ls-row"><span class="ls-l">MOD</span>' + a[0] + '<span class="ls-v">' + anyIcon(m.ic, 32, 'ls-ic') + '<b>' + esc(m.n) + '</b></span>' + a[1] + '</div>' +
+      '<p class="ls-d">' + esc(firstSentence(m.d)) + '</p>' +
+      '<div class="ls-row"><span class="ls-l">HARİTA</span>' + b[0] + '<span class="ls-v ls-map ' + (cfg.map === 'random' ? 'rnd' : '') + '" style="' + mapBg(cfg.map) + '"><b>' + esc(mapName(cfg.map)) + '</b></span>' + b[1] + '</div>' +
+      '<p class="ls-d">' + esc(mapMech(cfg.map)) + '</p>' +
+      '<div class="ls-row ls-2"><span class="ls-l">TUR</span><span class="rd-o">' + rd + '</span>' +
+        '<span class="ls-l ls-bl">BOT</span><button class="tgl ' + (cfg.bots ? 'on' : '') + '" ' + (host ? 'data-act="lcfg" data-k="bots"' : 'disabled') + ' role="switch" aria-checked="' + !!cfg.bots + '" aria-label="Botlar"><i></i><span class="tg-on">AÇIK</span><span class="tg-off">KAPALI</span></button></div>';
+  }
+  function lobbyFoot(d) {
+    const host = !!(d.lob && d.lob.isHost);
+    const me = d.pl.find(p => p.me) || {};
+    const others = d.pl.filter(p => !p.me && !p.off);
+    const rdy = others.filter(p => p.ready).length;
+    const ch = FM.CH[me.char] ? me.char : selChar();
+    let h = '<button class="rbtn b-orange lf-emo" data-act="lbemo" aria-label="Emoji gönder" title="Emoji gönder">' + svg('smile') + '</button>' +
+      '<button class="btn b-blue lf-ch" data-act="chpick"><span class="lf-pt">' + pt(ch, 44, { skin: me.skin || equipped('skins', ch) }) + '</span><span class="lf-ct"><em>KARAKTER</em><b>' + esc(ch) + '</b></span></button>' +
+      '<div class="tb-sp"></div>';
+    if (host) {
+      h += '<span class="lf-info">' + (others.length ? '<b>' + rdy + '/' + others.length + '</b> hazır' : 'Arkadaşların gelince başlat<br>(ya da botlarla hemen)') + '</span>' +
+        '<button class="btn b-gold lf-go" data-act="lbstart"><span class="shine"></span>' + svg('play') + '<span>BAŞLAT</span></button>';
+    } else {
+      h += '<span class="lf-info">' + (me.ready ? 'Ev sahibi başlatınca<br>yarış başlar' : 'Hazır olunca dokun') + '</span>' +
+        '<button class="btn ' + (me.ready ? 'b-steel on' : 'b-green') + ' lf-go lf-rdy" data-act="lbready">' + svg('check') + '<span>' + (me.ready ? 'HAZIRSIN' : 'HAZIRIM') + '</span></button>';
+    }
+    return h;
+  }
+  function updateLobby(force) {
+    if (st.view !== 'menu' || st.screen !== 'lobby') return;
+    const d = lobbyData(); if (!d) return;
+    const parts = [['.lb-code', lobbyCode], ['.lb-conn', lobbyConn], ['.lb-pl-in', lobbyPlayers], ['.lb-set', lobbySet], ['.lb-foot', lobbyFoot]];
+    for (const p of parts) {
+      const el = $(p[0], Ls.scr); if (!el) continue;
+      let h = '';
+      try { h = p[1](d); } catch (e) { console.error('[ui lobi]', e); continue; }
+      if (force || el._h !== h) { el._h = h; el.innerHTML = h; }
+    }
+    const pl = $('.lb-pl-in', Ls.scr); if (pl) syncHint(pl);
+  }
+
+  const SCREENS = { menu: renderMenu, chars: renderChars, shop: renderShop, missions: renderMissions, clan: renderClan, settings: renderSettings, help: renderHelp, solo: renderSolo, friends: renderFriends, lobby: renderLobby };
+  const NO_TB = { lobby: 1 };
 
   /* =====================================================================
      16) EKRAN ÇİZİMİ / GEZİNME
@@ -1321,8 +1561,8 @@
     if (!h || !h.isConnected) return;
     const max = el.scrollHeight - el.clientHeight;
     const on = max > 12 && el.scrollTop < max - 12 && !scrolledOnce[hintKey(el)] && el.clientHeight > 40;
-    // sağ alt köşe: sola hizalı yazıların üstüne binmesin
-    if (on) { h.style.left = (el.offsetLeft + el.clientWidth - 4) + 'px'; h.style.top = (el.offsetTop + el.clientHeight) + 'px'; }
+    // alt kenarın ortasında, kenarı ikiye bölerek: sağa yaslı değerlerin (fiyat, puan) ve sola yaslı yazıların üstüne binmesin
+    if (on) { h.style.left = (el.offsetLeft + el.clientWidth / 2) + 'px'; h.style.top = (el.offsetTop + el.clientHeight) + 'px'; }
     h.classList.toggle('on', on);
   }
   function scrollHints(box) {
@@ -1354,7 +1594,8 @@
     try { html = SCREENS[name](); }
     catch (e) { console.error('[ui ekran ' + name + ']', e); html = '<div class="body">' + emptyBox('info', 'Bir şeyler ters gitti', 'Menüye dönüp tekrar dene.') + '</div>'; }
     Ls.scr.classList.toggle('no-anim', !anim);
-    Ls.scr.innerHTML = '<div class="scr scr-' + name + (name === 'menu' ? '' : ' sub') + '">' + topbar(name !== 'menu') + html + '</div>';
+    Ls.scr.innerHTML = '<div class="scr scr-' + name + (name === 'menu' ? '' : ' sub') + '">' + (NO_TB[name] ? '' : topbar(name !== 'menu')) + html + '</div>';
+    if (name === 'lobby') updateLobby(true);
     for (const el of $$('[data-sk]', Ls.scr)) { const k = el.getAttribute('data-sk'); if (keep[k]) el.scrollTop = keep[k]; }
     mountArt(Ls.scr);
     scrollHints(Ls.scr);
@@ -1385,11 +1626,13 @@
     st.view = 'menu'; st.screen = name;
     setNotesPos();
     hideRaceLayer(); clearResults(); clearFinal();
-    if (st.modal && st.modal !== 'daily') closeModalHard();
+    if (st.modal && st.modal !== 'daily' && st.modal !== 'mperr') closeModalHard();
     showLayer('scr', true);
     paint(true);
+    syncIab();
   }
   function goBack() {
+    if (st.screen === 'lobby') { ACT.lbleave(); return; }
     if (st.screen && st.screen !== 'menu') showScreen('menu');
   }
   let rfr = 0;
@@ -1456,6 +1699,13 @@
   function canPause() { return S.mode === 'count' || S.mode === 'race'; }
   function pauseHtml() {
     const th = S.L && S.L.theme ? S.L.theme.n : '';
+    // çok oyunculu: duraklatma yok, yarış sürer → küçük menü (yarışa dön, sesler, odadan ayrıl)
+    if (mpLive()) return '<div class="pnl pnl-pause pz-mp">' + ribbon('MENÜ', 'rb-purple') +
+      '<div class="pz-sub">' + svg('users') + 'YARIŞ SÜRÜYOR · TUR ' + (S.round || 1) + ' / ' + (S.ROUNDS || 1) + '</div>' +
+      '<button class="btn b-green btn-big pz-go" data-act="resume">' + svg('play') + '<span>YARIŞA DÖN</span></button>' +
+      '<div class="pz-set">' + sliderRow('music', 'Müzik', 'music') + sliderRow('sfx', 'Efektler', 'sound') + '</div>' +
+      '<button class="btn b-red pz-quit" data-act="quit" data-t="ODADAN AYRIL">' + svg('door') + '<span class="q-t">ODADAN AYRIL</span></button>' +
+    '</div>';
     return '<div class="pnl pnl-pause">' + ribbon('DURAKLATILDI', 'rb-purple') +
       '<div class="pz-sub">' + svg('flag') + 'TUR ' + (S.round || 1) + ' / ' + (S.ROUNDS || 1) + (th ? ' · ' + esc(th) : '') + '</div>' +
       '<button class="btn b-green btn-big pz-go" data-act="resume">' + svg('play') + '<span>DEVAM</span></button>' +
@@ -1464,7 +1714,7 @@
     '</div>';
   }
   function openPause() {
-    S.paused = true;
+    if (!mpLive()) S.paused = true;          // ağ yarışında simülasyon durmaz (main.js), oyun durumunu da değiştirme
     releaseAllTouch();
     st.quitArm = 0;
     openModal('pause', pauseHtml(), true);
@@ -1503,7 +1753,18 @@
       '<div class="tbtn tb-item" data-tc="item" role="button" aria-label="Eşya"><span class="tb-in"><span class="tb-itm"></span><b>EŞYA</b></span></div>' +
       '<div class="tbtn tb-power" data-tc="power" role="button" aria-label="Özel güç"><span class="tb-ring"></span><span class="tb-in"><span class="tb-pp"></span><b>GÜÇ</b></span></div>' +
       '<div class="tbtn tb-jump" data-tc="jump" role="button" aria-label="Zıpla"><span class="tb-in">' + svg('up', 'tb-ico') + '<b>ZIPLA</b></span></div>' +
-    '</div>';
+    '</div>' +
+    '<button class="rbtn b-orange emo-btn" data-act="emotog" aria-label="Emoji gönder" title="Emoji gönder">' + svg('smile') + '</button>' +
+    '<div class="emo emo-race">' + ['👍', '😂', '😎', '😡', '🔥', '💀', '👋', 'GG'].map(e => '<button class="emo-b" data-act="emo" data-e="' + e + '">' + e + '</button>').join('') + '</div>' +
+    '<button class="btn b-gold sp-skip" data-act="skipres">' + svg('flag') + '<span>SONUÇLARA GEÇ</span></button>';
+  // emoji düğmeleri: başka parmak ZIPLA'ya basılıyken 'click' gelmez → pointerup ile çalıştır
+  Ls.race.addEventListener('pointerup', e => {
+    if (e.pointerType === 'mouse') return;
+    const el = e.target && e.target.closest ? e.target.closest('[data-act="emotog"],[data-act="emo"]') : null;
+    if (!el || !Ls.race.contains(el)) return;
+    st.emT = nowMs(); click();
+    try { ACT[el.getAttribute('data-act')](el); } catch (err) { console.error('[ui emoji]', err); }
+  });
   // Duraklat: başka bir parmak ZIPLA/KAY'a basılıyken tarayıcı ikinci parmak için 'click' üretmez → pointerup ile de aç
   const pzEl = Ls.race.querySelector('.pz-btn');
   if (pzEl) pzEl.addEventListener('pointerup', e => {
@@ -1567,8 +1828,14 @@
     tcRaf = 0;
     if (st.view !== 'race') return;
     const P = S.player;
-    const live = (S.mode === 'race' || S.mode === 'count') && (!S.paused || st.devForce);
+    const mpl = mpLive();
+    const live = (S.mode === 'race' || S.mode === 'count') && (!S.paused || st.devForce || mpl);
     if (live !== tcS.show) { tcS.show = live; Ls.race.classList.toggle('live', live); if (!live) releaseAllTouch(); }
+    // elenen / geç katılan izleyici: kontroller gizli; tek oyunculuda "Sonuçlara geç"
+    const spec = !!(P && (P.ghost || P.out)) && S.mode === 'race';
+    if (spec !== tcS.spec) { tcS.spec = spec; Ls.race.classList.toggle('spec', spec); if (spec) releaseAllTouch(); }
+    const mpc = !!(mpl && S.netRole);
+    if (mpc !== tcS.mp) { tcS.mp = mpc; Ls.race.classList.toggle('mp', mpc); if (!mpc) Ls.race.classList.remove('emo-open'); }
     if (touchMode && P) {
       const it = P.item && FM.ITEMS && FM.ITEMS[P.item] ? P.item : null;
       if (it !== tcS.item) {
@@ -1594,7 +1861,8 @@
     stopShowcases(); stopTicker();
     showLayer('scr', false); Ls.scr.innerHTML = '';
     clearResults(); clearFinal();
-    tcS.item = undefined; tcS.pct = -1; tcS.full = null; tcS.ch = null; tcS.show = null;
+    tcS.item = undefined; tcS.pct = -1; tcS.full = null; tcS.ch = null; tcS.show = null; tcS.spec = null; tcS.mp = null;
+    Ls.race.classList.remove('emo-open', 'spec');
     releaseAllTouch();
     Ls.race.classList.toggle('touch', touchMode);
     showLayer('race', true);
@@ -1661,14 +1929,18 @@
     const fin = !!(P && P.finished);
     const rw = lastRewards(res);
     const td = res.trophyDelta != null ? +res.trophyDelta : (P && +P.td) || 0;
+    const mp = !!res.mp, spect = !!res.spectator;
     let rows = '';
     rk.forEach((r, i) => {
-      const me = r === P || (P && r.id === P.id && !r.bot);
-      rows += '<div class="rr ' + (me ? 'me ' : '') + 'p' + (i + 1) + '" style="--d:' + (.25 + i * .09).toFixed(2) + 's">' +
+      // ağda aynı karakteri seçen iki oyuncu olabilir: "SEN" yalnızca kendi yarışçım
+      const me = mp ? (r === P || r.ctrl === 'local') : (r === P || (P && r.id === P.id && !r.bot));
+      const tcol = res.mode === 'coins' ? '<span class="rr-t rr-co">' + coinI(16, 'bi') + (r.coins | 0) + '</span>'
+        : '<span class="rr-t">' + (r.finished ? fmtTime(r.ftime) : r.off ? 'koptu' : (r.out || r.elim) ? 'elendi' : '—') + '</span>';
+      rows += '<div class="rr ' + (me ? 'me ' : '') + (r.off ? 'off ' : '') + 'p' + (i + 1) + '" style="--d:' + (.25 + Math.min(i, 6) * .07).toFixed(2) + 's">' +
         '<span class="rr-pl">' + placeBadge(i + 1) + '</span>' +
         '<span class="rr-pt">' + pt(r.id, 56, { skin: r.skin }) + '</span>' +
         '<span class="rr-n">' + esc(r.name || r.id) + (me ? '<em class="you">SEN</em>' : '') + '</span>' +
-        '<span class="rr-t">' + (r.finished ? fmtTime(r.ftime) : '—') + '</span>' +
+        tcol +
         '<span class="rr-p">+' + (r.rp || 0) + '</span>' +
         '<span class="rr-tot">' + (r.total || 0) + '</span>' +
       '</div>';
@@ -1691,26 +1963,32 @@
     const li = levelInfo();
     const lvUp = rw.levelUp && rw.kind !== 'match' ? '<div class="lvup"><span class="lvup-burst"></span>' + svg('star', 'gold lvup-star') + '<b class="lvup-n">' + (typeof rw.levelUp === 'number' ? rw.levelUp : li.level) + '</b><span class="lvup-t"><b>SEVİYE ATLADIN!</b><span>Yeni ödüller seni bekliyor</span></span></div>' : '';
     const last = !!res.last || (res.round >= res.rounds);
-    const head = fin ? (PLACE_TXT[pr] || (pr + 1) + '.') : 'BİTİREMEDİN';
-    const theme = res.theme && res.theme.n ? res.theme.n : '';
+    st.resLast = last;
+    const elimd = !!(P && (P.out || P.elim) && !P.finished);
+    const head = spect ? 'İZLEDİN' : fin ? (PLACE_TXT[pr] || (pr + 1) + '.') : elimd ? 'ELENDİN' : 'BİTİREMEDİN';
+    const mdn = res.mode && res.mode !== 'classic' ? modeOf(res.mode).n : '';
+    const theme = (res.theme && res.theme.n ? res.theme.n : '') + (mdn ? ' · ' + mdn : '');
+    const many = rk.length > 4;
+    // izleyici bu turda ödül almadı: ödül kartları yerine bilgi
+    const mid = spect
+      ? '<div class="res-mid scroll"><div class="res-spec">' + svg('users') + '<b>Bu turu izledin</b><span>Sonraki turda sen de yarışacaksın.</span></div></div>'
+      : null;
     Ls.res.innerHTML =
       '<div class="res">' +
         '<div class="pnl pnl-res">' + ribbon('TUR ' + (res.round || 1) + ' / ' + (res.rounds || 1), pr === 0 && fin ? 'rb-gold' : 'rb-purple') +
           '<div class="res-in">' +
-            '<div class="res-head p' + (fin ? pr + 1 : 0) + '"><span class="rh-pl">' + (pr >= 0 ? (pr + 1) + '.' : '—') + '</span><span class="rh-t"><b>' + head + '</b><span>' + esc(theme) + '</span></span></div>' +
-            '<div class="res-tbl"><div class="rr rr-h"><span></span><span></span><span>Yarışçı</span><span>Süre</span><span>Puan</span><span>Toplam</span></div>' + rows + '</div>' +
-            '<div class="res-mid scroll">' +
+            '<div class="res-head p' + (fin ? pr + 1 : 0) + '"><span class="rh-pl">' + (pr >= 0 && !spect ? (pr + 1) + '.' : '—') + '</span><span class="rh-t"><b>' + head + '</b><span>' + esc(theme) + '</span></span></div>' +
+            '<div class="res-tbl' + (many ? ' many' : '') + '"><div class="rr rr-h"><span></span><span></span><span>Yarışçı</span><span>' + (res.mode === 'coins' ? 'Altın' : 'Süre') + '</span><span>Puan</span><span>Toplam</span></div>' +
+              (many ? '<div class="rr-sc scroll" data-sk="rr-sc">' + rows + '</div>' : rows) + '</div>' +
+            (mid || ('<div class="res-mid scroll">' +
               '<div class="rws">' +
                 '<div class="rwc c-coin">' + coinI(48, 'rwc-i') + '<b data-cu="' + (+rw.coins || 0) + '" data-pre="+">0</b><span>Altın</span></div>' +
                 '<div class="rwc c-xp"><i class="xp-big">XP</i><b data-cu="' + (+rw.xp || 0) + '" data-pre="+">0</b><span>Deneyim</span></div>' +
                 '<div class="rwc c-gem">' + gemI(48, 'rwc-i') + '<b data-cu="' + (+rw.gems || 0) + '" data-pre="+">0</b><span>Elmas</span></div>' +
                 '<div class="rwc c-tr ' + (td < 0 ? 'neg' : '') + '">' + trophyI(48, 'rwc-i') + '<b data-cu="' + td + '" data-sign>0</b><span>Kupa</span></div>' +
               '</div>' + lvUp + lines + ms +
-            '</div>' +
-            '<div class="res-foot">' +
-              '<button class="rbtn b-steel res-home" data-act="resquit" aria-label="Menüye dön" title="Menüye dön">' + svg('home') + '</button>' +
-              '<button class="btn b-gold btn-next" data-act="next"><span>' + (last ? 'FİNAL' : 'SONRAKİ TUR') + '</span>' + svg('play') + '</button>' +
-            '</div>' +
+            '</div>')) +
+            '<div class="res-foot">' + resFoot(mp, last) + '</div>' +
           '</div>' +
         '</div>' +
         (rw.levelUp ? confetti(touchMode ? 14 : 26) : '') +
@@ -1719,6 +1997,30 @@
     runCountUps(Ls.res, 900);
     scrollHints(Ls.res);
     calmLater(Ls.res);
+    // kalabalık tabloda kendi satırım görünsün
+    const sc = $('.rr-sc', Ls.res), meRow = sc && $('.rr.me', sc);
+    if (sc && meRow) sc.scrollTop = Math.max(0, meRow.offsetTop - sc.clientHeight / 2 + meRow.offsetHeight / 2);
+    if (mp) mpTick();
+  }
+  /** Sonuç paneli alt düğmeleri. Çok oyunculuda "SONRAKİ TUR" yalnızca ev sahibinde; diğerlerinde "Ev sahibi bekleniyor" */
+  function resFoot(mp, last) {
+    if (!mp) return '<button class="rbtn b-steel res-home" data-act="resquit" aria-label="Menüye dön" title="Menüye dön">' + svg('home') + '</button>' +
+      '<button class="btn b-gold btn-next" data-act="next"><span>' + (last ? 'FİNAL' : 'SONRAKİ TUR') + '</span>' + svg('play') + '</button>';
+    const al = gcall('autoLeft');
+    return '<button class="rbtn b-steel res-home" data-act="mpleave" aria-label="Odadan ayrıl" title="Odadan ayrıl">' + svg('door') + '</button>' +
+      (mpHost()
+        ? '<button class="btn b-gold btn-next" data-act="next"><span>' + (last ? 'FİNAL' : 'SONRAKİ TUR') + '</span><em class="auto" data-auto>' + (al != null ? al : '') + '</em>' + svg('play') + '</button>'
+        : '<div class="btn b-steel btn-next wait is-static"><span>EV SAHİBİ BEKLENİYOR</span><i class="dots"><i></i><i></i><i></i></i></div>');
+  }
+  /** Ev sahibinin otomatik ilerleme geri sayımı (sonuç/final ekranında) */
+  let mpTickT = 0;
+  function mpTick() {
+    clearInterval(mpTickT);
+    mpTickT = setInterval(() => {
+      if (st.view !== 'results' && st.view !== 'final') { clearInterval(mpTickT); mpTickT = 0; return; }
+      const al = gcall('autoLeft');
+      for (const el of $$('[data-auto]')) el.textContent = al != null ? String(al) : '';
+    }, 500);
   }
   /** Telefonda sonsuz CSS animasyonları (konfeti, dönen ışınlar, nabız) birkaç saniye sonra dursun: GPU/pil */
   function calmLater(layer) {
@@ -1737,8 +2039,9 @@
     d = d || {};
     const standings = (Array.isArray(d.standings) && d.standings.length ? d.standings : (S.racers || []).slice().sort((a, b) => (b.total || 0) - (a.total || 0))).filter(Boolean);
     if (!standings.length) { showScreen('menu'); return; }
+    st.finData = d;
     const P = d.player || S.player;
-    const isMe = r => r === P || (P && r.id === P.id && !r.bot);
+    const isMe = d.mp ? (r => !!r.me) : (r => r === P || (P && r.id === P.id && !r.bot));
     const win = standings[0];
     const champ = d.champion != null ? !!d.champion : isMe(win);
     const myPlace = Math.max(0, standings.findIndex(isMe)) + 1;
@@ -1765,14 +2068,20 @@
           '<div class="fin-sub">' + (champ ? 'Klanın en hızlısı sensin, <b>' + esc(win.name || win.id) + '</b>!' : 'Şampiyon <b>' + esc(win.name || win.id) + '</b> · Sen <b>' + myPlace + '.</b> oldun') + '</div>' +
         '</div>' +
         '<div class="pnl fin-pnl">' + ribbon('TOPLAM PUAN', champ ? 'rb-gold' : 'rb-red') +
-          '<div class="fin-in"><div class="fin-rows">' + rows + '</div>' + finRewards() +
-          '<div class="fin-btns"><button class="btn b-steel" data-act="menu">' + svg('home') + '<span>MENÜ</span></button>' +
-          '<button class="btn b-green btn-again" data-act="replay">' + svg('reset') + '<span>TEKRAR OYNA</span></button></div></div>' +
+          '<div class="fin-in"><div class="fin-rows' + (standings.length > 4 ? ' scroll' : '') + '" data-sk="fin-rows">' + rows + '</div>' + (d.mp && !st.mpRaced ? '' : finRewards()) +
+          '<div class="fin-btns">' + (d.mp
+            ? '<button class="btn b-steel" data-act="mpleave">' + svg('door') + '<span>AYRIL</span></button>' +
+              (mpHost() ? '<button class="btn b-green btn-again" data-act="tolobby">' + svg('users') + '<span>LOBİYE DÖN</span><em class="auto" data-auto></em></button>'
+                : '<div class="btn b-steel btn-again wait is-static"><span>EV SAHİBİ BEKLENİYOR</span><i class="dots"><i></i><i></i><i></i></i></div>')
+            : '<button class="btn b-steel" data-act="menu">' + svg('home') + '<span>MENÜ</span></button>' +
+              '<button class="btn b-green btn-again" data-act="replay">' + svg('reset') + '<span>TEKRAR OYNA</span></button>') + '</div></div>' +
         '</div>' +
         (champ ? confetti(touchMode ? 22 : 60) : '') +
       '</div>';
     showLayer('fin', true);
     calmLater(Ls.fin);
+    scrollHints(Ls.fin);
+    if (d.mp) mpTick();
   }
   function clearFinal() { showLayer('fin', false); Ls.fin.innerHTML = ''; }
   function finRewards() {
@@ -1878,12 +2187,275 @@
     const need = touchMode && window.innerHeight > window.innerWidth * 1.05;
     Ls.rot.classList.toggle('on', need);
     if (need) {
-      if ((S.mode === 'race' || S.mode === 'count') && !S.paused) { S.paused = true; st.pausedByRot = true; releaseAllTouch(); }
+      if ((S.mode === 'race' || S.mode === 'count') && !S.paused && !mpLive()) { S.paused = true; st.pausedByRot = true; releaseAllTouch(); }
+      else if (mpLive()) releaseAllTouch();
     } else if (st.pausedByRot) {
       st.pausedByRot = false;
       if (canPause() && st.modal !== 'pause') openPause();
       else if (st.modal !== 'pause') S.paused = false;
     }
+  }
+
+  /* =====================================================================
+     22b) ARKADAŞLARLA: takma ad, oda kur/katıl, bekleme/hata pencereleri, paylaşım,
+          karakter seçici, kayıt kodu, uygulama-içi tarayıcı bandı
+     ===================================================================== */
+  function withNick(fn) {
+    if (sv().nickSet === true || !NET()) { fn(); return; }
+    openNick(fn);
+  }
+  function openNick(then) {
+    st.nickThen = typeof then === 'function' ? then : null;
+    const ch = selChar();
+    const cur = sv().nickSet === true ? myNick() : (sv().nick || ch);
+    openModal('nick',
+      '<div class="pnl pnl-sm pnl-nick">' + ribbon('TAKMA ADIN', 'rb-gold') +
+        '<div class="nk-body"><span class="nk-pt">' + pt(ch, 96, { skin: equipped('skins', ch) }) + '</span>' +
+          '<div class="nk-r"><p class="nk-t">Arkadaşların seni bu adla görecek.</p>' +
+          '<input class="nk-in" type="text" maxlength="14" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done" data-enter="nickok" aria-label="Takma ad" placeholder="' + esc(ch) + '" value="' + esc(cur) + '">' +
+          '<span class="nk-h">En çok 14 harf</span></div></div>' +
+        '<div class="cf-btns"><button class="btn b-steel" data-act="mclose">VAZGEÇ</button><button class="btn b-green cf-ok" data-act="nickok">' + svg('check') + '<span>TAMAM</span></button></div>' +
+      '</div>');
+    if (!touchMode) setTimeout(() => { const i = $('.nk-in', Ls.mdl); if (i) { try { i.focus(); i.select(); } catch (e) { /* yok say */ } } }, 60);
+  }
+  function nickOk() {
+    const i = $('.nk-in', Ls.mdl);
+    let v = (i && i.value || '').replace(/\s+/g, ' ').trim();
+    if (!v) v = selChar();
+    let ok = ncall('setNick', v);
+    if (!ok) { const s = sv(); s.nick = v.slice(0, 14); s.nickSet = true; if (typeof FM.persist === 'function') FM.persist(); }
+    const then = st.nickThen; st.nickThen = null;
+    closeModalHard();
+    if (st.view === 'menu' && (st.screen === 'friends' || st.screen === 'settings')) refreshSoon();
+    if (then) then();
+    else note({ title: 'Takma ad kaydedildi', sub: myNick(), icon: svg('user'), cls: 'n-ok', ms: 1500 });
+  }
+  function openWait(title, sub) {
+    openModal('mpwait',
+      '<div class="pnl pnl-sm pnl-wait">' + ribbon(title, 'rb-purple') +
+        '<div class="cf-body"><div class="spin" aria-hidden="true"><i></i></div><p class="cf-t">' + sub + '</p></div>' +
+        '<div class="cf-btns"><button class="btn b-steel" data-act="mpcancel">VAZGEÇ</button></div>' +
+      '</div>', true);
+  }
+  const ERR_T = { badcode: 'KOD HATALI', noroom: 'ODA BULUNAMADI', full: 'ODA DOLU', ver: 'YENİ SÜRÜM VAR', conn: 'BAĞLANTI YOK', nows: 'DESTEKLENMİYOR', dup: 'BAŞKA SEKMEDE AÇIK', kicked: 'ODADAN ÇIKARILDIN' };
+  function openErr(code, msg) {
+    const ver = code === 'ver';
+    const ic = code === 'full' ? 'users' : code === 'conn' ? 'wifi' : code === 'kicked' ? 'door' : ver ? 'reset' : 'info';
+    openModal('mperr',
+      '<div class="pnl pnl-sm pnl-err">' + ribbon(ERR_T[code] || 'BİR SORUN VAR', 'rb-red') +
+        '<div class="cf-body"><div class="cf-art cf-warn">' + svg(ic) + '</div><p class="cf-t">' + esc(msg || 'Bir sorun oluştu, tekrar dene.') + '</p></div>' +
+        '<div class="cf-btns">' + (ver
+          ? '<button class="btn b-steel" data-act="mclose">KAPAT</button><button class="btn b-gold cf-ok" data-act="reload">' + svg('reset') + '<span>SAYFAYI YENİLE</span></button>'
+          : '<button class="btn b-green cf-ok" data-act="mclose">TAMAM</button>') + '</div>' +
+      '</div>');
+  }
+  function mpCreate() {
+    const n = NET();
+    if (!n) { openErr('nows', 'Bu tarayıcı çok oyunculuyu desteklemiyor. Chrome ya da Safari ile aç.'); return; }
+    if (mpInRoom()) { showScreen('lobby'); return; }
+    if (mpBusy()) gcall('leave');
+    const ok = ncall('createRoom', { cfg: lastCfg() });
+    if (ok === false) return;      // net:error zaten geldi
+    openWait('ODA KURULUYOR', 'Sunucuya bağlanılıyor…');
+  }
+  function mpJoin(v) {
+    const n = NET();
+    if (!n) { openErr('nows', 'Bu tarayıcı çok oyunculuyu desteklemiyor. Chrome ya da Safari ile aç.'); return; }
+    const pc = ncall('parseCode', String(v || ''));
+    if (!pc || !pc.code) {
+      const inp = $('.cin', Ls.scr);
+      if (inp) { inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); }
+      sfx('error'); buzz(35);
+      note({ title: 'Kod hatalı', sub: 'Oda kodu 5 harflidir (ör. K7MXQ).', icon: svg('info'), cls: 'n-err', ms: 2000 });
+      return;
+    }
+    if (mpInRoom() && ncall('code') === pc.code) { showScreen('lobby'); return; }
+    if (mpInRoom() || mpBusy()) gcall('leave');
+    st.mpCode = pc.code;
+    const ok = ncall('joinRoom', pc.code);
+    if (ok === false) return;
+    openWait('ODAYA KATILINIYOR', '<b>' + esc(pc.code) + '</b> odası aranıyor…');
+  }
+  /** Lobiye girildi (ilk kez ya da maç sonunda ev sahibi lobiye döndürdü) */
+  function showLobby() {
+    if (st.modal === 'mpwait') closeModalHard();
+    // sayfa yenilenirse aynı odaya dönülsün: adrese ?oda=KOD yaz (ayrılınca silinir)
+    const code = ncall('code');
+    if (code && !FM.DEV) { try { const u = new URL(location.href); if (u.searchParams.get('oda') !== code) { u.searchParams.set('oda', code); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } } catch (e) { /* yok say */ } }
+    st.mpRaced = false;
+    showScreen('lobby');
+  }
+  function shareInfo() {
+    const code = String(ncall('code') || (st.fakeLobby && st.fakeLobby.lob.code) || '');
+    const link = ncall('shareLink') || (location.origin + location.pathname + '?oda=' + code);
+    return { code, link, text: 'Fuat Morel odama gel! Oda kodu: ' + code };
+  }
+  function copyText(t) {
+    const fallback = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.left = '-200px';
+        document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove();
+        return Promise.resolve(!!ok);
+      } catch (e) { return Promise.resolve(false); }
+    };
+    try { if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t).then(() => true, fallback); } catch (e) { /* yedek */ }
+    return fallback();
+  }
+  function copied(ok, what) {
+    if (ok) note({ title: 'Kopyalandı!', sub: what || 'Linki arkadaşlarına yapıştır.', icon: svg('copy'), cls: 'n-ok', ms: 1700 });
+    else note({ title: 'Kopyalanamadı', sub: 'Kodu elle yaz: ' + shareInfo().code, icon: svg('info'), cls: 'n-err', ms: 2600 });
+  }
+  function doShare() {
+    const si = shareInfo();
+    if (!si.code) return;
+    if (navigator.share && touchMode) {
+      try { const p = navigator.share({ title: 'Fuat Morel', text: si.text, url: si.link }); if (p && p.catch) p.catch(() => { }); return; } catch (e) { /* aşağıdaki pencere */ }
+    }
+    copyText(si.link).then(ok => { if (ok) copied(true); });
+    openModal('share',
+      '<div class="pnl pnl-sm pnl-share">' + ribbon('ARKADAŞINI ÇAĞIR', 'rb-green') +
+        '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
+        '<div class="sh-body"><span class="sh-l">Oda kodu</span><b class="sh-code">' + esc(si.code) + '</b>' +
+          '<span class="sh-link">' + esc(si.link) + '</span></div>' +
+        '<div class="cf-btns"><a class="btn b-green sh-wa" href="https://wa.me/?text=' + encodeURIComponent(si.text + ' ' + si.link) + '" target="_blank" rel="noopener">' + svg('share') + '<span>WHATSAPP</span></a>' +
+          '<button class="btn b-blue cf-ok" data-act="copylink">' + svg('copy') + '<span>KOPYALA</span></button></div>' +
+      '</div>');
+  }
+  function openCharPick() {
+    const cur = selChar();
+    let h = '';
+    FM.ORDER.forEach((id, i) => {
+      h += '<button class="cpk ' + (id === cur ? 'on' : '') + '" data-act="chset" data-id="' + esc(id) + '" style="--cc:' + esc(chBg(id)) + ';--d:' + (i * .03).toFixed(2) + 's">' +
+        '<span class="cpk-pt">' + pt(id, 80, { skin: equipped('skins', id) }) + '</span><b>' + esc(id) + '</b><em>' + esc((FM.CH[id] && FM.CH[id].ab) || '') + '</em></button>';
+    });
+    openModal('chpick', '<div class="pnl pnl-cpk">' + ribbon('KARAKTERİNİ SEÇ', 'rb-purple') +
+      '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
+      '<div class="cpk-g">' + h + '</div><p class="cpk-tip">Hepsi eşit güçte; fark görünüş ve özel güçte.</p></div>');
+  }
+  function setLobbyChar(id) {
+    if (!FM.CH[id]) return;
+    sv().selChar = id; if (typeof FM.persist === 'function') FM.persist();
+    ncall('setProfile', { char: id, skin: equipped('skins', id), trail: equipped('trails', id), plate: equipped('plates', id) });
+    closeModalHard(); sfx('select');
+    updateLobby(true);
+  }
+  function mpEmote(e) {
+    if (!e) return;
+    const ok = gcall('emote', e);
+    if (ok === false) return;
+    const me = ncall('pid');
+    if (me) st.mpEmo[me] = { e, t: nowMs() };
+    updateLobby();
+  }
+
+  /* ---------- kayıt kodu (Ayarlar): dışa aktar (bulut kısa kod / uzun kod) ve içe aktar (kod → önizleme → onay) ---------- */
+  function openExport() {
+    openModal('svexp',
+      '<div class="pnl pnl-sm pnl-sv">' + ribbon('KAYDINI TAŞI', 'rb-blue') +
+        '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
+        '<div class="sv-body">' +
+          '<p class="sv-t">Başka telefona ya da tarayıcıya geçerken ilerlemeni bu kodla taşı.</p>' +
+          '<div class="sv-box sv-cloud"><span class="sv-h">' + svg('wifi') + 'KISA KOD (internetten)</span><div class="sv-out" data-cloud>' +
+            '<button class="btn b-gold" data-act="svcloud">' + svg('share') + '<span>KISA KOD AL</span></button></div></div>' +
+          '<div class="sv-box"><span class="sv-h">' + svg('copy') + 'UZUN KOD (internetsiz)</span><div class="sv-out">' +
+            '<button class="btn b-blue" data-act="svlong">' + svg('copy') + '<span>UZUN KODU KOPYALA</span></button></div></div>' +
+        '</div>' +
+      '</div>');
+  }
+  function svCloud(el) {
+    if (!hasMeta('cloudSave')) return;
+    const box = $('[data-cloud]', Ls.mdl);
+    if (box) box.innerHTML = '<span class="sv-wait"><i class="spin sm"><i></i></i>Kod hazırlanıyor…</span>';
+    Promise.resolve(mcall('cloudSave')).then(r => {
+      const b = $('[data-cloud]', Ls.mdl); if (!b) return;
+      if (r && r.ok) {
+        b.innerHTML = '<b class="sv-code">' + esc(r.text || r.code) + '</b><button class="btn sm b-blue" data-act="svcopy" data-v="' + esc(r.code) + '">' + svg('copy') + '<span>KOPYALA</span></button>' +
+          (r.warn ? '<span class="sv-warn">' + esc(r.warn) + '</span>' : '');
+      } else b.innerHTML = '<span class="sv-warn err">' + esc((r && r.err) || 'Kod alınamadı, uzun kodu kullan.') + '</span><button class="btn sm b-gold" data-act="svcloud">TEKRAR</button>';
+    });
+    void el;
+  }
+  function svLong() {
+    if (!hasMeta('exportCode')) return;
+    Promise.resolve(mcall('exportCode')).then(code => {
+      if (!code) { note({ title: 'Kod oluşturulamadı', icon: svg('info'), cls: 'n-err', ms: 2000 }); return; }
+      copyText(code).then(ok => copied(ok, 'Uzun kayıt kodu panoda. Yeni cihazda Ayarlar › Kod gir.'));
+    });
+  }
+  function openImport() {
+    st.imp = null;
+    openModal('svimp',
+      '<div class="pnl pnl-sm pnl-sv">' + ribbon('KAYIT YÜKLE', 'rb-blue') +
+        '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
+        '<div class="sv-body" data-imp>' +
+          '<p class="sv-t">Kısa kodu (ör. ABCD-2345) ya da uzun kodu yapıştır.</p>' +
+          '<div class="code-in"><input class="cin imp-in" type="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" data-enter="svimpgo" placeholder="KOD" aria-label="Kayıt kodu">' +
+          '<button class="btn b-blue" data-act="svimpgo">' + svg('play') + '<span>GETİR</span></button></div>' +
+        '</div>' +
+      '</div>');
+  }
+  function impRow(l, a, b) { return '<div class="ip-r"><span>' + l + '</span><b>' + a + '</b><b class="nw">' + b + '</b></div>'; }
+  function svImpGo() {
+    const i = $('.imp-in', Ls.mdl), v = i ? i.value.trim() : '';
+    if (!v || !hasMeta('importCode')) return;
+    const box = $('[data-imp]', Ls.mdl);
+    const keep = box ? box.innerHTML : '';
+    if (box) box.innerHTML = '<span class="sv-wait"><i class="spin sm"><i></i></i>Kayıt aranıyor…</span>';
+    Promise.resolve(mcall('importCode', v)).then(r => {
+      const b = $('[data-imp]', Ls.mdl); if (!b) return;
+      if (!r || !r.ok) {
+        b.innerHTML = keep;
+        const i2 = $('.imp-in', b); if (i2) i2.value = v;
+        note({ title: 'Kayıt bulunamadı', sub: (r && r.err) || 'Kodu kontrol et.', icon: svg('info'), cls: 'n-err', ms: 2600 });
+        return;
+      }
+      st.imp = r;
+      const c = r.current || {}, n = r.preview || {};
+      b.innerHTML = '<p class="sv-t">Bu kayıt yüklensin mi? Şimdiki ilerlemen yedeklenir.</p>' +
+        '<div class="ip"><div class="ip-r ip-h"><span></span><b>Bu cihaz</b><b class="nw">Yüklenecek</b></div>' +
+          impRow('Takma ad', esc(c.nick || '—'), esc(n.nick || '—')) + impRow('Seviye', fmtN(c.level), fmtN(n.level)) +
+          impRow('Altın', fmtN(c.coins), fmtN(n.coins)) + impRow('Elmas', fmtN(c.gems), fmtN(n.gems)) +
+          impRow('Kupa', fmtN(c.trophies), fmtN(n.trophies)) + impRow('Yarış', fmtN(c.races), fmtN(n.races)) + '</div>' +
+        '<div class="cf-btns"><button class="btn b-steel" data-act="mclose">VAZGEÇ</button><button class="btn b-green cf-ok" data-act="svimpok">' + svg('check') + '<span>YÜKLE</span></button></div>';
+    });
+  }
+  function svImpOk() {
+    const r = st.imp; if (!r) return;
+    let ok = false;
+    try { ok = typeof r.apply === 'function' ? !!r.apply() : !!mcall('applyImport'); } catch (e) { console.error('[ui içe aktar]', e); }
+    st.imp = null;
+    closeModalHard();
+    if (ok) { st.lastCur = null; note({ title: 'Kayıt yüklendi!', sub: 'İlerlemen bu cihaza taşındı.', icon: svg('check'), cls: 'n-ok', ms: 2400 }); refreshSoon(); }
+    else note({ title: 'Yüklenemedi', sub: 'Yarış sırasında yüklenmez; menüde tekrar dene.', icon: svg('info'), cls: 'n-err', ms: 2600 });
+  }
+
+  /* ---------- uygulama-içi tarayıcı (WhatsApp, Instagram...) bandı: bir kez kapatılabilir ---------- */
+  const iab = document.createElement('div');
+  iab.className = 'iab'; root.appendChild(iab);
+  function syncIab() {
+    let k = null;
+    try { k = typeof FM.inAppBrowser === 'function' ? FM.inAppBrowser() : null; } catch (e) { k = null; }
+    if (FM.DEV && FM.params && FM.params.iab) k = FM.params.iab;
+    const on = !!k && st.view === 'menu' && (st.screen === 'menu' || st.screen === 'friends' || st.screen === 'lobby') && !lsGet('fm-iab-x');
+    if (on && !iab.firstChild) {
+      const nm = (FM.IN_APP_NAMES && FM.IN_APP_NAMES[k]) || 'Uygulama';
+      iab.innerHTML = '<span class="iab-ic">' + svg('info') + '</span><span class="iab-t"><b>' + esc(nm) + ' tarayıcısındasın.</b> İlerlemenin kaybolmaması için ⋮ / paylaş menüsünden <b>' + (isIOS() ? 'Safari' : 'Chrome') + '\'de aç</b>, sonra <b>Ana ekrana ekle</b>.</span>' +
+        '<button class="rbtn b-red iab-x" data-act="iabx" aria-label="Kapat">' + svg('close') + '</button>';
+    }
+    iab.classList.toggle('on', on);
+  }
+  function pwaCard() {
+    let inst = false;
+    try { inst = typeof FM.isStandalone === 'function' ? FM.isStandalone() : isStandalone(); } catch (e) { inst = false; }
+    let can = false;
+    try { can = !!(FM.pwa && typeof FM.pwa.canInstall === 'function' && FM.pwa.canInstall()); } catch (e) { can = false; }
+    if (inst) return '<div class="set-card"><h4>' + svg('home') + 'ANA EKRAN</h4><p class="set-tip sv-okline">' + svg('check') + 'Oyunu ana ekrandan açtın: ilerlemen güvende.</p></div>';
+    return '<div class="set-card"><h4>' + svg('home') + 'ANA EKRANA EKLE</h4>' +
+      '<p class="set-tip">Ana ekrandan açınca tam ekran olur ve ilerlemen hep aynı yerde kalır.</p>' +
+      (can ? '<div class="srow"><span class="s-l s-wide">Tek dokunuşla ekle.</span><button class="btn sm b-green" data-act="pwainst">EKLE</button></div>' : '') +
+      '<div class="a2h"><span><b>Android:</b> Chrome ⋮ › <b>Ana ekrana ekle</b></span><span><b>iPhone:</b> Safari › Paylaş › <b>Ana Ekrana Ekle</b></span></div>' +
+    '</div>';
   }
 
   /* =====================================================================
@@ -1936,9 +2508,10 @@
     const type = el.getAttribute('data-type'), id = el.getAttribute('data-id'), ch = el.getAttribute('data-ch') || selChar();
     const it = cosItem(type, id);
     if (!it) return;
-    if (coins() < (+it.price || 0)) { fail(el, 'coins'); return; }
+    const cur = cosCur(type, id);
+    if (curAmt(cur) < (+it.price || 0)) { fail(el, cur); return; }
     if (!armBuy(el)) return;
-    if (!buyCos(type, id, ch)) { fail(el, 'coins'); return; }
+    if (!buyCos(type, id, ch)) { fail(el, cur); return; }
     equip(type, id, ch);
     success(type + ':' + id, 'Satın alındı!', it.n + ' kuşanıldı.');
   }
@@ -1953,13 +2526,14 @@
     if (equipped('skins', ch) === id) return;
     if (owns('skins', id, ch)) { equip('skins', id, ch); st.flashKey = 'sk:' + id; st.cheerNext = true; refreshSoon(); return; }
     const it = cosItem('skins', id); if (!it) return;
+    const cur = cosCur('skins', id);
     confirmBox({
       title: 'GÖRÜNÜM', rcls: 'rb-gold',
       art: '<div class="cf-art sk-' + esc(id) + '">' + pt(ch, 140, { skin: id }) + '</div>',
       text: '<b>' + esc(ch) + '</b> için <b>' + esc(it.n) + '</b> görünümü satın alınsın mı?',
-      ok: coinI(28, 'bi') + '<b>' + fmtN(it.price) + '</b>', okCls: 'b-green',
+      ok: curIcon(cur, 28, 'bi') + '<b>' + fmtN(it.price) + '</b>', okCls: 'b-green',
       onOk: btn => {
-        if (coins() < it.price || !buyCos('skins', id, ch)) { fail(btn, 'coins'); return false; }
+        if (curAmt(cur) < it.price || !buyCos('skins', id, ch)) { fail(btn, cur); return false; }
         equip('skins', id, ch); st.cheerNext = true;
         success('sk:' + id, 'Yeni görünüm!', ch + ' · ' + it.n);
         return true;
@@ -2008,11 +2582,11 @@
   }
   function startGame() {
     if (!FM.game || typeof FM.game.startMatch !== 'function') return;
-    const rounds = roundsSel(), ch = selChar();
-    st.lastMatch = { rounds };
+    const o = soloSel(), ch = selChar();
+    st.lastMatch = { rounds: o.rounds, mode: o.mode, theme: o.map, n: o.rivals + 1 };
     if (touchMode) toggleFull(true);
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* yok say */ }
-    FM.game.startMatch({ char: ch, rounds });
+    FM.game.startMatch({ char: ch, rounds: o.rounds, mode: o.mode, theme: o.map, n: o.rivals + 1 });
   }
   function cycleChar(d) {
     const i = FM.ORDER.indexOf(selChar());
@@ -2022,7 +2596,15 @@
     updateShowcaseOnly();
   }
   const ACT = {
-    play: () => startGame(),
+    play: () => showScreen('solo'),
+    solostart: () => startGame(),
+    smode: el => { const v = el.getAttribute('data-v'); if (!FM.modeById || FM.modeById(v)) { sv().mode = modeOf(v).id; if (typeof FM.persist === 'function') FM.persist(); paint(false); } },
+    smap: el => { const v = el.getAttribute('data-v'); if (mapList().indexOf(v) >= 0) { sv().map = v; if (typeof FM.persist === 'function') FM.persist(); paint(false); } },
+    rivals: el => {
+      const s = sv(); s.rivals = clamp(Math.round(+s.rivals || 3) + (+el.getAttribute('data-d') || 0), 1, 9);
+      if (typeof FM.persist === 'function') FM.persist();
+      const b = $('.stp-v', Ls.scr); if (b) b.textContent = String(s.rivals);
+    },
     rounds: el => {
       const n = +el.getAttribute('data-n');
       if ([1, 3, 5].indexOf(n) < 0) return;
@@ -2129,7 +2711,7 @@
       st.quitArm = t;
       el.classList.add('armed');
       const q = el.querySelector('.q-t'); if (q) q.textContent = 'EMİN MİSİN?';
-      setTimeout(() => { if (el.isConnected) { el.classList.remove('armed'); if (q) q.textContent = 'MENÜYE DÖN'; } }, 3000);
+      setTimeout(() => { if (el.isConnected) { el.classList.remove('armed'); if (q) q.textContent = el.getAttribute('data-t') || 'MENÜYE DÖN'; } }, 3000);
     },
     next: el => {
       if (st.view !== 'results') return;
@@ -2143,9 +2725,91 @@
     }),
     replay: () => {
       if (!FM.game || typeof FM.game.startMatch !== 'function') return;
-      FM.game.startMatch({ char: selChar(), rounds: (st.lastMatch && st.lastMatch.rounds) || roundsSel() });
+      const o = soloSel(), lm = st.lastMatch || {};
+      FM.game.startMatch({ char: selChar(), rounds: lm.rounds || o.rounds, mode: lm.mode || o.mode, theme: lm.theme || o.map, n: lm.n || o.rivals + 1 });
     },
-    menu: () => { if (FM.game && typeof FM.game.toMenu === 'function') FM.game.toMenu(); else showScreen('menu'); }
+    menu: () => { if (FM.game && typeof FM.game.toMenu === 'function') FM.game.toMenu(); else showScreen('menu'); },
+    /* ---- çok oyunculu ---- */
+    golobby: () => { if (mpInRoom()) showScreen('lobby'); else showScreen('friends'); },
+    nick: () => openNick(null),
+    nickok: () => nickOk(),
+    mpcreate: () => withNick(mpCreate),
+    mpjoin: () => { const i = $('.cin', Ls.scr); const v = i ? i.value : st.mpCode; st.mpCode = v || ''; withNick(() => mpJoin(v)); },
+    mpcancel: () => { closeModalHard(); gcall('leave'); if (NET() && !mpInRoom()) ncall('clearUrlCode'); },
+    lbleave: () => confirmBox({
+      title: 'ODADAN AYRIL', rcls: 'rb-red', art: '<div class="cf-art cf-warn">' + svg('door') + '</div>',
+      text: mpHost() ? 'Ayrılırsan ev sahipliği başka bir oyuncuya geçer.' : 'Odadan ayrılıp ana menüye dönülsün mü?',
+      ok: '<span>AYRIL</span>', okCls: 'b-red',
+      onOk: () => { setTimeout(() => { gcall('leave'); ncall('clearUrlCode'); if (st.view === 'menu') showScreen('menu'); }, 0); return true; }
+    }),
+    mpleave: () => confirmBox({
+      title: 'ODADAN AYRIL', rcls: 'rb-red', art: '<div class="cf-art cf-warn">' + svg('door') + '</div>',
+      text: 'Maçı bırakıp odadan ayrılmak istiyor musun?', ok: '<span>AYRIL</span>', okCls: 'b-red',
+      onOk: () => {
+        setTimeout(() => {
+          gcall('leave'); ncall('clearUrlCode');
+          if (st.view !== 'menu' && st.view !== 'race') { if (FM.game && typeof FM.game.toMenu === 'function') FM.game.toMenu(); else showScreen('menu'); }
+        }, 0);
+        return true;
+      }
+    }),
+    share: () => doShare(),
+    copylink: () => { const si = shareInfo(); if (!si.code) return; copyText(si.link).then(ok => copied(ok)); },
+    lcfg: el => {
+      if (!mpHost()) return;
+      const d = lobbyData(); if (!d || !d.lob) return;
+      const cur = normCfg(d.lob.cfg), k = el.getAttribute('data-k'), dd = +el.getAttribute('data-d') || 0;
+      let patch = null;
+      if (k === 'mode') { const L = MODES().map(m => m.id); patch = { mode: L[(L.indexOf(cur.mode) + dd + L.length) % L.length] }; }
+      else if (k === 'map') { const L = mapList(); patch = { map: L[(Math.max(0, L.indexOf(cur.map)) + dd + L.length) % L.length] }; }
+      else if (k === 'rounds') patch = { rounds: [1, 3, 5].indexOf(+el.getAttribute('data-v')) >= 0 ? +el.getAttribute('data-v') : 3 };
+      else if (k === 'bots') patch = { bots: !cur.bots };
+      if (!patch) return;
+      ncall('setConfig', patch);
+      lsSet('fm-mpcfg', JSON.stringify(Object.assign({}, cur, patch)));
+      updateLobby();
+    },
+    lbready: () => {
+      const d = lobbyData(); if (!d) return;
+      const me = d.pl.find(p => p.me) || {};
+      ncall('setReady', !me.ready); sfx(me.ready ? 'click' : 'select'); buzz(12);
+      updateLobby();
+    },
+    lbstart: el => {
+      const d = lobbyData(); if (!d || !mpHost()) return;
+      const others = d.pl.filter(p => !p.me && !p.off), notReady = others.filter(p => !p.ready).length;
+      const go = () => {
+        if (touchMode) toggleFull(true);
+        const ok = gcall('hostStart');
+        if (!ok) { note({ title: 'Başlatılamadı', sub: 'Bağlantıyı bekle ve tekrar dene.', icon: svg('info'), cls: 'n-err', ms: 2000 }); return; }
+        if (el && el.isConnected) el.disabled = true;
+      };
+      if (notReady > 0) confirmBox({ title: 'HERKES HAZIR DEĞİL', rcls: 'rb-gold', text: '<b>' + notReady + '</b> oyuncu henüz hazır değil. Yine de başlatılsın mı?', ok: svg('play') + '<span>BAŞLAT</span>', okCls: 'b-gold', onOk: () => { setTimeout(go, 0); return true; } });
+      else go();
+    },
+    chpick: () => openCharPick(),
+    chset: el => setLobbyChar(el.getAttribute('data-id')),
+    lbemo: () => { const e = $('.lb-emo', Ls.scr); if (e) e.classList.toggle('on'); },
+    emotog: () => { if (nowMs() - (st.emT || 0) < 450 && st.emLast === 'tog') return; st.emLast = 'tog'; Ls.race.classList.toggle('emo-open'); },
+    emo: el => {
+      if (nowMs() - (st.emT || 0) < 450 && st.emLast === 'emo') return;
+      st.emLast = 'emo';
+      mpEmote(el.getAttribute('data-e'));
+      Ls.race.classList.remove('emo-open');
+      const e = $('.lb-emo', Ls.scr); if (e) e.classList.remove('on');
+    },
+    skipres: () => { if (FM.game && typeof FM.game.finishNow === 'function') FM.game.finishNow(); },
+    tolobby: el => { if (gcall('hostToLobby') && el) el.disabled = true; },
+    reload: () => { try { location.reload(); } catch (e) { /* yok say */ } },
+    iabx: () => { lsSet('fm-iab-x', '1'); syncIab(); },
+    pwainst: () => { try { if (FM.pwa && typeof FM.pwa.install === 'function') Promise.resolve(FM.pwa.install()).then(() => refreshSoon()); } catch (e) { /* yok say */ } },
+    svexp: () => openExport(),
+    svimp: () => openImport(),
+    svcloud: el => svCloud(el),
+    svlong: () => svLong(),
+    svcopy: el => copyText(el.getAttribute('data-v') || '').then(ok => copied(ok, 'Kısa kod panoda.')),
+    svimpgo: () => svImpGo(),
+    svimpok: () => svImpOk()
   };
   root.addEventListener('click', e => {
     const el = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
@@ -2153,6 +2817,7 @@
     const a = el.getAttribute('data-act');
     if (!a || !ACT[a]) return;
     if (a === 'pause' && nowMs() - (st.pzT || 0) < 450) return;   // pointerup ile zaten açıldı
+    if ((a === 'emo' || a === 'emotog') && el.closest('.ly-race') && nowMs() - (st.emT || 0) < 450) return;
     // Android: menüdeki ilk dokunuşta bir kez tam ekrana geç (adres çubuğu yer kaplamasın)
     if (touchMode && !st.autoFs && !FM.DEV) {
       st.autoFs = true;   // oturum başına yalnızca bir kez (oyuncu tam ekrandan çıkarsa zorlama)
@@ -2181,6 +2846,13 @@
     const k = e.key;
     const ae = document.activeElement;
     const onCtl = ae && ae !== document.body && root.contains(ae) && /^(BUTTON|INPUT)$/.test(ae.tagName);
+    // yazı alanında Enter: alanın data-enter eylemi (takma ad, oda kodu, kayıt kodu)
+    if (k === 'Enter' && ae && ae.tagName === 'INPUT' && ae.getAttribute('data-enter') && root.contains(ae)) {
+      e.preventDefault(); click();
+      const a = ae.getAttribute('data-enter'); if (ACT[a]) { try { ACT[a](ae); } catch (err) { console.error(err); } }
+      return;
+    }
+    if (ae && ae.tagName === 'INPUT' && ae.type === 'text' && k !== 'Escape') return;   // yazarken kısayol yok
     if (st.modal === 'pause') {
       if (k === 'Enter' && !onCtl) { e.preventDefault(); click(); resumeGame(); }
       return;   // Esc'i main.js 'ui:pause' ile iletir
@@ -2210,6 +2882,8 @@
      ===================================================================== */
   FM.on('ui:menu', () => {
     showScreen('menu');
+    // ?oda=KOD linkiyle açıldıysa doğrudan katıl (takma ad yoksa önce sor)
+    tryAutoJoin();
     if (!st.dailyShown && !FM.DEV && dailyReady()) {
       st.dailyShown = true;
       setTimeout(() => { if (st.view === 'menu' && st.screen === 'menu' && !st.modal && dailyReady()) openDaily(); }, 800);
@@ -2225,9 +2899,80 @@
   FM.on('race:end', () => { releaseAllTouch(); });
   FM.on('ui:podium', res => showResults(res && res.ranking ? res : S.lastResult));
   FM.on('match:end', d => {
+    // ağ maçı: final ekranını mp:final çizer (takma adlar, ev sahibi düğmeleri)
+    if (mpActive()) { st.mpRaced = true; return; }
     showFinal(d);
     // arka planda canlı demo dönsün (diğer dinleyiciler bitince)
     setTimeout(() => { if (st.view === 'final' && S.mode === 'menu' && FM.game && typeof FM.game.startDemo === 'function') { try { FM.game.startDemo(); if (typeof FM.updateCamera === 'function') FM.updateCamera(0, true); } catch (e) { console.error(e); } } }, 60);
+  });
+  /* ---------- çok oyunculu olaylar ---------- */
+  function tryAutoJoin() {
+    if (st.autoJoinDone) return;
+    st.autoJoinDone = true;
+    if (!(FM.DEV && FM.params && FM.params.mp)) setTimeout(autoJoin, 250);
+  }
+  function autoJoin() {
+    if (!NET()) return;
+    let code = null;
+    try { code = ncall('codeFromUrl'); } catch (e) { code = null; }
+    if (!code) {
+      if (FM.params && FM.params.oda) note({ title: 'Linkteki oda kodu geçersiz', sub: 'Arkadaşından linki tekrar iste.', icon: svg('info'), cls: 'n-err', ms: 3000 });
+      return;
+    }
+    if (mpInRoom() || mpBusy()) return;
+    st.mpCode = code;
+    showScreen('friends');
+    withNick(() => mpJoin(code));
+  }
+  FM.on('mp:lobby', () => { try { showLobby(); } catch (e) { console.error('[ui mp:lobby]', e); } });
+  FM.on('net:lobby', () => updateLobby());
+  FM.on('net:players', () => updateLobby());
+  FM.on('net:status', s => {
+    updateLobby();
+    // kurulum/katılma iptal oldu (bağlantı kurulamadı vb.): bekleme penceresi açık kalmasın
+    if (st.modal === 'mpwait' && s && !s.phase && s.conn === 'idle') closeModalHard();
+  });
+  FM.on('net:error', d => {
+    d = d || {};
+    if (st.modal === 'mpwait' || st.modal === 'share' || st.modal === 'chpick') closeModalHard();
+    if (st.view === 'menu' && st.screen === 'lobby') showScreen('friends');
+    if (d.code === 'badcode' || d.code === 'noroom' || d.code === 'full' || d.code === 'ver' || d.code === 'kicked') ncall('clearUrlCode');
+    openErr(d.code, d.msg);
+  });
+  FM.on('net:kicked', d => {
+    if (st.view === 'menu' && st.screen === 'lobby') showScreen('menu');
+    ncall('clearUrlCode');
+    openErr('kicked', (d && d.msg) || 'Ev sahibi seni odadan çıkardı.');
+  });
+  FM.on('mp:left', d => {
+    if (st.modal === 'mpwait' || st.modal === 'share' || st.modal === 'chpick') closeModalHard();
+    if (st.view === 'menu' && (st.screen === 'lobby' || st.screen === 'friends')) showScreen(d && d.reason === 'left' ? 'menu' : 'friends');
+    else if (st.view === 'results' || st.view === 'final') { if (FM.game && typeof FM.game.toMenu === 'function') FM.game.toMenu(); else showScreen('menu'); }
+    if (d && d.reason === 'left') ncall('clearUrlCode');
+  });
+  FM.on('mp:host', d => {
+    if (!d || d.pending) return;
+    if (d.me) note({ title: 'Artık ev sahibi sensin!', sub: 'Turları ve ayarları sen yönetiyorsun.', icon: svg('crown', 'gold'), cls: 'n-ok', ms: 3000 });
+    else {
+      const p = (ncall('players') || []).find(x => x.pid === d.pid);
+      note({ title: 'Ev sahibi değişti', sub: p ? 'Yeni ev sahibi: ' + p.nick : 'Oda devam ediyor.', icon: svg('crown', 'gold'), cls: 'n-tip', ms: 2600 });
+    }
+    if (st.view === 'results') { const f = $('.res-foot', Ls.res); if (f) f.innerHTML = resFoot(true, !!st.resLast); }
+    else if (st.view === 'final' && st.finData) showFinal(st.finData);
+    updateLobby(true);
+  });
+  FM.on('mp:emote', d => {
+    if (!d || !d.pid || typeof d.e !== 'string') return;
+    st.mpEmo[d.pid] = { e: d.e, t: nowMs() };
+    if (st.view === 'menu' && st.screen === 'lobby') { updateLobby(); setTimeout(updateLobby, 3300); }
+  });
+  FM.on('mp:final', f => {
+    if (!f || !Array.isArray(f.standings)) return;
+    const stn = f.standings.map(x => {
+      const r = gcall('racer', x.pid) || {};
+      return { id: FM.CH[x.char] ? x.char : 'TAFTAF', name: x.nick || x.char, skin: x.skin, total: x.total | 0, bot: !!x.bot, me: !!x.me, kills: r.kills | 0 };
+    });
+    showFinal({ mp: true, standings: stn, champion: !!f.champion });
   });
   FM.on('ui:pause', d => {
     d = d || {};
@@ -2267,9 +3012,9 @@
      25) GELİŞTİRİCİ MODU (?dev=1&scene=menu&ui=shop&tab=trails)
      ===================================================================== */
   function devFakeResult() {
-    const rs = (S.racers || []).slice(0, 4);
+    const rs = (S.racers || []).slice(0, 10);
     if (!rs.length) return null;
-    const rk = rs.slice().sort((a, b) => b.x - a.x).map((r, i) => Object.assign({}, r, { finished: i < 3, ftime: 41.37 + i * 2.71, place: i + 1, rp: i < 3 ? (FM.PTS || [10, 6, 3, 1])[i] : 0, total: [16, 13, 9, 2][i] }));
+    const rk = rs.slice().sort((a, b) => b.x - a.x).map((r, i) => Object.assign({}, r, { finished: i < 3, ftime: 41.37 + i * 2.71, place: i + 1, rp: i < 3 ? (FM.PTS || [10, 6, 3, 1])[i] : 0, total: Math.max(0, 16 - i * 3) }));
     const pid = S.player && S.player.id;
     const pl = rk.find(r => r.id === pid) || rk[0];
     pl.bot = false;
@@ -2291,11 +3036,20 @@
     return { ranking: rk, player: pl, playerRank: rk.indexOf(pl), round: 2, rounds: 3, theme: S.L && S.L.theme, trophyDelta: [30, 12, -5, -15][rk.indexOf(pl)] || 0, last: FM.params.last === '1' };
   }
   function devFakeFinal() {
-    const rs = (S.racers || []).slice(0, 4).map((r, i) => Object.assign({}, r, { total: [24, 19, 11, 4][i], kills: [3, 1, 0, 2][i] }));
+    const rs = (S.racers || []).slice(0, 10).map((r, i) => Object.assign({}, r, { total: Math.max(0, 24 - i * 5), kills: [3, 1, 0, 2, 1, 0, 0, 1, 0, 0][i] }));
     const pl = rs[0]; pl.bot = false;
     const champ = FM.params.champ !== '0';
-    const st2 = champ ? rs : [rs[1], rs[0], rs[2], rs[3]];
+    const st2 = champ ? rs : [rs[1], rs[0]].concat(rs.slice(2));
     return { standings: st2, player: pl, champion: champ };
+  }
+  function devFakeLobby(host, np) {
+    const nicks = ['Emir', 'Caner', 'Lul_Kral', 'ertan', 'Nusret', 'baso', 'Fuat', 'Morel', 'TAFTAF', 'Kral'];
+    const pl = [];
+    for (let i = 0; i < clamp(np, 1, 10); i++) {
+      const me = host ? i === 0 : i === 2;
+      pl.push({ pid: 'p' + i, nick: nicks[i], char: FM.ORDER[i % FM.ORDER.length], skin: i === 3 ? 'altin' : 'klasik', ready: i % 3 !== 1, waiting: false, off: i === 5, host: i === 0, me, alive: i !== 5, ping: [62, 88, 140, 250, 95, null, 72, 410, 66, 120][i] });
+    }
+    return { lob: { code: 'K7MXQ', isHost: host, max: 10, st: 'lobby', cfg: { mode: FM.params.mode || 'elim', map: FM.params.map || 'desert', rounds: 3, bots: true, fill: 4 } }, pl, stt: { conn: 'open', rtt: 84, phase: 'in' } };
   }
   function devOpen() {
     const P = FM.params || {}, u = P.ui;
@@ -2316,6 +3070,17 @@
       case 'results': showResults(S.lastResult || devFakeResult()); break;
       case 'final': showFinal(devFakeFinal()); break;
       case 'rotate': setTouch(true); showScreen('menu'); Ls.rot.classList.add('on'); break;
+      case 'solo': case 'friends': showScreen(u); break;
+      case 'lobby': st.fakeLobby = devFakeLobby(P.host !== '0', +P.np || 6); showScreen('lobby'); break;
+      case 'nick': showScreen('friends'); openNick(null); break;
+      case 'wait': showScreen('friends'); openWait('ODAYA KATILINIYOR', '<b>K7MXQ</b> odası aranıyor…'); break;
+      case 'mperr': showScreen('friends'); openErr(P.code || 'noroom', P.code === 'ver' ? 'Oyunun yeni bir sürümü var. Sayfayı yenile.' : 'Bu kodla açık bir oda yok. Kodu kontrol et ya da arkadaşından yeni link iste.'); break;
+      case 'share': st.fakeLobby = devFakeLobby(true, 3); showScreen('lobby'); doShare(); break;
+      case 'chpick': st.fakeLobby = devFakeLobby(false, 4); showScreen('lobby'); openCharPick(); break;
+      case 'svexp': showScreen('settings'); openExport(); break;
+      case 'svimp': showScreen('settings'); openImport(); break;
+      case 'mpresults': { const r = devFakeResult(); if (r) { r.mp = true; r.mode = P.mode || 'elim'; } showResults(r); break; }
+      case 'mpfinal': { const f = devFakeFinal(); f.mp = true; f.standings.forEach((x, i) => { x.me = i === 1; }); showFinal(f); break; }
       default: showScreen('menu');
     }
     if (P.note === '1') {
@@ -2330,6 +3095,8 @@
     const s = sv().settings || {};
     try { if (FM.audio && typeof FM.audio.setVolume === 'function') { FM.audio.setVolume('music', s.music); FM.audio.setVolume('sfx', s.sfx); } } catch (e) { /* yok say */ }
     if (FM.DEV) setTimeout(devOpen, 0);
+    // geliştirici sahnesinde ui:menu gelmeyebilir: ?oda= ile açılışta yine katıl
+    setTimeout(() => { if (st.view === 'menu' && FM.params && FM.params.oda) tryAutoJoin(); }, 600);
   });
 
   /* =====================================================================

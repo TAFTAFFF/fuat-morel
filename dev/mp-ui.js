@@ -16,7 +16,7 @@ if (!chromePath) { console.error('Chrome/Edge bulunamadı'); process.exit(1); }
 const ARGS = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const opt = k => { const a = process.argv.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=')[1] : null; };
 const OUT = path.resolve(ARGS[0] || path.join(os.tmpdir(), 'fm-mp-ui'));
-const ROUNDS = +(opt('rounds') || 1), MODE = opt('mode') || 'classic';
+const ROUNDS = [1, 3, 5].indexOf(+opt('rounds')) >= 0 ? +opt('rounds') : 1, MODE = opt('mode') || 'classic';
 fs.mkdirSync(OUT, { recursive: true });
 
 function cdp(wsUrl) {

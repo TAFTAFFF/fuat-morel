@@ -130,6 +130,7 @@ if (require.main === module) {
         console.log(errs ? 'HATA VAR' : 'TAMAM');
         return finish(errs ? 1 : 0);
       }
+      if (cmd === 'lobi') { const bad = await lobbyFlow(all); return finish(bad ? 1 : 0); }
       // --- host: tamamen node içinde maç ---
       const n = Math.max(2, Math.min(10, +(A[1] || 4))), mode = A[2] || 'classic', theme = A[3] || 'random', rounds = +(A[4] || 1), fill = +(A[5] || 4);
       const broker = A[6] != null ? +A[6] : undefined;
@@ -245,4 +246,156 @@ if (require.main === module) {
       finish(bad.length ? 1 : 0);
     } catch (e) { console.log('HATA', e.stack || e); finish(1); }
   })();
+}
+
+/* =================== TUR5 lobi akışı (node dev/mp-bots.js lobi --yerel) ===================
+   herkes hazır → 5 sn geri sayım (her istemcide mp:countdown 5..1) → yarış; yeni gelen / çıkan / hazırı geri alan iptal eder;
+   yarış ortasında sayfası yenilenen üye aynı yarışçıya kaldığı yerden döner; turlar arası otomatik geçiş (üyede de autoLeft);
+   final → ~10 sn sonra herkes aynı odada LOBİDE (hazırlar sıfır); ev sahibinin yenilemesi; tek başına ev sahibinin odayı geri alması;
+   olmayan odaya geri dönüş denemesi → mp:left {reason: 'rejoin-failed'}. */
+async function lobbyFlow(all) {
+  let bad = 0; const t00 = Date.now();
+  const pass = m => console.log('  ✓ ' + m), fail = m => { bad++; console.log('  ✗ ' + m); };
+  const el = () => ((Date.now() - t00) / 1000).toFixed(1) + ' sn';
+  const cds = g => g.ev.filter(x => x.e === 'mp:countdown').map(x => x.d);
+  const mk = (n, o) => { const g = ghost(n, Object.assign({ quiet: true }, o || {})); all.push(g); return g; };
+  // sayfa yenileme / uygulama kapanması benzetimi: pagehide (bilerek çıkış DEĞİL) + istemci durur, kayıt (store) kalır
+  const refresh = g => { g.net._dbg.pagehide(); g.stopped = true; clearInterval(g.loop); for (const t of g.timers) clearInterval(t); };
+  const step = async (name, fn) => { try { await fn(); } catch (e) { fail(name + ' — ' + (e && e.message)); } };
+  const H = mk('Ev', { char: 'Kral' }), Am = mk('Ayşe'), Bm = mk('Barış');
+  for (const g of all) g.ng.autopilot = true;
+  if (H.ng.normCfg({ autoNext: 20 }).autoNext !== 10 || H.ng.normCfg({}).autoNext !== 8) fail('autoNext sınırı: ' + JSON.stringify(H.ng.normCfg({ autoNext: 20 })));
+  H.net.createRoom({ cfg: { mode: 'classic', map: 'random', rounds: 2, bots: true, fill: 4 } });
+  await waitFor(() => H.net.inRoom(), 20000, 'oda kuruldu');
+  const code = H.net.code();
+  console.log(`oda ${code} (${H.net.status().brokerName})`);
+  Am.net.joinRoom(code); Bm.net.joinRoom(code);
+  await waitFor(() => [Am, Bm].every(g => g.net.inRoom()) && H.net.players().length === 3, 20000, 'üyeler katıldı');
+
+  await step('geri sayım + iptaller', async () => {
+    H.net.setReady(true); Am.net.setReady(true);
+    await sleep(1500);
+    if (H.ng.countdown() != null) throw new Error('herkes hazır değilken geri sayım başladı');
+    Bm.net.setReady(true);
+    await waitFor(() => [H, Am, Bm].every(g => g.ng.countdown() === 5 || g.ng.countdown() === 4), 3000, 'geri sayım herkeste');
+    pass('herkes hazır (ev sahibi dahil) → 5 sn geri sayım herkeste başladı (' + [H, Am, Bm].map(g => g.ng.countdown()).join('/') + ')');
+    // yeni biri girer → iptal (join)
+    const J = mk('Geç');
+    J.net.joinRoom(code);
+    await waitFor(() => [H, Am, Bm].every(g => { const c = cds(g); return c.length && c[c.length - 1].left === null && c[c.length - 1].reason === 'join'; }), 8000, 'katılınca iptal');
+    pass('yeni oyuncu girince geri sayım herkeste iptal (reason: join)');
+    J.net.setReady(true);
+    await waitFor(() => H.ng.countdown() != null && Am.ng.countdown() != null, 5000, 'yeni gelen hazır → yeniden sayım');
+    J.stop();                                                   // bilerek çıkış → iptal (leave)
+    await waitFor(() => [H, Am, Bm].every(g => cds(g).some(c => c.left === null && c.reason === 'leave')), 9000, 'çıkınca iptal');
+    pass('hazır oyuncu çıkınca iptal (reason: leave), kalanlar hazır olduğu için sayım kısa beklemeyle yeniden başlıyor');
+    await waitFor(() => Am.ng.countdown() != null, 5000, 'yeniden sayım');
+    Am.net.setReady(false);
+    await waitFor(() => [H, Am, Bm].every(g => { const c = cds(g); return c.length && c[c.length - 1].left === null && c[c.length - 1].reason === 'unready'; }), 5000, 'hazırı geri alınca iptal');
+    await sleep(6000);
+    if ([H, Am, Bm].some(g => g.ng.state().phase !== 'lobby')) throw new Error('iptalden sonra yarış başladı');
+    pass('hazırı geri alınca iptal (reason: unready); yarış başlamadı');
+    for (const g of [H, Am, Bm]) g.ev = g.ev.filter(x => x.e !== 'mp:countdown');
+    Am.net.setReady(true);
+    const t0 = Date.now();
+    await waitFor(() => [H, Am, Bm].every(g => g.count('mp:start') >= 1), 12000, 'sayım sonunda yarış');
+    const dt = (Date.now() - t0) / 1000;
+    const seqB = cds(Bm).map(c => c.left === null ? 'x(' + c.reason + ')' : c.left).join(',');
+    if (dt > 4.3 && dt < 7.5 && /^5,4,3,2,1,x\(start\)$/.test(seqB)) pass(`geri sayım bitti → yarış kendiliğinden başladı (${dt.toFixed(1)} sn), üyedeki sayım: ${seqB}`);
+    else fail(`sayım/başlama: ${dt.toFixed(1)} sn, üye sayımı ${seqB}`);
+  });
+
+  let B2 = null;
+  await step('yarış ortasında yenileme', async () => {
+    await waitFor(() => Bm.FM.S.mode === 'race' && Bm.FM.S.raceT > 9, 30000, 'yarış ilerledi');
+    const xB = Math.round(Bm.FM.S.player.x), pidB = Bm.net.pid(), mid = Bm.ng.state().mid;
+    refresh(Bm);
+    await waitFor(() => { const r = H.ng.racer(pidB); return r && r.off; }, 9000, 'ev sahibinde "bağlantı koptu"');
+    B2 = mk('Barış', { store: Bm.store });
+    if (B2.net.pid() !== pidB) throw new Error('pid korunmadı: ' + B2.net.pid());
+    const info = B2.ng.rejoinInfo();
+    if (!info || info.code !== code) throw new Error('rejoinInfo: ' + JSON.stringify(info));
+    if (!B2.ng.rejoin()) throw new Error('rejoin false');
+    await waitFor(() => B2.count('mp:start') >= 1 && B2.ng.state().phase === 'race', 15000, 'geri dönen yarışta');
+    const st = B2.ng.state(), P = B2.FM.S.player, x2 = Math.round(P.x);
+    await waitFor(() => { const r = H.ng.racer(pidB); return r && !r.off && !r.out; }, 9000, 'ev sahibinde geri geldi');
+    if (B2.count('mp:rejoining') && !st.spectating && st.mid === mid && P.ctrl === 'local' && x2 > 600 && Math.abs(x2 - xB) < 1500) pass(`yenileyen üye ${info.mins} dk'lık kayıtla aynı yarışa AYNI yarışçı olarak döndü (yenilemeden önce x=${xB}, dönünce x=${x2}; başlangıç değil), ev sahibinde "koptu" kalktı`);
+    else fail('geri dönüş: ' + JSON.stringify({ st, x2, xB, ctrl: P.ctrl, rej: B2.count('mp:rejoining') }));
+  });
+  const M3 = [H, Am, B2 || Bm];
+
+  await step('turlar arası otomatik geçiş', async () => {
+    await waitFor(() => M3.every(g => g.count('mp:end') >= 1), 120000, 'tur 1 sonu');
+    await sleep(300);
+    const al = M3.map(g => g.ng.autoLeft());
+    const tEnd = Date.now();
+    if (al.every(v => v != null && v >= 6 && v <= 9)) pass('tur sonu: kalan süre herkeste (üyeler dahil) autoLeft = ' + al.join('/'));
+    else fail('autoLeft: ' + JSON.stringify(al));
+    await waitFor(() => M3.every(g => g.ng.state().round === 2 && g.ng.state().phase === 'race'), 20000, 'tur 2 kendiliğinden');
+    const s = (Date.now() - tEnd) / 1000;
+    if (s > 6 && s < 10.5) pass(`sonraki tur ${s.toFixed(1)} sn sonra kendiliğinden başladı (kürsüden ~6 sn sonra)`); else fail('tur 2 gecikmesi ' + s.toFixed(1) + ' sn');
+  });
+
+  await step('maç sonu → herkes lobiye', async () => {
+    await waitFor(() => M3.every(g => g.count('mp:final') >= 1), 150000, 'final');
+    await sleep(300);
+    const al = M3.map(g => g.ng.autoLeft());
+    if (al.every(v => v != null && v >= 8 && v <= 10)) pass('final: lobiye dönüşe kalan süre herkeste ' + al.join('/')); else fail('final autoLeft: ' + JSON.stringify(al));
+    const tF = Date.now();
+    await waitFor(() => M3.every(g => g.ev.some(x => x.e === 'mp:lobby' && x.t > tF)), 16000, 'lobiye dönüş');
+    const s = (Date.now() - tF) / 1000;
+    const lob = H.net.lobby(), pl = H.net.players();
+    const okRoom = M3.every(g => g.net.inRoom() && g.net.code() === code && g.ng.state().phase === 'lobby' && g.count('mp:left') === 0);
+    if (okRoom && pl.length === 3 && pl.every(p => !p.ready) && lob.st === 'lobby') pass(`final'den ${s.toFixed(1)} sn sonra herkes AYNI odada (${code}) lobide; 3 oyuncu korundu, hazırlar sıfırlandı, kimse menüye atılmadı`);
+    else fail('lobiye dönüş: ' + JSON.stringify({ okRoom, n: pl.length, ready: pl.map(p => p.ready), st: lob.st }));
+  });
+
+  let H2 = null;
+  await step('ev sahibi lobide yeniledi', async () => {
+    const pidH = H.net.pid();
+    refresh(H);
+    await waitFor(() => [Am, B2].every(g => g.net.isHost() || g.net.host() !== pidH), 12000, 'devir');
+    H2 = mk('Ev', { store: H.store });
+    if (!H2.ng.rejoin()) throw new Error('rejoin false');
+    await waitFor(() => H2.net.inRoom() && H2.net.code() === code, 15000, 'ev sahibi geri döndü');
+    await sleep(1500);
+    const hosts = [Am, B2, H2].filter(g => g.net.isHost()).length;
+    if (hosts === 1 && H2.net.players().length === 3 && !H2.net.isHost()) pass('ev sahibi sayfayı yeniledi → oda en küçük pid\'e devredildi, kendisi aynı odaya üye olarak döndü (tek ev sahibi, 3 oyuncu)');
+    else fail('ev sahibi dönüşü: ' + JSON.stringify({ hosts, n: H2.net.players().length, host: H2.net.isHost() }));
+  });
+
+  await step('tek başına ev sahibi odayı geri alır', async () => {
+    const others = [Am, B2, H2].filter(Boolean);
+    const solo = others.find(g => g.net.isHost());
+    for (const g of others) if (g !== solo) g.stop();               // bilerek çıkış (kayıt silinir)
+    await waitFor(() => solo.net.players().length === 1, 12000, 'yalnız kaldı');
+    if (others.filter(g => g !== solo).some(g => g.net.lastRoom())) throw new Error('bilerek çıkışta kayıt silinmedi');
+    refresh(solo);
+    const S2 = mk('Yalnız', { store: solo.store });
+    const t0 = Date.now();
+    if (!S2.ng.rejoin()) throw new Error('rejoin false');
+    await waitFor(() => S2.net.inRoom() && S2.net.isHost(), 12000, 'oda geri alındı');
+    if (S2.net.code() === code && S2.count('mp:lobby') >= 1) pass(`tek başına ev sahibi yeniledi → ${((Date.now() - t0) / 1000).toFixed(1)} sn içinde aynı odayı (${code}) ev sahibi olarak geri aldı`);
+    else fail('geri alma: ' + S2.net.code());
+    S2.stop();
+    await sleep(500);
+    if (S2.net.lastRoom()) fail('leaveRoom sonrası kayıt duruyor'); else pass('ODADAN AYRIL → geri dönüş kaydı silindi');
+  });
+
+  await step('olmayan odaya geri dönüş', async () => {
+    const X = mk('Kayıp');
+    X.store['fm-oda'] = JSON.stringify({ code, broker: 1, t: Date.now() - 60000, pid: X.net.pid(), hn: 'Ev', live: 0, closed: Date.now() - 60000 });
+    const info = X.ng.rejoinInfo();
+    if (!info || info.mins !== 1 || info.nick !== 'Ev') throw new Error('rejoinInfo: ' + JSON.stringify(info));
+    X.ng.rejoin();
+    await waitFor(() => X.ev.some(x => x.e === 'mp:left' && x.d && x.d.reason === 'rejoin-failed'), 20000, 'rejoin-failed');
+    if (!X.net.lastRoom() && !X.net.busy()) pass('kapanmış odaya geri dönüş → mp:left {reason: "rejoin-failed"}, kayıt silindi'); else fail('başarısız dönüşte kayıt/oturum kaldı');
+    X.stop();
+  });
+
+  const errs = all.reduce((a, g) => a.concat(g.errors), []);
+  const caught = all.reduce((a, g) => a.concat(g.net.log().filter(l => l.indexOf('HATA') >= 0)), []);
+  if (!errs.length && !caught.length) pass('konsol hatası yok'); else { fail(errs.length + caught.length + ' hata'); for (const e of errs.concat(caught).slice(0, 8)) console.log('      ' + String(e).slice(0, 300)); }
+  console.log(`\nSonuç: ${bad ? bad + ' kaldı' : 'hepsi geçti'} (${el()})`);
+  return bad;
 }

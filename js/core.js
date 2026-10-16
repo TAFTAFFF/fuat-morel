@@ -47,14 +47,14 @@ window.FM = window.FM || {};
   /* ---------------- eşyalar ---------------- */
   // col: eşyanın tema rengi (HUD/çizim için)
   FM.ITEMS = {
-    saw:     { ic: '🪚', n: 'Testere',       col: '#c7ccd6', d: 'Yerde yuvarlanır, duvardan seker. Değdiği herkesi öldürür — geri sekerse seni de!' },
-    dyn:     { ic: '🧨', n: 'Dinamit',       col: '#e23b3b', d: 'İleri fırlatılır, 1 sn sonra patlar. Yakındaysan sen de gidersin.' },
-    trap:    { ic: '🪤', n: 'Ayı Tuzağı',    col: '#9aa3b2', d: 'Arkana bırakılır. Basan ölür (sen dahil).' },
-    mis:     { ic: '🚀', n: 'Güdümlü Füze',  col: '#ff6b3d', d: 'Lideri (lider sensen ikinciyi) kovalar ve patlar.' },
+    saw:     { ic: '🪚', n: 'Testere',       col: '#a3adbd', d: 'Yerde yuvarlanır, duvardan seker. Değdiği herkesi öldürür — geri sekerse seni de! Nişanla geriye ya da kavisli yukarı fırlat.' },
+    dyn:     { ic: '🧨', n: 'Dinamit',       col: '#e23b3b', d: 'Fırlatılır, 1 sn sonra patlar. Nişanla yayını sen seç (ileri, geri, yukarı). Yakındaysan sen de gidersin.' },
+    trap:    { ic: '🪤', n: 'Ayı Tuzağı',    col: '#9aa3b2', d: 'Arkana bırakılır; nişanla kısa mesafeye fırlatılır, yere düşünce kurulur. Basan ölür (sen dahil).' },
+    mis:     { ic: '🚀', n: 'Güdümlü Füze',  col: '#ff6b3d', d: 'Lideri (lider sensen ikinciyi) kovalar ve patlar. Geriye nişan alırsan arkandaki en yakın rakibi kovalar.' },
     bolt:    { ic: '🌩️', n: 'Yıldırım',      col: '#ffe14d', d: 'Önündeki rakiplerin (en yakın 4 kişi) üstünde bulut belirir, 1.8 sn sonra çakar. Kalkan ve balon korur.' },
     ice:     { ic: '❄️', n: 'Kar Fırtınası', col: '#9be7ff', d: 'Diğer herkesi 2.2 sn dondurur, buzda kayarlar.' },
     mag:     { ic: '🧲', n: 'Mıknatıs',      col: '#c084fc', d: 'Öndekileri sana doğru geri çeker.' },
-    net:     { ic: '🕸️', n: 'Elektrik Ağı',  col: '#7be3ff', d: 'Havaya kurulur, yakalananı 1.5 sn tutar.' },
+    net:     { ic: '🕸️', n: 'Elektrik Ağı',  col: '#7be3ff', d: 'Havaya kurulur, yakalananı 1.5 sn tutar. Arkana bırakılır; nişanla ileri ya da yukarı fırlatılır.' },
     ink:     { ic: '🦑', n: 'Mürekkep',      col: '#3b3b55', d: 'Öndekilerin ekranını 3.5 sn karartır.' },
     speed:   { ic: '👟', n: 'Hız',           col: '#ffb020', d: '3.2 sn çok hızlı koşarsın. Kalkanı iptal eder.' },
     shield:  { ic: '🛡️', n: 'Kalkan',        col: '#5ad1ff', d: '4 sn her şeye karşı korur. Hızı iptal eder.' },
@@ -65,10 +65,10 @@ window.FM = window.FM || {};
   // Görünüş bilgisi (render-chars.js bunları kullanır). Tüm karakterlerin hız/zıplama/dolum değerleri AYNIDIR.
   FM.CH = {
     TAFTAF: { role: 'Üye Alım Görevlisi', tr: 2555, species: 'Kedi',     ab: 'Gölge Atılımı',      col: '#efe0c0', col2: '#5b2a86', acc: '#d62828',
-      d: 'Maskeli kedi 0.55 sn boyunca ışık gibi ileri atılır. Atılım sırasında hiçbir şey ona zarar veremez, boşlukların üstünden geçer.',
+      d: 'Maskeli kedi 0.55 sn boyunca ışık gibi ileri atılır. Atılım sırasında hiçbir şey ona zarar veremez, boşlukların üstünden geçer. Nişanla yukarı çapraz atılıp duvarları aşar.',
       look: 'Krem kedi, mor göz maskesi, kırmızı kep, pembe kulak içi, kıvrık kuyruk' },
     Caner:  { role: 'Lider',              tr: 1999, species: 'Karga',    ab: 'Kızıl Ay Kargaları', col: '#1d1d26', col2: '#c0182e', acc: '#f2b134',
-      d: 'Kızıl ayın kargalarını çağırır: kargalar en yakın öndeki rakibe uçar ve onu 2 sn sersemletir. Önde kimse yoksa kargalar Caner\'i hızlandırır.',
+      d: 'Kızıl ayın kargalarını çağırır: kargalar en yakın öndeki rakibe (nişanla o yöndekine, arkadakine de) uçar ve onu 2 sn sersemletir. Hedef yoksa kargalar Caner\'i hızlandırır.',
       look: 'Kara karga, parlayan kırmızı gözler, kızıl atkı, turuncu gaga, tüy tepeliği, kızıl ay simgesi' },
     LUL:    { role: 'Görevli',            tr: 872,  species: 'Goril',    ab: 'Goril Yumruğu',      col: '#2f4f9a', col2: '#8fa8dd', acc: '#0d0d12',
       d: 'Yere öyle bir vurur ki 340 px çevresindeki yerdeki herkes 1.7 sn sersemler (öndeki de arkadaki de).',
@@ -77,13 +77,13 @@ window.FM = window.FM || {};
       d: 'Göbeğinin üstünde 1.25 sn hızla kayar. Kayarken diken, tuzak, ağ ve ezicilerden etkilenmez.',
       look: 'Koyu mor penguen, beyaz göğüs, yuvarlak turkuaz gözlük, açık mavi ceket, beyaz spor ayakkabı' },
     Kral:   { role: 'Üye',                tr: 1188, species: 'Aslan',    ab: 'Kral Kükremesi',     col: '#d89a45', col2: '#9c4f1c', acc: '#ffd23f',
-      d: 'Kükreyerek öndeki yakın rakipleri geri savurur ve çevresindeki tüm tuzakları, testereleri, füzeleri yok eder.',
+      d: 'Kükreyerek öndeki yakın rakipleri geri savurur (nişanla kükreme konisini arkaya ya da yukarı çevir) ve çevresindeki tüm tuzakları, testereleri, füzeleri yok eder.',
       look: 'Aslan, gür kahverengi yele, altın taç (kırmızı/mavi taşlı), kırmızı pelerin (beyaz kürk kenarlı)' },
     Nuss:   { role: 'Üye',                tr: 1131, species: 'Baykuş',   ab: 'Tüy Süzülüşü',       col: '#f0f4ff', col2: '#7be3ff', acc: '#ffd23f',
-      d: 'Baykuş kanatlarını açar: 2.4 sn süzülür, havadayken zıplama tuşuyla kanat çırpar. Boşluklar ve tuzaklar onu durduramaz.',
+      d: 'Baykuş kanatlarını açar: 2.4 sn süzülür, havadayken zıplama tuşuyla kanat çırpar. Nişanla yukarı (yüksek) ya da ileri (alçak ve hızlı) süzülür. Boşluklar ve tuzaklar onu durduramaz.',
       look: 'Beyaz kar baykuşu, iri sarı gözler, kulak tüyleri, gri benekler, başında mavi tüy' },
     baso:   { role: 'Üye',                tr: 668,  species: 'Ayı',      ab: 'Bas Dalgası',        col: '#8b5a33', col2: '#3cb371', acc: '#e63946',
-      d: 'Kulaklıktaki bası sonuna kadar açar: ileri giden ses dalgası çarptığı herkesi 3.2 sn yarı hıza düşürür.',
+      d: 'Kulaklıktaki bası sonuna kadar açar: ileri (nişanla geri) giden ses dalgası çarptığı herkesi 3.2 sn yarı hıza düşürür.',
       look: 'Kahverengi ayı, yeşil kapüşonlu, siyah kafa bantlı kırmızı kulaklık' }
   };
   FM.ORDER = ['TAFTAF', 'Caner', 'LUL', 'ertan', 'Kral', 'Nuss', 'baso'];
@@ -122,31 +122,120 @@ window.FM = window.FM || {};
   };
 
   /* ---------------- kozmetik (görsel, güç vermez) ---------------- */
-  // price: fiyat; cur: para birimi ('coins' varsayılan | 'gems'). Satın alma/gösterim FM.meta.currency()/cosmetics() ile.
+  /* Mağaza 2.0 kataloğu. Ortak alanlar: id (kayıt anahtarı, SABİT), n (ad), price, cur ('coins' varsayılan | 'gems'),
+     rar (nadirlik: 'c' Sıradan | 'r' Nadir | 'e' Destansı | 'l' Efsanevi; FM.meta.rarity(rar) → {n, col}), d (kısa açıklama), col (kart rengi).
+     Fiyat kuralı: c 0-600 altın · r 700-1200 altın · e 1500-2600 altın ya da 20-30 elmas · l 45-60 elmas.
+     Hiçbir öğe karakter/klan takma adlarına bağlı değildir. Satın alma/gösterim FM.meta.cosmetics()/dailyShop() ile.
+     Türler: skins (karakter başına), trails, plates, hats (şapka/aksesuar), wins (zafer kutlaması), deaths (ölüm efekti).
+       skins:  pat (desen türü, render-chars çizer), glow (ışıma)
+       trails: colors, k (parçacık türü: render-fx)
+       plates: render-chars plateSprite stili (oyuncunun TAKMA ADIYLA çizilir)
+       hats:   slot 'head' | 'face' | 'neck' (render-chars kafa/yüz/boyun çapasına oturtur)
+       wins:   pose (render-chars poz: 'cheer'|'dance'|'flex'|'flip'), fx {k, cols, ring?} (render-fx: bitişte parçacık)
+       deaths: fx {k, cols} (render-fx: ölümde parçacık; 'none' = klasik puf) */
   FM.COSMETICS = {
-    skins: [ // her karakter için aynı id seti; render-chars renk dönüşümünü uygular
-      { id: 'klasik', n: 'Klasik', price: 0 },
-      { id: 'altin',  n: 'Altın',  price: 25, cur: 'gems' },   // elmasla alınır (cur yoksa 'coins')
-      { id: 'gece',   n: 'Gece',   price: 800 },
-      { id: 'neon',   n: 'Neon',   price: 1200 },
-      { id: 'buz',    n: 'Buz',    price: 1000 }
+    skins: [ // her karakter için aynı id seti; render-chars renk dönüşümünü + deseni uygular
+      { id: 'klasik',    n: 'Klasik',        price: 0,    rar: 'c', col: '#8f7bd6', d: 'Karakterin özgün görünümü.' },
+      { id: 'gumus',     n: 'Gümüş',         price: 600,  rar: 'c', col: '#c4ccd8', d: 'Parlak krom, ışıltılı.' , glow: 'twinkle' },
+      { id: 'gece',      n: 'Gece',          price: 800,  rar: 'r', col: '#6f5fc4', d: 'Mor gece tonları, parlayan gözler.' },
+      { id: 'okyanus',   n: 'Okyanus',       price: 800,  rar: 'r', col: '#2fb3cf', d: 'Derin mavi, dalga desenli.', pat: 'wave' },
+      { id: 'seker',     n: 'Şeker',         price: 900,  rar: 'r', col: '#ff8fc8', d: 'Pastel pembe, renkli serpme şekerli.', pat: 'sprinkle' },
+      { id: 'kamuflaj',  n: 'Kamuflaj',      price: 900,  rar: 'r', col: '#6f8c3a', d: 'Asker yeşili lekeler: ormanda kaybol.', pat: 'camo' },
+      { id: 'buz',       n: 'Buz',           price: 1000, rar: 'r', col: '#6fbde6', d: 'Buz mavisi, donmuş ışıltı.' },
+      { id: 'zebra',     n: 'Zebra',         price: 1000, rar: 'r', col: '#e6e6ee', d: 'Siyah-beyaz zebra çizgileri.', pat: 'stripes' },
+      { id: 'benek',     n: 'Benekli',       price: 1000, rar: 'r', col: '#e0a040', d: 'Leopar benekleri, vahşi tarz.', pat: 'spots' },
+      { id: 'neon',      n: 'Neon',          price: 1200, rar: 'r', col: '#ff3bd4', d: 'Gece kulübü neonu, parlayan kenarlar.' },
+      { id: 'piksel',    n: 'Retro Piksel',  price: 1800, rar: 'e', col: '#3ddc84', d: '8-bit renkler ve piksel dokusu.', pat: 'pixel' },
+      { id: 'lav',       n: 'Lav',           price: 2200, rar: 'e', col: '#ff6a1a', d: 'Kor kayalar, parlayan çatlaklar.', pat: 'cracks', glow: 'ember' },
+      { id: 'robot',     n: 'Robot',         price: 25, cur: 'gems', rar: 'e', col: '#a6afc0', d: 'Çelik paneller, perçinler, mavi ışık.', pat: 'panel' },
+      { id: 'altin',     n: 'Altın',         price: 25, cur: 'gems', rar: 'e', col: '#ffd23f', d: 'Saf altın, pırıl pırıl.', glow: 'twinkle' },
+      { id: 'galaksi',   n: 'Galaksi',       price: 50, cur: 'gems', rar: 'l', col: '#7b5fd0', d: 'Yıldız tozu ve bulutsu: evren üstünde.', pat: 'stars', glow: 'cosmic' },
+      { id: 'gokkusagi', n: 'Gökkuşağı',     price: 55, cur: 'gems', rar: 'l', col: '#ff5aa0', d: 'Yedi renk, tek karakter.', pat: 'rainbow', glow: 'twinkle' }
     ],
     trails: [
-      { id: 'none',     n: 'Yok',          price: 0,    colors: [] },
-      { id: 'dust',     n: 'Toz',          price: 0,    colors: ['#ffffff', '#e8dcc8'] },
-      { id: 'fire',     n: 'Ateş',         price: 600,  colors: ['#ff4d1a', '#ffb020', '#ffe14d'] },
-      { id: 'rainbow',  n: 'Gökkuşağı',    price: 900,  colors: ['#ff3b3b', '#ffb020', '#ffe14d', '#3ddc84', '#3b82f6', '#a855f7'] },
-      { id: 'stars',    n: 'Yıldızlar',    price: 700,  colors: ['#fff6b0', '#ffd23f'] },
-      { id: 'spades',   n: 'Maça (Klan)',  price: 20, cur: 'gems', colors: ['#111111', '#c0182e', '#ffffff'] },
-      { id: 'hearts',   n: 'Kalpler',      price: 500,  colors: ['#ff5a7a', '#ff9eb5'] }
+      { id: 'none',     n: 'Yok',            price: 0,    rar: 'c', colors: [], d: 'İz bırakma.' },
+      { id: 'dust',     n: 'Toz',            price: 0,    rar: 'c', colors: ['#ffffff', '#e8dcc8'], k: 'puff', d: 'Ayaklarının altından toz kalkar.' },
+      { id: 'hearts',   n: 'Kalpler',        price: 500,  rar: 'c', colors: ['#ff5a7a', '#ff9eb5'], k: 'heart', d: 'Arkanda süzülen kalpler.' },
+      { id: 'yaprak',   n: 'Yaprak',         price: 500,  rar: 'c', colors: ['#5ec54a', '#9ad44a', '#f0a830', '#e0632a'], k: 'leaf', d: 'Sonbahar yaprakları savrulur.' },
+      { id: 'fire',     n: 'Ateş',           price: 600,  rar: 'c', colors: ['#ff4d1a', '#ffb020', '#ffe14d'], k: 'flame', d: 'Alev alev koş.' },
+      { id: 'kar',      n: 'Kar Tanesi',     price: 600,  rar: 'c', colors: ['#ffffff', '#cfefff', '#9fd8ff'], k: 'ice', d: 'Buz kristalleri serpilir.' },
+      { id: 'baloncuk', n: 'Baloncuk',       price: 600,  rar: 'c', colors: ['#bff4ff', '#ffffff', '#8fe0ff'], k: 'bubble', d: 'Sabun köpüğü baloncukları.' },
+      { id: 'stars',    n: 'Yıldızlar',      price: 700,  rar: 'r', colors: ['#fff6b0', '#ffd23f'], k: 'star', d: 'Parıldayan yıldızlar.' },
+      { id: 'nota',     n: 'Notalar',        price: 800,  rar: 'r', colors: ['#ff6ec7', '#c084fc', '#7be3ff'], k: 'note', d: 'Koşarken müzik yap.' },
+      { id: 'rainbow',  n: 'Gökkuşağı',      price: 900,  rar: 'r', colors: ['#ff3b3b', '#ffb020', '#ffe14d', '#3ddc84', '#3b82f6', '#a855f7'], k: 'ribbon', d: 'Yedi renkli kurdele.' },
+      { id: 'simsek',   n: 'Şimşek',         price: 900,  rar: 'r', colors: ['#ffe14d', '#7df9ff', '#ffffff'], k: 'bolt', d: 'Çıtırdayan elektrik kıvılcımları.' },
+      { id: 'piksel',   n: 'Piksel',         price: 1000, rar: 'r', colors: ['#ff3b3b', '#3ddc84', '#3b82f6', '#ffe14d'], k: 'pixel', d: 'Retro kare bloklar.' },
+      { id: 'mavialev', n: 'Mavi Alev',      price: 1800, rar: 'e', colors: ['#4fb3ff', '#8fe0ff', '#ffffff'], k: 'flame', d: 'Buz gibi mavi alevler.' },
+      { id: 'spades',   n: 'Maça',           price: 20, cur: 'gems', rar: 'e', colors: ['#111111', '#c0182e', '#ffffff'], k: 'spade', d: 'Kırmızı-siyah maça yağmuru.' },
+      { id: 'galaksi',  n: 'Galaksi İzi',    price: 26, cur: 'gems', rar: 'e', colors: ['#c084fc', '#7be3ff', '#ffffff', '#ff6ec7'], k: 'galaxy', d: 'Yıldız tozu ve bulutsu ışığı.' },
+      { id: 'altin',    n: 'Altın Yağmuru',  price: 45, cur: 'gems', rar: 'l', colors: ['#ffd23f', '#fff6b0', '#f0b020'], k: 'coin', d: 'Arkanda altın paralar uçuşur.' }
     ],
-    plates: [
-      { id: 'basic', n: 'Sade',     price: 0 },
-      { id: 'gold',  n: 'Altın',    price: 800 },
-      { id: 'clan',  n: 'Klan ♠',   price: 500 },
-      { id: 'neon',  n: 'Neon',     price: 700 },
-      { id: 'fire',  n: 'Alev',     price: 900 }
+    plates: [ // render-chars: oyuncunun TAKMA ADI (nick) bu stillerle çizilir
+      { id: 'basic',    n: 'Sade',       price: 0,    rar: 'c', col: '#7a7a8c', d: 'Sade ve şık.' },
+      { id: 'clan',     n: 'Maça',       price: 500,  rar: 'c', col: '#c0182e', d: 'Kırmızı-siyah maça.' },
+      { id: 'orman',    n: 'Orman',      price: 500,  rar: 'c', col: '#8a5a2a', d: 'Ahşap tabela, yeşil yaprak.' },
+      { id: 'seker',    n: 'Şeker',      price: 600,  rar: 'c', col: '#ff8fc8', d: 'Pembe-beyaz şeker çizgileri.' },
+      { id: 'neon',     n: 'Neon',       price: 700,  rar: 'r', col: '#ff3bd4', d: 'Gece ışıltısı.' },
+      { id: 'gold',     n: 'Altın',      price: 800,  rar: 'r', col: '#ffd23f', d: 'Altın parıltı.' },
+      { id: 'karbon',   n: 'Karbon',     price: 800,  rar: 'r', col: '#3a3f4a', d: 'Karbon fiber dokusu, yarış tarzı.' },
+      { id: 'fire',     n: 'Alev',       price: 900,  rar: 'r', col: '#ff6a1a', d: 'Alev alev.' },
+      { id: 'retro',    n: 'Retro',      price: 900,  rar: 'r', col: '#f0a830', d: '8-bit piksel çerçeve.' },
+      { id: 'grafiti',  n: 'Graffiti',   price: 1000, rar: 'r', col: '#a855f7', d: 'Sprey boya sıçramaları.' },
+      { id: 'buzul',    n: 'Buzul',      price: 1000, rar: 'r', col: '#8fd8ff', d: 'Buz bloğu, sarkan buz saçakları.' },
+      { id: 'lav',      n: 'Lav',        price: 1600, rar: 'e', col: '#ff4d1a', d: 'Kor kaya, akan magma.' },
+      { id: 'elmas',    n: 'Elmas',      price: 1800, rar: 'e', col: '#7df9ff', d: 'Kristal yüzeyler, göz kamaştıran.' },
+      { id: 'galaksi',  n: 'Galaksi',    price: 26, cur: 'gems', rar: 'e', col: '#7b5fd0', d: 'Yıldızlı uzay boşluğu.' },
+      { id: 'saray',    n: 'Saray',      price: 45, cur: 'gems', rar: 'l', col: '#b03aff', d: 'Mor kadife, altın işleme, mücevher.' }
+    ],
+    hats: [ // slot: head (kafa üstü) | face (göz hizası) | neck (boyun)
+      { id: 'none',     n: 'Yok',                price: 0,    rar: 'c', slot: 'head', d: 'Aksesuar takma.' },
+      { id: 'papyon',   n: 'Papyon',             price: 300,  rar: 'c', slot: 'neck', col: '#e0243a', d: 'Şık kırmızı papyon.' },
+      { id: 'parti',    n: 'Parti Külahı',       price: 350,  rar: 'c', slot: 'head', col: '#ff6ec7', d: 'Çizgili külah, ponponlu.' },
+      { id: 'kasket',   n: 'Kasket',             price: 400,  rar: 'c', slot: 'head', col: '#3b82f6', d: 'Ters çevrilmiş mavi kasket.' },
+      { id: 'bere',     n: 'Bere',               price: 450,  rar: 'c', slot: 'head', col: '#e0632a', d: 'Ponponlu örgü bere.' },
+      { id: 'tavsan',   n: 'Tavşan Kulakları',   price: 450,  rar: 'c', slot: 'head', col: '#ffb6c1', d: 'Uzun pembe tavşan kulakları.' },
+      { id: 'gunes',    n: 'Güneş Gözlüğü',      price: 500,  rar: 'c', slot: 'face', col: '#2a2a36', d: 'Havacı güneş gözlüğü.' },
+      { id: 'atki',     n: 'Atkı',               price: 700,  rar: 'r', slot: 'neck', col: '#c0182e', d: 'Rüzgârda dalgalanan çizgili atkı.' },
+      { id: 'kulaklik', n: 'DJ Kulaklığı',       price: 800,  rar: 'r', slot: 'head', col: '#22d3e6', d: 'Neon kenarlı kulaklık.' },
+      { id: 'korsan',   n: 'Korsan Şapkası',     price: 900,  rar: 'r', slot: 'head', col: '#2a2a36', d: 'Kuru kafalı üç köşeli şapka.' },
+      { id: 'boynuz',   n: 'Şeytan Boynuzları',  price: 900,  rar: 'r', slot: 'head', col: '#e0243a', d: 'Küçük kırmızı boynuzlar.' },
+      { id: 'sihirbaz', n: 'Sihirbaz Şapkası',   price: 1000, rar: 'r', slot: 'head', col: '#6a2bb0', d: 'Yıldızlı sivri şapka.' },
+      { id: 'silindir', n: 'Silindir Şapka',     price: 1000, rar: 'r', slot: 'head', col: '#1b1024', d: 'Beyefendi silindiri.' },
+      { id: 'defne',    n: 'Yaprak Tacı',        price: 1100, rar: 'r', slot: 'head', col: '#5ec54a', d: 'Şampiyonların defne tacı.' },
+      { id: 'viking',   n: 'Boynuzlu Miğfer',    price: 2000, rar: 'e', slot: 'head', col: '#9aa3b2', d: 'Çelik miğfer, kocaman boynuzlar.' },
+      { id: 'tiara',    n: 'Mücevher Tacı',      price: 25, cur: 'gems', rar: 'e', slot: 'head', col: '#ffd23f', d: 'Pırlantalı zarif taç.' },
+      { id: 'hale',     n: 'Hale',               price: 28, cur: 'gems', rar: 'e', slot: 'head', col: '#ffe680', d: 'Başının üstünde süzülen ışık halkası.' },
+      { id: 'astronot', n: 'Astronot Kaskı',     price: 50, cur: 'gems', rar: 'l', slot: 'head', col: '#8fd8ff', d: 'Cam fanuslu uzay kaskı.' }
+    ],
+    wins: [ // zafer kutlaması: bitişte poz + parçacık (render-fx fx alanını kullanır)
+      { id: 'none',    n: 'Klasik Sevinç',     price: 0,    rar: 'c', pose: 'cheer', col: '#9aa3b2', d: 'Zıpla, sevin.' },
+      { id: 'konfeti', n: 'Konfeti Yağmuru',   price: 500,  rar: 'c', pose: 'cheer', col: '#ff5a7a', fx: { k: 'conf', cols: ['#ff3b3b', '#ffd23f', '#3ddc84', '#3b82f6', '#a855f7', '#ff8fc8'] }, d: 'Gökten rengârenk konfeti yağar.' },
+      { id: 'kalp',    n: 'Kalp Yağmuru',      price: 900,  rar: 'r', pose: 'cheer', col: '#ff5a7a', fx: { k: 'heart', cols: ['#ff5a7a', '#ff9eb5', '#ffffff'] }, d: 'Etrafında kalpler süzülür.' },
+      { id: 'havai',   n: 'Havai Fişek',       price: 1000, rar: 'r', pose: 'cheer', col: '#ffd23f', fx: { k: 'firework', cols: ['#ff3b3b', '#ffd23f', '#3ddc84', '#4fb3ff', '#ffffff'] }, d: 'Başının üstünde havai fişekler patlar.' },
+      { id: 'takla',   n: 'Zafer Taklası',     price: 1100, rar: 'r', pose: 'flip', col: '#3ddc84', fx: { k: 'twinkle', cols: ['#ffffff', '#ffe14d'] }, d: 'Arka arkaya ters takla.' },
+      { id: 'yildiz',  n: 'Yıldız Patlaması',  price: 1800, rar: 'e', pose: 'flex', col: '#ffe14d', fx: { k: 'star', cols: ['#ffe14d', '#fff6b0', '#ffffff'], ring: '#ffe14d' }, d: 'Yıldızlar patlar, halkalar yayılır.' },
+      { id: 'dans',    n: 'Zafer Dansı',       price: 22, cur: 'gems', rar: 'e', pose: 'dance', col: '#c084fc', fx: { k: 'note', cols: ['#ff6ec7', '#c084fc', '#7be3ff'] }, d: 'Müzik eşliğinde dans.' },
+      { id: 'ates',    n: 'Ateş Halkası',      price: 50, cur: 'gems', rar: 'l', pose: 'flex', col: '#ff6a1a', fx: { k: 'flame', cols: ['#ff4d1a', '#ffb020', '#ffe14d'], ring: '#ff6a1a' }, d: 'Etrafında alevden bir halka yükselir.' }
+    ],
+    deaths: [ // ölüm efekti: render-fx parçacıkları
+      { id: 'none',      n: 'Klasik Puf',         price: 0,    rar: 'c', col: '#9aa3b2', d: 'Bildiğin duman.' },
+      { id: 'duman',     n: 'Duman Bulutu',       price: 400,  rar: 'c', col: '#7a7a8c', fx: { k: 'puff', cols: ['#9a9aa8', '#5a5a6a', '#ffffff'] }, d: 'Kara bir duman bulutu bırak.' },
+      { id: 'baloncuk',  n: 'Baloncuk',           price: 500,  rar: 'c', col: '#8fe0ff', fx: { k: 'bubble', cols: ['#bff4ff', '#ffffff'] }, d: 'Baloncuklara dönüşüp uçup git.' },
+      { id: 'yildiz',    n: 'Yıldız Tozu',        price: 800,  rar: 'r', col: '#ffe14d', fx: { k: 'star', cols: ['#ffe14d', '#fff6b0', '#ffffff'] }, d: 'Parıldayan yıldız tozu.' },
+      { id: 'hayalet',   n: 'Hayalet',            price: 900,  rar: 'r', col: '#d8d8ff', fx: { k: 'ghost', cols: ['#ffffff', '#c8c8ff'] }, d: 'Ruhun yukarı süzülür.' },
+      { id: 'piksel',    n: 'Piksel Dağılma',     price: 1000, rar: 'r', col: '#3ddc84', fx: { k: 'pixel', cols: ['#ff3b3b', '#3ddc84', '#3b82f6', '#ffe14d'] }, d: 'Piksellere ayrılıp dağıl.' },
+      { id: 'konfeti',   n: 'Konfeti Patlaması',  price: 1600, rar: 'e', col: '#ff8fc8', fx: { k: 'conf', cols: ['#ff3b3b', '#ffd23f', '#3ddc84', '#3b82f6', '#a855f7'] }, d: 'Ölürken bile parti.' },
+      { id: 'simsek',    n: 'Şimşek Çarpması',    price: 24, cur: 'gems', rar: 'e', col: '#7df9ff', fx: { k: 'bolt', cols: ['#ffe14d', '#7df9ff', '#ffffff'] }, d: 'Gökten şimşek iner, kıvılcım saçılır.' },
+      { id: 'karadelik', n: 'Kara Delik',         price: 45, cur: 'gems', rar: 'l', col: '#6a2bb0', fx: { k: 'vortex', cols: ['#2a0e5a', '#a855f7', '#ffffff'] }, d: 'Bir kara delik seni yutar.' }
     ]
+  };
+  FM.COS_TYPES = ['skins', 'trails', 'plates', 'hats', 'wins', 'deaths'];
+  // nadirlik: id → {n, col}
+  FM.RARITY = {
+    c: { n: 'Sıradan',  col: '#9aa3b2' },
+    r: { n: 'Nadir',    col: '#4fb3ff' },
+    e: { n: 'Destansı', col: '#c084fc' },
+    l: { n: 'Efsanevi', col: '#ffb020' }
   };
 
   /* ---------------- yardımcılar ---------------- */
@@ -226,8 +315,9 @@ window.FM = window.FM || {};
       rivals: 3,                // tek oyunculu rakip (bot) sayısı 1..9
       trophies,
       upgrades: {},             // meta.js doldurur: { key: level } veya { 'key:charId': level }
-      owned: { skins: { }, trails: ['none', 'dust'], plates: ['basic'] }, // skins: { charId: ['klasik', ...] }
-      equipped: { skin: {}, trail: 'dust', plate: 'basic' },              // skin: { charId: 'klasik' }
+      // kozmetik sahiplik: skins { charId: ['klasik', ...] }; diğer türler id dizisi (Mağaza 2.0: hats/wins/deaths eklendi)
+      owned: { skins: { }, trails: ['none', 'dust'], plates: ['basic'], hats: ['none'], wins: ['none'], deaths: ['none'] },
+      equipped: { skin: {}, trail: 'dust', plate: 'basic', hat: 'none', win: 'none', death: 'none' },   // skin: { charId: 'klasik' }
       missions: null,           // meta.js yönetir
       stats: {},                // meta.js yönetir (toplam sayaçlar)
       settings: { music: 0.6, sfx: 0.8, shake: true, quality: 'high' },
@@ -265,12 +355,10 @@ window.FM = window.FM || {};
     if (s.missions !== null && !obj(s.missions) && !Array.isArray(s.missions)) s.missions = null;
     s.owned = Object.assign({}, d.owned, obj(s.owned) ? s.owned : {});
     if (!obj(s.owned.skins)) s.owned.skins = {};
-    if (!Array.isArray(s.owned.trails)) s.owned.trails = d.owned.trails.slice();
-    if (!Array.isArray(s.owned.plates)) s.owned.plates = d.owned.plates.slice();
+    for (const t of ['trails', 'plates', 'hats', 'wins', 'deaths']) if (!Array.isArray(s.owned[t])) s.owned[t] = d.owned[t].slice();
     s.equipped = Object.assign({}, d.equipped, obj(s.equipped) ? s.equipped : {});
     if (!obj(s.equipped.skin)) s.equipped.skin = {};
-    if (typeof s.equipped.trail !== 'string') s.equipped.trail = d.equipped.trail;
-    if (typeof s.equipped.plate !== 'string') s.equipped.plate = d.equipped.plate;
+    for (const k of ['trail', 'plate', 'hat', 'win', 'death']) if (typeof s.equipped[k] !== 'string') s.equipped[k] = d.equipped[k];
     s.settings = Object.assign({}, d.settings, obj(s.settings) ? s.settings : {});
     if (typeof s.selChar !== 'string' || !FM.CH[s.selChar]) s.selChar = 'TAFTAF';
     if (!FM.modeById(s.mode)) s.mode = 'classic';

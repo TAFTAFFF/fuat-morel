@@ -12,14 +12,23 @@
      kayma, tırmanma, uçma, sersemleme, kürsüde sevinç/üzüntü) + esneme/ezilme (r.land, r.jumpT).
    - Durum katmanları: kalkan, balon, sersem yıldızları, buz bloğu, elektrik ağı, yavaşlama notaları,
      mıknatıs halkası, hız alevi/ped parlaması, gölge atılımı hayaletleri, kızak buz serpintisi.
-   - Kozmetik: 5 skin (klasik, altin, gece, neon, buz) karakter başına renk eşleme tablosu ile.
+   - Kozmetik (Mağaza 2.0): 16 skin — 5 elle ayarlı (klasik, altin, gece, neon, buz) + 11 rampa/desen tabanlı (gumus, okyanus, seker,
+     kamuflaj, zebra, benek, piksel, lav, robot, galaksi, gokkusagi). Desenler (çizgi, benek, kamuflaj, yıldız tozu, piksel, çatlak…)
+     parça sprite'ı üretilirken yalnızca karakterin "gövde" renkli şekillerinin içine (cel() klibi) bir kez çizilir: gözler/aksesuarlar
+     temiz kalır, her karede ek maliyet yok. Şapkalar/aksesuarlar (FM.COSMETICS.hats) karakter başına kafa/yüz/boyun çapasına oturur,
+     dış hatlı sprite olarak önbellekte. İsim plakaları (FM.COSMETICS.plates) oyuncunun TAKMA ADIYLA çizilir (15 stil).
 
    API
-   FM.R.drawRacers(ctx)                                   dünya koordinatında tüm yarışçılar
-   FM.R.drawCharacter(ctx, id, x, y, scale, pose, opts)    x,y = ayak noktası; pose {st, ph, t, vy, sled, expr}; opts {skin, outline, face}
-   FM.R.portrait(id, size, opts) -> HTMLCanvasElement     size×size piksel, önbellekli; opts {skin, bg, expr, ring}
+   FM.R.drawRacers(ctx)                                   dünya koordinatında tüm yarışçılar (r.skin, r.hat, r.plate, r.win kullanılır)
+   FM.R.drawCharacter(ctx, id, x, y, scale, pose, opts)    x,y = ayak noktası; pose {st, ph, t, vy, sled, expr}; opts {skin, hat, outline, face}
+                                                          st ∈ idle run air slide climb fly cheer sad stun dance flex flip (son üçü zafer kutlaması pozları)
+   FM.R.portrait(id, size, opts) -> HTMLCanvasElement     size×size piksel, önbellekli; opts {skin, hat, bg, expr, ring}
    FM.R.portraitURL(id, size, opts) -> dataURL            (aynı portrenin önbellekli PNG adresi; DOM'da <img> için)
    FM.R.charHeadPos(r) -> {x,y}                           (yarışçının kafa merkezi, dünya koordinatı; diğer modüller için)
+   FM.R.cosmeticIcon(type, id, size, opts) -> canvas      mağaza kartı ikonu (hats/trails/plates/wins/deaths/skins), önbellekli; opts {nick, char}
+   FM.R.drawPlate(ctx, style, name, x, y, scale, big)     isim plakasını (oyuncunun takma adıyla) ekrana çizer (mağaza canlı önizleme)
+   FM.R.racerHat(r) / FM.R.racerWinPose(r)                yarışçının geçerli şapkası / kutlama pozu (yerel oyuncuda kuşanılan)
+   FM.R.SKIN_IDS / FM.R.HAT_IDS / FM.R.PLATE_IDS          renderer'ın çizebildiği id listeleri
 */
 'use strict';
 (function (FM) {
@@ -30,7 +39,31 @@
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const lerp = (a, b, t) => a + (b - a) * t;
   const SC = 1.0;                       // yarışçı çizim ölçeği (karakter ~56 birim boyunda: çarpışma kutusunun ~1.3 katı)
+  /* Rampa tabanlı skin'ler: ramp (koyu→açık 7 renk), lo (gövde renklerinin rampadaki başlangıcı 0..1), th (bu parlaklığın altındaki
+     aksesuar renkleri koyu bölgede kalır: güneş gözlüğü siyah kalsın), line (dış hat), eye (göz rengi; yoksa karakterinki),
+     pat (desen türü), glow ('ember' | 'cosmic': dış hat ışıması rengi col), fx (twinkle rengi) */
+  const SKIN_DEF = {
+    gumus:     { ramp: ['#1e2028', '#3c404c', '#6a7080', '#9aa2b4', '#c4ccda', '#e4e9f2', '#ffffff'], lo: 0.42, th: 0.2, line: '#171a22', fx: '#ffffff' },
+    okyanus:   { ramp: ['#062238', '#0b3d5c', '#0f5f85', '#1a86ad', '#2fb3cf', '#7fdce8', '#d8f8ff'], lo: 0.3, th: 0.2, line: '#062238', eye: '#ffd23f', pat: 'wave' },
+    seker:     { ramp: ['#6b2a4a', '#a0406e', '#d06a98', '#f08cb8', '#ffb0d0', '#ffd3e6', '#fff4f9'], lo: 0.5, th: 0.2, line: '#5a1e3e', eye: '#4fb3ff', pat: 'sprinkle' },
+    kamuflaj:  { ramp: ['#161f0e', '#2a3a18', '#405a22', '#5c7a2e', '#7a9440', '#a3b468', '#d4dcb0'], lo: 0.38, th: 0.2, line: '#121a0a', pat: 'camo' },
+    zebra:     { ramp: ['#1c1c22', '#3a3a44', '#78788a', '#b4b4c0', '#dcdce4', '#f2f2f6', '#ffffff'], lo: 0.6, th: 0.2, line: '#14141a', pat: 'stripes' },
+    benek:     { ramp: ['#2a1708', '#5a3410', '#8c5418', '#c47a26', '#e0a040', '#f0c878', '#fff0d0'], lo: 0.45, th: 0.2, line: '#2a1408', eye: '#3ddc84', pat: 'spots' },
+    piksel:    { posterize: true, line: '#101020', pat: 'pixel' },
+    lav:       { ramp: ['#0d0608', '#2a0d0e', '#4a1612', '#6e2114', '#9a3414', '#c8501a', '#f0a040'], lo: 0.22, th: 0.2, line: '#1a0604', eye: '#ffe14d', pat: 'cracks', glow: 'ember', glowCol: '#ff8a1a' },
+    robot:     { ramp: ['#1c1f26', '#343945', '#555c6c', '#7d8597', '#a6afc0', '#ccd4e0', '#eef2f8'], lo: 0.4, th: 0.2, line: '#141820', eye: '#7df9ff', pat: 'panel' },
+    galaksi:   { ramp: ['#05031a', '#120b3a', '#1e1660', '#2d2384', '#4a35a8', '#7b5fd0', '#b9a8f0'], lo: 0.2, th: 0.2, line: '#05030f', eye: '#7df9ff', pat: 'stars', glow: 'cosmic', glowCol: '#9a7bff', fx: '#d8ccff' },
+    gokkusagi: { ramp: ['#2a2230', '#5a4a5a', '#9a8a9a', '#cfc2cf', '#ece4ec', '#faf6fa', '#ffffff'], lo: 0.58, th: 0.2, line: '#2a1a34', pat: 'rainbow', fx: '#ffffff' }
+  };
   const SKINS = { klasik: 1, altin: 1, gece: 1, neon: 1, buz: 1 };
+  for (const k in SKIN_DEF) SKINS[k] = 1;
+  // Her karakterin "gövde" renk anahtarları (rampa tabanlı skin'lerde gövde bölgesine eşlenir) ve desenin çizileceği alt küme
+  const BODY_KEYS = {
+    TAFTAF: ['fur', 'furD', 'belly', 'stripe'], Caner: ['fur', 'furL', 'belly', 'sheen'], LUL: ['fur', 'furL'],
+    ertan: ['fur', 'furL', 'jacket', 'jacketL', 'jacketD'], Kral: ['fur', 'furL', 'mane', 'mane2', 'maneL'], Nuss: ['fur', 'furL', 'shade'], baso: ['fur', 'furL', 'hood', 'hoodL', 'hoodD']
+  };
+  const PAT_KEYS = { TAFTAF: ['fur', 'belly'], Caner: ['fur', 'belly'], LUL: ['fur'], ertan: ['fur', 'jacket'], Kral: ['fur', 'mane', 'mane2'], Nuss: ['fur'], baso: ['fur', 'hood'] };
+  const KEEP_KEYS = { sclera: 1, blush: 1 };   // her skin'de özgün kalan anahtarlar (göz akı, allık)
 
   /* =====================================================================
      RENK YARDIMCILARI
@@ -124,13 +157,25 @@
     neonC: ['#03121c', '#062c40', '#0a5873', '#0f97b8', '#1fe3ff', '#8ef6ff', '#e6fdff']
   };
   function ramp(rp, l) { const n = rp.length - 1, f = clamp(l, 0, 1) * n, i = min(n - 1, f | 0); return mix(rp[i], rp[i + 1], f - i); }
-  function skinColor(c, skin) {
+  /** Retro piksel: kanal başına 4 seviye (0, 85, 170, 255) + hafif doygunluk artışı */
+  function posterize(c) {
+    const [r, g, b] = rgb(c), m = (r + g + b) / 3, q = v => clamp(Math.round(v / 85) * 85, 0, 255);
+    return hex(q(m + (r - m) * 1.35), q(m + (g - m) * 1.35), q(m + (b - m) * 1.35));
+  }
+  /** c rengini skin'e eşler. body=true: gövde anahtarı (rampanın ana bölgesine), değilse aksesuar (koyu renkler koyu kalır). */
+  function skinColor(c, skin, body) {
     const l = lum(c);
     if (skin === 'altin') return ramp(RAMP.altin, Math.pow(l, .8));
     if (skin === 'gece') return ramp(RAMP.gece, .1 + l * .8);
     if (skin === 'buz') return ramp(RAMP.buz, .3 + l * .7);
     if (skin === 'neon') { const [r, g, b] = rgb(c); const cool = b > r + 12 || g > r + 30; return ramp(cool ? RAMP.neonC : RAMP.neonP, .08 + l * .62); }
-    return c;
+    const sd = SKIN_DEF[skin];
+    if (!sd) return c;
+    if (sd.posterize) return posterize(c);
+    if (body) return ramp(sd.ramp, sd.lo + l * (1 - sd.lo));
+    const th = sd.th || 0.2;
+    if (l < th) return ramp(sd.ramp, l / th * 0.22);                         // koyu aksesuar (gözlük, bant) koyu kalır
+    return ramp(sd.ramp, sd.lo + (l - th) / (1 - th) * (1 - sd.lo));
   }
   const SKIN_LINE = { altin: '#4a2800', gece: '#05040e', neon: '#12041f', buz: '#123a5e' };
   const SKIN_OV = {
@@ -187,14 +232,20 @@
       const f = pal(id, skin, false);
       for (const k in f) P[k] = (typeof f[k] === 'string' && f[k].charAt(0) === '#' && k !== 'line') ? mix(f[k], '#24123a', 0.2) : f[k];
     } else {
-      const base = PAL[id] || PAL.TAFTAF;
-      for (const k in base) P[k] = (skin === 'klasik' || k === 'line') ? base[k] : skinColor(base[k], skin);
+      const base = PAL[id] || PAL.TAFTAF, sd = SKIN_DEF[skin], bk = BODY_KEYS[id] || BODY_KEYS.TAFTAF;
+      for (const k in base) P[k] = (skin === 'klasik' || k === 'line' || (sd && KEEP_KEYS[k])) ? base[k] : skinColor(base[k], skin, bk.indexOf(k) >= 0);
       const ov = SKIN_OV[id] && SKIN_OV[id][skin];
       if (ov) Object.assign(P, ov);
-      if (skin !== 'klasik' && !(ov && ov.line)) P.line = SKIN_LINE[skin] || P.line;
-      P.glowEye = skin === 'gece' || skin === 'neon' || id === 'Caner';
-      P.neonGlow = skin === 'neon';
-      if (P.neonGlow) P.neonCol = (id === 'LUL' || id === 'ertan' || id === 'baso') ? '#26f0ff' : '#ff4fe0';
+      if (sd) {
+        if (sd.eye) P.eye = sd.eye;
+        if (sd.line) P.line = sd.line;
+        if (id === 'Nuss' && !sd.eye) P.eye = base.eye;                           // baykuşun iri sarı gözü her skin'de okunur kalsın
+        if (sd.pat) { P.pattern = sd.pat; P.patKeys = PAT_KEYS[id] || PAT_KEYS.TAFTAF; }
+      } else if (skin !== 'klasik' && !(ov && ov.line)) P.line = SKIN_LINE[skin] || P.line;
+      P.glowEye = skin === 'gece' || skin === 'neon' || id === 'Caner' || !!(sd && (sd.glow || sd.eye === '#7df9ff'));
+      P.neonGlow = skin === 'neon' || !!(sd && sd.glow);
+      if (skin === 'neon') P.neonCol = (id === 'LUL' || id === 'ertan' || id === 'baso') ? '#26f0ff' : '#ff4fe0';
+      else if (sd && sd.glow) { P.neonCol = sd.glowCol; P.glowSoft = sd.glow === 'cosmic'; }
       P.skinId = skin;
     }
     PALC.set(key, P);
@@ -205,6 +256,132 @@
      YOL / ŞEKİL YARDIMCILARI
      ===================================================================== */
   let LN = '#1b1024';   // parça çizilirken geçerli çizgi rengi
+  let PAT = null;       // parça çizilirken geçerli skin deseni: { fn, cols:Set(gövde renkleri), seed } (yalnızca outlined() içinde)
+
+  /* =====================================================================
+     SKİN DESENLERİ — parça yerel koordinatında, cel() klibinin içine (yalnızca gövde renkli şekillere) bir kez çizilir.
+     Deterministik (FM.hash + parça tohumu): aynı parça her üretimde aynı görünür.
+     ===================================================================== */
+  const H = (s, i) => FM.hash(s * 131 + i * 7919);
+  const PATTERNS = {
+    stripes(g, s) {   // zebra: dalgalı siyah şeritler
+      g.strokeStyle = 'rgba(23,23,30,0.94)'; g.lineCap = 'round';
+      for (let i = -7; i <= 7; i++) {
+        const x = i * 8.6 + H(s, i) * 3, w = 2.4 + H(s, i + 40) * 1.8, k = H(s, i + 80) * 6;
+        g.lineWidth = w; g.beginPath(); g.moveTo(x - 12, -60);
+        g.bezierCurveTo(x - 4 + sin(k) * 5, -30, x + 6 + cos(k) * 5, -10, x - 2 + sin(k * 1.7) * 4, 20);
+        g.quadraticCurveTo(x - 6, 40, x + 2, 60); g.stroke();
+      }
+    },
+    spots(g, s) {     // leopar rozetleri: koyu kesik halka + açık merkez
+      for (let i = 0; i < 16; i++) {
+        const x = -44 + H(s, i) * 88, y = -52 + H(s, i + 50) * 92, r = 2.3 + H(s, i + 100) * 1.6, a0 = H(s, i + 150) * TAU;
+        g.fillStyle = 'rgba(42,23,8,0.92)';
+        g.beginPath(); g.arc(x, y, r, a0, a0 + 2.1); g.lineTo(x + cos(a0 + 2.1) * r * 0.45, y + sin(a0 + 2.1) * r * 0.45); g.arc(x, y, r * 0.45, a0 + 2.1, a0, true); g.closePath(); g.fill();
+        g.beginPath(); g.arc(x, y, r, a0 + 2.9, a0 + 5.2); g.lineTo(x + cos(a0 + 5.2) * r * 0.45, y + sin(a0 + 5.2) * r * 0.45); g.arc(x, y, r * 0.45, a0 + 5.2, a0 + 2.9, true); g.closePath(); g.fill();
+        g.fillStyle = 'rgba(196,122,38,0.55)'; g.beginPath(); g.arc(x, y, r * 0.42, 0, TAU); g.fill();
+      }
+    },
+    camo(g, s) {      // kamuflaj lekeleri (koyu yeşil, kum, kahve)
+      const cols = ['rgba(38,54,24,0.95)', 'rgba(138,122,69,0.9)', 'rgba(78,60,34,0.85)', 'rgba(60,88,34,0.9)'];
+      for (let i = 0; i < 14; i++) {
+        const x = -44 + H(s, i) * 88, y = -52 + H(s, i + 60) * 92, rx = 4 + H(s, i + 120) * 6, ry = 3 + H(s, i + 180) * 4;
+        g.fillStyle = cols[i % cols.length]; g.beginPath();
+        blob(g, [x - rx, y, x - rx * 0.4, y - ry, x + rx * 0.5, y - ry * 0.8, x + rx, y + ry * 0.2, x + rx * 0.3, y + ry, x - rx * 0.5, y + ry * 0.7], 1); g.fill();
+      }
+    },
+    sprinkle(g, s) {  // şeker serpmesi: renkli kapsüller + beyaz noktalar
+      const cols = ['#ff5a7a', '#ffe14d', '#3ddc84', '#4fb3ff', '#ffffff', '#c084fc'];
+      g.lineCap = 'round'; g.lineWidth = 2;
+      for (let i = 0; i < 22; i++) {
+        const x = -44 + H(s, i) * 88, y = -52 + H(s, i + 70) * 92, a = H(s, i + 140) * PI, L = 2.2 + H(s, i + 210) * 1.4;
+        g.strokeStyle = cols[i % cols.length]; g.beginPath(); g.moveTo(x - cos(a) * L, y - sin(a) * L); g.lineTo(x + cos(a) * L, y + sin(a) * L); g.stroke();
+      }
+      g.fillStyle = 'rgba(255,255,255,0.7)';
+      for (let i = 0; i < 8; i++) { g.beginPath(); g.arc(-40 + H(s, i + 300) * 80, -48 + H(s, i + 330) * 84, 0.9, 0, TAU); g.fill(); }
+    },
+    wave(g, s) {      // okyanus: açık dalga çizgileri + küçük baloncuklar
+      g.strokeStyle = 'rgba(200,245,255,0.55)'; g.lineWidth = 1.5; g.lineCap = 'round';
+      for (let j = -7; j <= 7; j++) {
+        const y0 = j * 7.5 + H(s, j) * 2, ph = H(s, j + 30) * TAU;
+        g.beginPath();
+        for (let x = -50; x <= 50; x += 4) { const y = y0 + sin(x * 0.28 + ph) * 1.8; if (x === -50) g.moveTo(x, y); else g.lineTo(x, y); }
+        g.stroke();
+      }
+      g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 0.9;
+      for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(-40 + H(s, i + 90) * 80, -46 + H(s, i + 120) * 84, 1.2 + H(s, i + 150), 0, TAU); g.stroke(); }
+    },
+    pixel(g, s) {     // retro piksel: 3 birimlik kareler, değişen parlaklık
+      const c = 3.2;
+      for (let i = -16; i < 16; i++) for (let j = -18; j < 12; j++) {
+        const v = H(s, i * 37 + j * 101 + 5000);
+        if (v < 0.55) continue;
+        g.fillStyle = v < 0.8 ? 'rgba(255,255,255,' + ((v - 0.55) * 0.9).toFixed(2) + ')' : 'rgba(0,0,30,' + ((v - 0.8) * 1.3).toFixed(2) + ')';
+        g.fillRect(i * c, j * c, c, c);
+      }
+    },
+    cracks(g, s) {    // lav çatlakları: geniş turuncu ışıma + ince sarı damar
+      const paths = [];
+      for (let i = 0; i < 7; i++) {
+        const pts = []; let x = -40 + H(s, i) * 80, y = -50 + H(s, i + 20) * 90;
+        pts.push(x, y);
+        for (let k = 0; k < 4; k++) { x += (H(s, i * 10 + k) - 0.5) * 18; y += 5 + H(s, i * 10 + k + 300) * 9; pts.push(x, y); }
+        paths.push(pts);
+      }
+      const stroke = (w, col) => {
+        g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round';
+        for (const p of paths) { g.beginPath(); g.moveTo(p[0], p[1]); for (let k = 2; k < p.length; k += 2) g.lineTo(p[k], p[k + 1]); g.stroke(); }
+      };
+      stroke(4.2, 'rgba(255,120,30,0.35)'); stroke(2, '#ff8a1e'); stroke(0.9, '#ffe680');
+    },
+    panel(g, s) {     // robot: panel ek yerleri + perçinler + küçük mavi LED
+      g.strokeStyle = 'rgba(28,32,42,0.75)'; g.lineWidth = 1.1; g.lineCap = 'round';
+      const yA = -36 + H(s, 1) * 20, yB = yA + 16 + H(s, 2) * 14, xA = -20 + H(s, 3) * 16;
+      g.beginPath(); g.moveTo(-50, yA); g.lineTo(50, yA); g.moveTo(-50, yB); g.lineTo(xA, yB); g.lineTo(xA, yB + 40); g.moveTo(xA + 14, yB); g.lineTo(50, yB); g.stroke();
+      for (let i = 0; i < 9; i++) {
+        const x = -44 + H(s, i + 40) * 88, y = (i % 2 ? yA : yB) + (H(s, i + 60) - 0.5) * 2;
+        g.fillStyle = 'rgba(20,24,32,0.8)'; g.beginPath(); g.arc(x, y, 1.5, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(240,244,250,0.9)'; g.beginPath(); g.arc(x - 0.3, y - 0.35, 0.85, 0, TAU); g.fill();
+      }
+      const lx = -10 + H(s, 9) * 18, ly = yA + 7;
+      g.fillStyle = '#0a3a4a'; g.beginPath(); g.arc(lx, ly, 2.2, 0, TAU); g.fill();
+      g.fillStyle = '#7df9ff'; g.beginPath(); g.arc(lx, ly, 1.3, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(lx - 0.4, ly - 0.4, 0.5, 0, TAU); g.fill();
+    },
+    stars(g, s) {     // galaksi: bulutsu lekeleri + yıldız tozu + parıltılar
+      const neb = [['rgba(255,90,200,', -14, -20], ['rgba(60,220,255,', 16, 4], ['rgba(170,110,255,', -6, 18]];
+      for (let i = 0; i < 3; i++) {
+        const n = neb[i], x = n[1] + (H(s, i) - 0.5) * 20, y = n[2] + (H(s, i + 9) - 0.5) * 20;
+        const gr = g.createRadialGradient(x, y, 0, x, y, 16); gr.addColorStop(0, n[0] + '0.32)'); gr.addColorStop(1, n[0] + '0)');
+        g.fillStyle = gr; g.fillRect(x - 16, y - 16, 32, 32);
+      }
+      for (let i = 0; i < 46; i++) {
+        const x = -46 + H(s, i + 100) * 92, y = -54 + H(s, i + 200) * 94, a = 0.35 + H(s, i + 300) * 0.65, r = 0.45 + H(s, i + 400) * 0.7;
+        g.fillStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+      }
+      const sc = ['#ffffff', '#7df9ff', '#ff9ae0'];
+      for (let i = 0; i < 5; i++) {
+        const x = -40 + H(s, i + 500) * 80, y = -48 + H(s, i + 600) * 86, r = 1.8 + H(s, i + 700) * 1.6;
+        g.fillStyle = sc[i % 3]; g.beginPath(); sparklePath(g, x, y, r); g.fill();
+      }
+    },
+    rainbow(g, s) {   // gökkuşağı: çapraz renk bantları (gölgelendirme altından görünsün diye yarı saydam)
+      const cols = ['#ff3b3b', '#ff8a1a', '#ffe14d', '#3ddc84', '#3b82f6', '#7b3fe0', '#ff5aa0'];
+      g.save(); g.rotate(-0.6); g.globalAlpha = 0.8;
+      const w = 7.2, off = H(s, 1) * w * 7;
+      for (let i = -12; i <= 12; i++) { g.fillStyle = cols[((i % 7) + 7) % 7]; g.fillRect(-80, i * w + off - 40, 160, w + 0.4); }
+      g.restore();
+    }
+  };
+  /** outlined() için desen bağlamı: P.pattern varsa { fn, cols (gövde renkleri kümesi), seed } */
+  function patCtx(P, key) {
+    if (!P || !P.pattern || !PATTERNS[P.pattern]) return null;
+    const cols = new Set();
+    for (const k of P.patKeys || []) if (P[k]) cols.add(P[k]);
+    if (P.mane) cols.add(sh(P.mane, -0.08));
+    let seed = 7; for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) % 100000;
+    return { fn: PATTERNS[P.pattern], cols, seed };
+  }
 
   /** Noktalardan geçen kapalı yumuşak eğri (Catmull-Rom → kübik Bezier). beginPath ÇAĞIRMAZ. */
   function blob(g, p, t) {
@@ -290,6 +467,8 @@
       g.fillStyle = dk; g.fill('evenodd');
     }
     if (o.fn) o.fn(g);
+    // skin deseni: yalnızca gövde renkli şekillerin içine (klip etkin), parça üretiminde bir kez
+    if (PAT && PAT.cols.has(base)) { g.save(); try { PAT.fn(g, PAT.seed); } catch (e) { /* desen çizilemedi */ } g.restore(); }
     if (o.hl) { const h = o.hl; g.beginPath(); ell(g, h[0], h[1], h[2], h[3], h[4] || 0); g.fillStyle = 'rgba(255,255,255,' + (h[5] != null ? h[5] : 0.55) + ')'; g.fill(); }
     g.restore();
     if (o.lw !== 0) { g.beginPath(); path(g); g.lineWidth = o.lw || 1.2; g.strokeStyle = o.line || LN; g.lineJoin = 'round'; g.stroke(); }
@@ -447,7 +626,7 @@
       const a = mkCanvas(W, H), t = a.getContext('2d');
       t.setTransform(k * m, 0, 0, k * m, ox * m * k, oy * m * k);
       t.lineJoin = 'round'; t.lineCap = 'round';
-      const old = LN; LN = P.line;
+      const old = LN, oldPat = PAT; LN = P.line; PAT = patCtx(P, key);
       let b = null, nb = null;
       try {
         draw(t, P);
@@ -457,13 +636,14 @@
           s.drawImage(a, 0, 0); s.globalCompositeOperation = 'source-in'; s.fillStyle = P.line; s.fillRect(0, 0, W, H);
           const px = thick * k * m;
           if (P.neonGlow) {
-            // neon: koyu dış hattın dışında parlak ince bir neon kenar + hafif ışıma
+            // neon / kor / kozmik: koyu dış hattın dışında parlak ince bir kenar + hafif ışıma (glowSoft: yalnızca yumuşak ışıma)
             nb = mkCanvas(W, H); const ns = nb.getContext('2d');
             ns.drawImage(a, 0, 0); ns.globalCompositeOperation = 'source-in'; ns.fillStyle = P.neonCol || '#ff4fe0'; ns.fillRect(0, 0, W, H);
-            g.globalAlpha = 0.07;
+            g.globalAlpha = P.glowSoft ? 0.09 : 0.07;
             for (let i = 0; i < 16; i++) { const an = i / 16 * TAU; g.drawImage(nb, cos(an) * px * 2.3, sin(an) * px * 2.3); }
-            g.globalAlpha = 1;
+            g.globalAlpha = P.glowSoft ? 0.5 : 1;
             for (let i = 0; i < 20; i++) { const an = i / 20 * TAU; g.drawImage(nb, cos(an) * px * 1.55, sin(an) * px * 1.55); }
+            g.globalAlpha = 1;
           }
           const N = px > 7 ? 28 : px > 3.5 ? 20 : 16;
           for (let i = 0; i < N; i++) { const an = i / N * TAU; g.drawImage(b, cos(an) * px, sin(an) * px); }
@@ -472,7 +652,7 @@
         g.drawImage(a, 0, 0);
         g.restore();
         if (post) { g.save(); g.setTransform(k * m, 0, 0, k * m, ox * m * k, oy * m * k); g.lineJoin = 'round'; g.lineCap = 'round'; post(g, P); g.restore(); }
-      } finally { LN = old; freeCanvas(a); freeCanvas(b); freeCanvas(nb); }
+      } finally { LN = old; PAT = oldPat; freeCanvas(a); freeCanvas(b); freeCanvas(nb); }
     });
   }
 

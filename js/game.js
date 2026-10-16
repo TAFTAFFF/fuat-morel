@@ -509,7 +509,11 @@
     const wasPow = r.dash > 0 || r.sled > 0 || r.fly > 0;
     r.boost = Math.max(0, r.boost - dt); r.shield = Math.max(0, r.shield - dt); r.dash = Math.max(0, r.dash - dt); r.sled = Math.max(0, r.sled - dt); r.fly = Math.max(0, r.fly - dt);
     // güç (atılım/kızak/süzülüş) bittiği an tehlikenin üstünde kalınca anında ölmesin: kısa lütuf süresi
-    if (wasPow && r.dash <= 0 && r.sled <= 0 && r.fly <= 0 && r.dead <= 0) r.inv = Math.max(r.inv, .35);
+    if (wasPow && r.dash <= 0 && r.sled <= 0 && r.fly <= 0 && r.dead <= 0) {
+      r.inv = Math.max(r.inv, .35);
+      if (r.dashY < 0 && r.vy < -240) r.vy = -240;   // yukarı atılım bitti: ivmesi fırlatmasın (kısa ve güvenli)
+      r.dashY = 0;
+    }
     r.land = Math.max(0, r.land - dt * 5); r.jumpT = Math.max(0, r.jumpT - dt * 5);
     r.perfT = Math.max(0, (r.perfT || 0) - dt); r.perfCd = Math.max(0, (r.perfCd || 0) - dt); r.landT = (r.landT || 0) + dt;
     if (r.dead > 0) { r.dead -= dt; if (r.dead <= 0) respawn(r); c.jp = c.dp = c.use = c.ab = false; r.jbuf = 0; return; }
@@ -808,7 +812,8 @@
     let lead = -1e9; for (const q of S.racers) if (!q.out && !q.finished && q.x > lead) lead = q.x;
     const far = rk > 0 && lead > -1e9 ? clamp((lead - r.x - 500) / 1500, 0, 1) : 0;
     const w = { saw: 14, dyn: 12, trap: 6 + 10 * (1 - f), mis: rk > 0 ? 6 + 12 * f : 0, bolt: f > .6 ? 5 : 0, ice: 5 + 6 * f, mag: rk > 0 ? 5 + 8 * f : 0, net: 4 + 10 * (1 - f), ink: rk > 0 ? 3 + 6 * f : 0, speed: 8 + 14 * f, shield: 8 + 6 * (1 - f), balloon: 9 };
-    if (far > 0) { w.speed *= 1 + 1.6 * far; w.mis *= 1 + .8 * far; w.bolt += 6 * far; w.mag *= 1 + far; w.trap *= 1 - .6 * far; w.net *= 1 - .6 * far; w.shield *= 1 - .4 * far; }
+    // geride kalana asıl yardım hız; saldırı payı az (kalabalıkta geride kalan çok olur, ölüm artmasın)
+    if (far > 0) { w.speed *= 1 + 1.8 * far; w.mis *= 1 + .3 * far; w.mag *= 1 + .4 * far; w.trap *= 1 - .6 * far; w.net *= 1 - .6 * far; w.shield *= 1 - .3 * far; w.balloon *= 1 - .3 * far; }
     // Kaos: saldırı eşyaları çok daha sık
     if (S.gameMode === 'chaos') for (const k in w) w[k] *= ATTACK[k] ? 1.7 : .6;
     // kalabalık yarış (5-10 kişi): hedef çok olduğundan saldırılar daha öldürücü → saldırı eşyası biraz seyrek (kaos hariç)
@@ -1006,7 +1011,9 @@
     const x = Math.max(.35, Math.abs(d.x)), y = clamp(d.y, -.85, .35), l = Math.hypot(x, y);
     return { x: x / l, y: y / l };
   }
-  const dashDur = (r, v) => .55 * abK(r) * (1 - .3 * Math.max(0, -v.y));   // yukarı atılım biraz kısa
+  const dashDur = (r, v) => .55 * abK(r) * (1 - .38 * Math.max(0, -v.y));   // yukarı atılım kısa (~230 px yükselir: en yüksek duvarı aşar)
+  // Nuss süzülüşü: up = nişanın yukarı payı 0..1 (-1 = nişansız → eski değerler)
+  const nussVy = up => up < 0 ? -520 : -(220 + 300 * up), nussMul = up => up < 0 ? 1.3 : 1.3 + .22 * (1 - up);
   // baso dalgası: ileri/geri, yataydan en çok ~40° sapar
   function waveVec(d) {
     if (!d) return { x: 1, y: 0 };
@@ -1072,9 +1079,9 @@
       }
       case 'Nuss': {
         if (own) {
-          // nişan: yukarı → daha çok kalkış, ileri → daha hızlı ve alçak süzülüş (varsayılan: eskisi gibi)
+          // nişan: yukarı → varsayılan kadar yüksek kalkış, ileri → alçak ve daha hızlı süzülüş (nişansız: eskisi gibi)
           const up = d ? clamp(-d.y, 0, 1) : -1;
-          r.fly = 2.4 * k; r.vy = up < 0 ? -520 : -(300 + 420 * up); r.flyMul = up < 0 ? 1.3 : 1.3 + .22 * (1 - up);
+          r.fly = 2.4 * k; r.vy = nussVy(up); r.flyMul = nussMul(up);
           r.climb = false; if (r.slide) setSlide(r, false);
         }
         FM.fx.burst(cx, cy, ['#ffffff', '#7be3ff'], 16, 200, 100, 'leaf');
@@ -1229,8 +1236,8 @@
         break;
       }
       case 'Nuss': {
-        const up = d ? clamp(-d.y, 0, 1) : -1, mul = up < 0 ? 1.3 : 1.3 + .22 * (1 - up);
-        let x = cx, y = cy, vx = Math.max(0, r.vx), vy = up < 0 ? -520 : -(300 + 420 * up);
+        const up = d ? clamp(-d.y, 0, 1) : -1, mul = nussMul(up);
+        let x = cx, y = cy, vx = Math.max(0, r.vx), vy = nussVy(up);
         const sol = solTest(cx - 100, cx + 900), dt = 1 / 60, tgt = RUN * mul;
         A.shape = 'arc'; A.pts = [[r1(x), r1(y)]];
         for (let i = 1; i <= 84; i++) {
@@ -1533,11 +1540,11 @@
       if (it === 'saw') {
         const fw = aheadOf(r, 600);
         if (fw && r.onGround && level(fw)) go = true;                                          // ileri yuvarla (varsayılan)
-        else if (bh && r.onGround && level(bh) && r.x - bh.x < 400) { go = true; ax = -1; }    // arkadakine geri yuvarla
-        else if ((fw || bh) && a.aimT <= 0) { a.aimT = .3; const v = botAim(r, 'saw', fw || bh); if (v) { go = true; ax = v.x; ay = v.y; } }
+        else if (bh && r.onGround && level(bh) && r.x - bh.x < 400 && a.wait > .6) { go = true; ax = -1; }    // arkadakine geri yuvarla
+        else if ((fw || bh) && a.aimT <= 0 && a.wait > 1.2) { a.aimT = .3; const v = botAim(r, 'saw', fw || bh); if (v) { go = true; ax = v.x; ay = v.y; } }
       } else if (it === 'dyn') {
         if (ah && ah.x - r.x > DYN_MIN && ah.x - r.x < DYN_MAX) go = true;                     // varsayılan uzun atış
-        else if (a.aimT <= 0) {
+        else if (a.aimT <= 0 && a.wait > 1.2) {                                                // varsayılan fırsat çıkmadıysa nişanlı atış
           a.aimT = .3;
           const tg = ah && ah.x - r.x < 650 ? ah : bh;
           if (tg) { const v = botAim(r, 'dyn', tg); if (v) { go = true; ax = v.x; ay = v.y; } }

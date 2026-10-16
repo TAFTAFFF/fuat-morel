@@ -7,8 +7,10 @@
      coins, gems, xp, level                     (core.js varsayılanları)
      upgrades   { 'ab:<charId>': 1..5, charge: 1..5, start: 1..3 }
      startItem  'speed' | 'shield' | 'balloon'      (kilidi açık olanlardan seçilen başlangıç eşyası; saldırı eşyası YOK)
-     owned      { skins: { charId: [id...] }, trails: [id...], plates: [id...] }
-     equipped   { skin: { charId: id }, trail: id, plate: id }
+     owned      { skins: { charId: [id...] }, trails: [id...], plates: [id...], hats: [id...], wins: [id...], deaths: [id...] }
+     equipped   { skin: { charId: id }, trail: id, plate: id, hat: id, win: id, death: id }
+     Mağaza 2.0: tür ∈ 'skins'|'trails'|'plates'|'hats'|'wins'|'deaths' (FM.COS_TYPES); nadirlik FM.meta.rarity(rar);
+       günlük vitrin FM.meta.dailyShop() (tarihe göre deterministik, herkese aynı, bir öğe %30 indirimli; buyCosmetic indirimi uygular).
      missions   { v, day:'YYYY-MM-DD', list:[{t,slot,goal,prog,c,n,ch,r}], bonus, bonusN, rr, ach:{key:claimedTier}, achN:{key:notifiedTier} }
      stats      { races, wins, ... toplam sayaçlar; charRaces:{}, charWins:{}, killsBy:{}, itemsBy:{}, best:{} }
      daily      { last:'YYYY-MM-DD', streak }
@@ -180,7 +182,7 @@
     { key: 'kills', icon: '💥', t: 'Yok Edici', stat: 'kills', tiers: [10, 100, 500], ds: g => `${fmt(g)} rakip patlat` },
     { key: 'allChars', icon: '♠️', t: 'Klanın Her Üyesi', stat: s => countKeys(s.stats.charRaces), tiers: [3, 7], ds: g => g >= FM.ORDER.length ? 'Klandaki 7 karakterin hepsiyle yarış' : `${g} farklı karakterle yarış` },
     { key: 'skins', icon: '👕', t: 'Gardırop', stat: s => ownedSkinCount(s), tiers: [1, 7, 28], ds: g => g >= totalSkins() ? `Bütün kostümleri topla (${totalSkins()})` : `${g} kostüm satın al` },
-    { key: 'style', icon: '✨', t: 'Tarz Sahibi', stat: s => ownedStyleCount(s), tiers: [2, 5, 9], ds: g => g >= totalStyle() ? 'Bütün iz ve isim plakalarını topla' : `${g} iz ya da isim plakası satın al` },
+    { key: 'style', icon: '✨', t: 'Tarz Sahibi', stat: s => ownedStyleCount(s), tiers: [2, 6, 15], ds: g => g >= totalStyle() ? 'Bütün süsleri topla (iz, plaka, aksesuar, kutlama, ölüm efekti)' : `${g} süs satın al (iz, plaka, aksesuar, kutlama ya da ölüm efekti)` },
     { key: 'matches', icon: '🎮', t: 'Maç Adamı', stat: 'matches', tiers: [5, 25, 100], ds: g => `${fmt(g)} maç tamamla` },
     { key: 'champs', icon: '👑', t: 'Kupa Kralı', stat: 'champs', tiers: [1, 10, 30], ds: g => g === 1 ? 'İlk maçını şampiyon bitir' : `${fmt(g)} maçta şampiyon ol` },
     { key: 'items', icon: '🎁', t: 'Eşya Ustası', stat: 'items', tiers: [50, 250, 1000], ds: g => `${fmt(g)} eşya kullan` },
@@ -226,7 +228,7 @@
     'items', 'abilities', 'abHits', 'hitsDealt', 'hitsTaken', 'jumps', 'dbl', 'slides', 'slams', 'climbs', 'vaults', 'flaps', 'pads', 'mush', 'boxes',
     'blocks', 'blocksShield', 'blocksBalloon', 'earned', 'spent', 'gemsEarned', 'gemsSpent', 'dailyClaims', 'dailyDone', 'achDone',
     'upBought', 'skinsBought', 'styleBought', 'winStreak', 'bestStreak', 'time', 'xpTotal', 'rerolls', 'exchanges',
-    'mpRaces', 'mpWins', 'mpTop3', 'mpMatches', 'mpChamps', 'mpKills', 'elimTop3', 'elimWins', 'coinsBest', 'coinsWins', 'meteorDodge', 'gemCos', 'imports', 'playSec', 'trBest'];
+    'mpRaces', 'mpWins', 'mpTop3', 'mpMatches', 'mpChamps', 'mpKills', 'elimTop3', 'elimWins', 'coinsBest', 'coinsWins', 'meteorDodge', 'gemCos', 'imports', 'playSec', 'trBest', 'dealsBought'];
   const STAT_MAPS = ['charRaces', 'charWins', 'killsBy', 'itemsBy', 'best', 'modeRaces', 'themeRaces'];
 
   /* =====================================================================
@@ -291,10 +293,28 @@
   }
 
   /* ---------------- kozmetik yardımcıları ---------------- */
+  // Tür tabloları: skins karakter başına; diğerleri ("tarz" türleri) hesap geneli tek liste + tek kuşanılan.
+  const STYLE_TYPES = ['trails', 'plates', 'hats', 'wins', 'deaths'];
+  const EQ_KEY = { trails: 'trail', plates: 'plate', hats: 'hat', wins: 'win', deaths: 'death' };   // FM.save.equipped alan adı
+  const DEF_ID = { skins: 'klasik', trails: 'dust', plates: 'basic', hats: 'none', wins: 'none', deaths: 'none' };
+  const TYPE_INFO = {
+    skins:  { n: 'Görünümler',    one: 'Görünüm',    icon: 'user' },
+    hats:   { n: 'Aksesuarlar',   one: 'Aksesuar',   icon: 'hat' },
+    trails: { n: 'İzler',         one: 'İz',         icon: 'sparkle' },
+    plates: { n: 'Plakalar',      one: 'Plaka',      icon: 'flag' },
+    wins:   { n: 'Kutlamalar',    one: 'Kutlama',    icon: 'trophy' },
+    deaths: { n: 'Ölüm Efektleri', one: 'Ölüm Efekti', icon: 'skull' }
+  };
+  const RARITY = FM.RARITY || { c: { n: 'Sıradan', col: '#9aa3b2' }, r: { n: 'Nadir', col: '#4fb3ff' }, e: { n: 'Destansı', col: '#c084fc' }, l: { n: 'Efsanevi', col: '#ffb020' } };
+  const RAR_ORDER = ['c', 'r', 'e', 'l'];
   function normType(t) {
+    if (typeof t !== 'string') return null;
     if (t === 'skin' || t === 'skins') return 'skins';
     if (t === 'trail' || t === 'trails') return 'trails';
     if (t === 'plate' || t === 'plates') return 'plates';
+    if (t === 'hat' || t === 'hats') return 'hats';
+    if (t === 'win' || t === 'wins') return 'wins';
+    if (t === 'death' || t === 'deaths') return 'deaths';
     return null;
   }
   function cosList(type) { const t = normType(type); return t && FM.COSMETICS && Array.isArray(FM.COSMETICS[t]) ? FM.COSMETICS[t] : []; }
@@ -302,8 +322,9 @@
   function freeIds(type) { return cosList(type).filter(x => !(num0(x.price) > 0)).map(x => x.id); }
   /** Kozmetiğin para birimi: FM.COSMETICS öğesinde cur: 'gems' ise elmas, yoksa altın */
   function cosCur(it) { return it && it.cur === 'gems' ? 'gems' : 'coins'; }
+  function rarOf(it) { return it && RARITY[it.rar] ? it.rar : 'c'; }
   function totalSkins() { return FM.ORDER.length * cosList('skins').filter(x => num0(x.price) > 0).length; }
-  function totalStyle() { return cosList('trails').filter(x => num0(x.price) > 0).length + cosList('plates').filter(x => num0(x.price) > 0).length; }
+  function totalStyle() { let n = 0; for (const t of STYLE_TYPES) n += cosList(t).filter(x => num0(x.price) > 0).length; return n; }
   function ownedSkinCount(s) {
     let n = 0; const o = s.owned && s.owned.skins;
     if (!isObj(o)) return 0;
@@ -312,8 +333,14 @@
   }
   function ownedStyleCount(s) {
     let n = 0;
-    for (const t of ['trails', 'plates']) { const a = s.owned && s.owned[t]; if (Array.isArray(a)) for (const id of a) { const it = cosItem(t, id); if (it && num0(it.price) > 0) n++; } }
+    for (const t of STYLE_TYPES) { const a = s.owned && s.owned[t]; if (Array.isArray(a)) for (const id of a) { const it = cosItem(t, id); if (it && num0(it.price) > 0) n++; } }
     return n;
+  }
+  /** Türün varsayılan (her zaman sahipli) öğesi: listede varsa DEF_ID, yoksa ilk ücretsiz, o da yoksa ilk öğe */
+  function defId(t) {
+    if (cosItem(t, DEF_ID[t])) return DEF_ID[t];
+    const f = freeIds(t); if (f.length) return f[0];
+    const l = cosList(t); return l.length ? l[0].id : DEF_ID[t];
   }
 
   /* =====================================================================
@@ -387,7 +414,7 @@
       for (const id of freeIds('skins').concat(a)) if (cosItem('skins', id) && out.indexOf(id) < 0) out.push(id);
       s.owned.skins[c] = out;
     }
-    for (const t of ['trails', 'plates']) {
+    for (const t of STYLE_TYPES) {
       const a = Array.isArray(s.owned[t]) ? s.owned[t] : [];
       const out = [];
       for (const id of freeIds(t).concat(a)) if (cosItem(t, id) && out.indexOf(id) < 0) out.push(id);
@@ -399,8 +426,10 @@
     for (const k of Object.keys(s.equipped.skin)) {
       if (!charOk(k) || s.owned.skins[k].indexOf(s.equipped.skin[k]) < 0) delete s.equipped.skin[k];
     }
-    if (s.owned.trails.indexOf(s.equipped.trail) < 0) s.equipped.trail = s.owned.trails.indexOf('dust') >= 0 ? 'dust' : (s.owned.trails[0] || 'none');
-    if (s.owned.plates.indexOf(s.equipped.plate) < 0) s.equipped.plate = s.owned.plates.indexOf('basic') >= 0 ? 'basic' : (s.owned.plates[0] || 'basic');
+    for (const t of STYLE_TYPES) {
+      const k = EQ_KEY[t];
+      if (s.owned[t].indexOf(s.equipped[k]) < 0) s.equipped[k] = s.owned[t].indexOf(defId(t)) >= 0 ? defId(t) : (s.owned[t][0] || defId(t));
+    }
     // istatistikler
     if (!isObj(s.stats)) s.stats = {};
     for (const k of STAT_KEYS) s.stats[k] = clampInt(s.stats[k], 0, 1e12, 0);
@@ -878,33 +907,53 @@
     if (t === 'skins') { const a = s.owned.skins[charOr(charId)]; return Array.isArray(a) && a.indexOf(id) >= 0; }
     return Array.isArray(s.owned[t]) && s.owned[t].indexOf(id) >= 0;
   };
-  meta.price = function (type, id) { const it = cosItem(type, id); return it ? Math.floor(num0(it.price)) : null; };
+  /** price(type, id) → bugünkü fiyat (vitrin indirimi uygulanmış); geçersiz öğede null. basePrice → liste fiyatı. */
+  meta.price = function (type, id) { const it = cosItem(type, id); return it ? effPrice(normType(type), it).price : null; };
+  meta.basePrice = function (type, id) { const it = cosItem(type, id); return it ? Math.floor(num0(it.price)) : null; };
   /** currency(type, id) → 'coins' | 'gems' (geçersiz öğede null) */
   meta.currency = function (type, id) { const it = cosItem(type, id); return it ? cosCur(it) : null; };
+  /** rarity(rar | öğe) → {id, n, col, idx} (bilinmeyen → Sıradan) */
+  meta.rarity = function (r) {
+    const id = isObj(r) ? rarOf(r) : (RARITY[r] ? r : 'c');
+    return { id, n: RARITY[id].n, col: RARITY[id].col, idx: RAR_ORDER.indexOf(id) };
+  };
+  meta.RARITY = RAR_ORDER.map(id => Object.assign({ id, idx: RAR_ORDER.indexOf(id) }, RARITY[id]));
+  /** cosTypes() → [{type, n, one, icon, count}] mağaza sekmeleri için (sırası: görünüm, aksesuar, iz, plaka, kutlama, ölüm) */
+  meta.cosTypes = function () {
+    return ['skins', 'hats', 'trails', 'plates', 'wins', 'deaths'].filter(t => cosList(t).length).map(t => Object.assign({ type: t, count: cosList(t).length }, TYPE_INFO[t]));
+  };
+  meta.typeName = function (type) { const t = normType(type); return t && TYPE_INFO[t] ? TYPE_INFO[t].n : ''; };
+  /** Bugünkü geçerli fiyat: vitrinde indirimliyse indirimli, değilse liste fiyatı → {price, cur, base, off} */
+  function effPrice(t, it) {
+    const base = Math.floor(num0(it.price)), cur = cosCur(it);
+    const d = shopEntry(t, it.id);
+    if (d && d.off > 0 && base > 0) return { price: discounted(base, cur, d.off), cur, base, off: d.off };
+    return { price: base, cur, base, off: 0 };
+  }
   /** buyCosmetic(type, id, charId) → true (alındı ya da zaten sahipli) / false (geçersiz ya da altın yetersiz).
-      Satın alınan öğe otomatik kuşanılır. */
+      Günün vitrinindeki indirim otomatik uygulanır. Satın alınan öğe otomatik kuşanılır. */
   meta.buyCosmetic = function (type, id, charId) {
     const t = normType(type), it = cosItem(t, id); if (!it) return false;
     if (t === 'skins' && charId != null && !charOk(charId)) return false;
     if (meta.owns(t, id, charId)) return true;
-    const price = Math.floor(num0(it.price)), cur = cosCur(it);
+    const ep = effPrice(t, it), price = ep.price, cur = ep.cur;
     if (!debit(cur, price)) return false;
     const s = S();
     if (t === 'skins') { const c = charOr(charId); (s.owned.skins[c] = s.owned.skins[c] || []).push(id); s.stats.skinsBought++; }
     else { s.owned[t].push(id); s.stats.styleBought++; }
     if (cur === 'gems') s.stats.gemCos++;
+    if (ep.off) s.stats.dealsBought = num0(s.stats.dealsBought) + 1;
     equipRaw(t, id, charId);
     checkMissions(false);
     persist(true);
-    FM.emit('meta:buy', { type: t, id, charId: t === 'skins' ? charOr(charId) : null, price, cur });
+    FM.emit('meta:buy', { type: t, id, charId: t === 'skins' ? charOr(charId) : null, price, cur, off: ep.off, base: ep.base, rar: rarOf(it) });
     FM.emit('meta:change', { reason: 'buy', type: t, id });
     return true;
   };
   function equipRaw(t, id, charId) {
     const s = S();
     if (t === 'skins') s.equipped.skin[charOr(charId)] = id;
-    else if (t === 'trails') s.equipped.trail = id;
-    else if (t === 'plates') s.equipped.plate = id;
+    else if (EQ_KEY[t]) s.equipped[EQ_KEY[t]] = id;
   }
   /** equip(type, id, charId) → bool (sahip değilsen false) */
   meta.equip = function (type, id, charId) {
@@ -917,22 +966,89 @@
     FM.emit('meta:change', { reason: 'equip', type: t, id });
     return true;
   };
-  /** equipped(type, charId) → kuşanılan öğenin id'si (her zaman geçerli bir id) */
+  /** equipped(type, charId) → kuşanılan öğenin id'si (her zaman geçerli bir id; tür geçersizse null) */
   meta.equipped = function (type, charId) {
     const t = normType(type), s = S();
     if (t === 'skins') { const c = charOr(charId), id = s.equipped.skin[c]; return id && meta.owns('skins', id, c) ? id : 'klasik'; }
-    if (t === 'trails') return cosItem('trails', s.equipped.trail) && meta.owns('trails', s.equipped.trail) ? s.equipped.trail : 'dust';
-    if (t === 'plates') return cosItem('plates', s.equipped.plate) && meta.owns('plates', s.equipped.plate) ? s.equipped.plate : 'basic';
-    return null;
+    if (!t) return null;
+    const id = s.equipped[EQ_KEY[t]];
+    return cosItem(t, id) && meta.owns(t, id) ? id : defId(t);
   };
-  /** cosmetics(type, charId) → [{id, n, price, cur: 'coins'|'gems', owned, equipped, can, ...}] (mağaza listesi için) */
+  /** loadout(charId) → {skin, trail, plate, hat, win, death}: yarışçıya kopyalanacak kuşanılan kozmetikler (game.js / netgame.js / net.js profili) */
+  meta.loadout = function (charId) {
+    const c = charOr(charId);
+    return { skin: meta.equipped('skins', c), trail: meta.equipped('trails'), plate: meta.equipped('plates'), hat: meta.equipped('hats'), win: meta.equipped('wins'), death: meta.equipped('deaths') };
+  };
+  /** Öğe görünümü (mağaza kartı): katalog alanları + {type, price (bugünkü), base, off, cur, rar, rarN, rarCol, owned, equipped, can} */
+  function cosView(t, x, charId, eq) {
+    const owned = meta.owns(t, x.id, charId), ep = effPrice(t, x), rr = rarOf(x);
+    return Object.assign({}, x, { type: t, price: ep.price, base: ep.base, off: ep.off, cur: ep.cur, rar: rr, rarN: RARITY[rr].n, rarCol: RARITY[rr].col,
+      owned, equipped: x.id === eq, can: owned || S()[ep.cur] >= ep.price });
+  }
+  /** cosmetics(type, charId) → [{id, n, d, price, base, off, cur, rar, rarN, rarCol, owned, equipped, can, ...}] (mağaza listesi; katalog sırası) */
   meta.cosmetics = function (type, charId) {
     const t = normType(type); if (!t) return [];
-    const eq = meta.equipped(t, charId), sv = S();
-    return cosList(t).map(x => {
-      const owned = meta.owns(t, x.id, charId), price = Math.floor(num0(x.price)), cur = cosCur(x);
-      return Object.assign({}, x, { type: t, price, cur, owned, equipped: x.id === eq, can: owned || sv[cur] >= price });
-    });
+    const eq = meta.equipped(t, charId);
+    return cosList(t).map(x => cosView(t, x, charId, eq));
+  };
+  /** cosmetic(type, id, charId) → tek öğe görünümü | null */
+  meta.cosmetic = function (type, id, charId) {
+    const t = normType(type), it = cosItem(t, id); if (!it) return null;
+    return cosView(t, it, charId, meta.equipped(t, charId));
+  };
+  /** Sahiplik özeti: {owned, total, pct} (tüm türler; skins 7 karakter × ücretli görünüm) */
+  meta.collection = function () {
+    const s = S(), owned = ownedSkinCount(s) + ownedStyleCount(s), total = totalSkins() + totalStyle();
+    return { owned, total, pct: total ? Math.round(100 * owned / total) : 0 };
+  };
+
+  /* ---------------- GÜNÜN VİTRİNİ (günlük değişen mağaza) ----------------
+     Tarihe göre deterministik (FM.mulberry32 + gün tohumu): aynı gün herkes aynı 6 öğeyi görür.
+     Dizilim: [efsanevi|destansı, destansı, nadir, nadir, sıradan, sıradan]; türler olabildiğince farklı; bir öğe %30 indirimli. */
+  const SHOP_SLOTS = ['L', 'e', 'r', 'r', 'c', 'c'];   // 'L' = %50 efsanevi, değilse destansı
+  const SHOP_OFF = 30;
+  function discounted(base, cur, off) {
+    const v = base * (1 - off / 100);
+    return cur === 'gems' ? Math.max(1, Math.round(v)) : Math.max(10, Math.round(v / 10) * 10);
+  }
+  function shopPool() {
+    const out = [];
+    for (const t of FM.COS_TYPES || ['skins', 'trails', 'plates', 'hats', 'wins', 'deaths']) for (const it of cosList(t)) if (num0(it.price) > 0) out.push({ type: t, it });
+    return out;
+  }
+  function genShop(day) {
+    const rng = FM.mulberry32((daySeed(day) * 2246822519 + 0x51A7E) >>> 0);
+    const pool = shopPool(), used = [], usedTypes = [];
+    for (const slot of SHOP_SLOTS) {
+      let rar = slot === 'L' ? (rng() < 0.5 ? 'l' : 'e') : slot;
+      let cand = [];
+      for (let tries = 0; tries < 4 && !cand.length; tries++) {
+        cand = pool.filter(p => rarOf(p.it) === rar && used.indexOf(p) < 0 && (tries > 0 || usedTypes.indexOf(p.type) < 0));
+        if (!cand.length && tries === 1) rar = rar === 'l' ? 'e' : rar === 'e' ? 'r' : rar === 'r' ? 'c' : 'r';
+      }
+      if (!cand.length) cand = pool.filter(p => used.indexOf(p) < 0);
+      if (!cand.length) break;
+      const p = cand[Math.min(cand.length - 1, Math.floor(rng() * cand.length))];
+      used.push(p); usedTypes.push(p.type);
+    }
+    const offIdx = used.length ? Math.floor(rng() * used.length) : -1;
+    return used.map((p, i) => ({ type: p.type, id: p.it.id, off: i === offIdx ? SHOP_OFF : 0 }));
+  }
+  let shopDay = '', shopList = [];
+  function ensureShop() { const k = todayKey(); if (shopDay !== k) { shopDay = k; shopList = genShop(k); } return shopList; }
+  function shopEntry(t, id) { for (const e of ensureShop()) if (e.type === t && e.id === id) return e; return null; }
+  /** dailyShop(charId) → {day, items:[{type, typeN, id, n, d, rar, rarN, rarCol, base, price, cur, off, owned, equipped, can, featured}], resetsIn (ms), resetsText}
+      5-6 öğe; aynı gün herkese aynı; bir öğe %30 indirimli (off). Görünüm (skins) seçili karakter içindir. */
+  meta.dailyShop = function (charId) {
+    const list = ensureShop();
+    const items = list.map((e, i) => {
+      const it = cosItem(e.type, e.id); if (!it) return null;
+      const v = cosView(e.type, it, charId, meta.equipped(e.type, charId));
+      v.typeN = TYPE_INFO[e.type] ? TYPE_INFO[e.type].n : e.type; v.typeOne = TYPE_INFO[e.type] ? TYPE_INFO[e.type].one : e.type;
+      v.featured = i === 0; v.slot = i;
+      return v;
+    }).filter(Boolean);
+    return { day: shopDay, items, resetsIn: msToMidnight(), resetsText: meta.dailyResetText() };
   };
 
   /* =====================================================================
@@ -1370,12 +1486,12 @@
     }
     return best || sel;
   }
-  /** card() → {nick, char, skin, lvl, tr, play, races, wins, kills, best, since, lg}. Hepsi düz JSON sayı/metin (ağda paylaşılır).
-      tr = toplam kupa, play = oynama sn, best = en çok yarışılan karakter, since = ilk oynama ms, lg = lig id'si. */
+  /** card() → {nick, char, skin, hat, lvl, tr, play, races, wins, kills, best, since, lg}. Hepsi düz JSON sayı/metin (ağda paylaşılır).
+      tr = toplam kupa, play = oynama sn, best = en çok yarışılan karakter, since = ilk oynama ms, lg = lig id'si, hat = kuşanılan aksesuar (Mağaza 2.0). */
   meta.card = function () {
     const sv = S(), st = isObj(sv.stats) ? sv.stats : {}, ch = charOr(sv.selChar), tr = totalTrophies(sv);
     return {
-      nick: cleanNick(sv.nick) || ch, char: ch, skin: meta.equipped('skins', ch), lvl: clampInt(sv.level, 1, MAX_LEVEL, 1), tr,
+      nick: cleanNick(sv.nick) || ch, char: ch, skin: meta.equipped('skins', ch), hat: meta.equipped('hats'), lvl: clampInt(sv.level, 1, MAX_LEVEL, 1), tr,
       play: meta.playTime(), races: Math.floor(num0(st.races)), wins: Math.floor(num0(st.wins)), kills: Math.floor(num0(st.kills)),
       best: bestChar(sv), since: Math.floor(num0(sv.since)), lg: leagueOf(tr).id
     };
@@ -1383,7 +1499,7 @@
   /* 'meta:card' yalnızca kart DEĞİŞİNCE ve en sık ~1 sn'de bir yayınlanır. Oynama süresi dakikaya yuvarlanarak karşılaştırılır
      (sürekli artan sayı kartı her saniye değiştirmesin; AĞ kartı en fazla dakikada bir yeniden yayınlar). */
   let cardSig = null, cardLast = 0, cardTimer = null;
-  function cardSigOf(c) { return [c.nick, c.char, c.skin, c.lvl, c.tr, Math.floor(c.play / 60), c.races, c.wins, c.kills, c.best, c.since, c.lg].join('|'); }
+  function cardSigOf(c) { return [c.nick, c.char, c.skin, c.hat, c.lvl, c.tr, Math.floor(c.play / 60), c.races, c.wins, c.kills, c.best, c.since, c.lg].join('|'); }
   function cardCheck(force) {
     let c; try { c = meta.card(); } catch (e) { return; }
     const sig = cardSigOf(c);
@@ -1701,6 +1817,8 @@
   meta.ACHIEVEMENTS = ACH.map(a => ({ key: a.key, icon: a.icon, t: a.t, tiers: a.tiers.slice() }));
   meta.START_ITEMS = START_ITEMS.slice();
   meta.LOGIN_REWARDS = loginRewards();
+  meta.COS_TYPES = ['skins', 'hats', 'trails', 'plates', 'wins', 'deaths'];
+  meta._genShop = genShop;
   meta.todayKey = todayKey;
   meta._normalize = normalize;
   meta._ensureDay = ensureDay;

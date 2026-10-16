@@ -1810,13 +1810,13 @@
     const lob = kind === 'lobby' && p.code;
     const title = lob ? nick + ' lobi kurdu!' : nick + ' çevrimiçi oldu!';
     const sub = lob ? 'Lobide · ' + ((p.n | 0) || 1) + '/' + ((p.max | 0) || 10) + ' — katıl, birlikte yarışın' : stText(Object.assign({ online: true }, p));
-    if (document.hidden) { sysNotify(title, lob ? 'Lobi açık, katıl!' : 'Oyuna katıl!', p); return; }
+    if (document.hidden) { sysNotify(title + (lob ? ' Katılmak için dokun.' : ''), p); return; }
     const canJoin = lob && st.view === 'menu' && !mpInRoom();
     FM.haptic('pick');
     note({ title, sub, icon: pt(FM.CH[p.char] ? p.char : 'TAFTAF', 48, {}, 'n-pt'), cls: 'n-friend' + (lob ? ' n-lobby' : ''), ms: lob ? 7000 : 4200,
       btn: canJoin ? '<button class="btn sm b-green n-btn" data-act="joinroom" data-code="' + esc(p.code) + '">KATIL</button>' : '' });
   }
-  function sysNotify(title, body, p) {
+  function sysNotify(body, p) {
     try {
       if (!setting('notify') || notifPerm() !== 'granted') return false;
       const code = p && p.code ? String(p.code) : '';
@@ -3566,7 +3566,6 @@
   FM.on('hit', d => { if (d && localR(d.victim)) FM.haptic('hit'); });
   FM.on('finish', d => { if (d && localR(d.r)) FM.haptic(d.place === 1 ? 'win' : 'pick'); });
   FM.on('match:end', d => { if (d && d.champion) FM.haptic('win'); });
-  FM.on('aim:start', () => { /* ilk dokunuş titreşimi aimStart'ta; klavye/başka kaynaktan gelenler için burada hafif */ });
   FM.on('hud:arrive', d => bumpSlot(d && d.kind === 'ab' ? 'ab' : 'item'));
   FM.on('net:came', d => { try { friendNote('came', d && d.p); } catch (e) { console.error('[ui net:came]', e); } });
   FM.on('net:lobby-open', d => { try { friendNote('lobby', d && d.p); } catch (e) { console.error('[ui net:lobby-open]', e); } });
@@ -3621,6 +3620,7 @@
 
   /* =====================================================================
      25) GELİŞTİRİCİ MODU (?dev=1&scene=menu&ui=shop&tab=trails)
+         5. tur: ui=online | clan | prof&pid=p1 | ftoast&kind=lobby | rejoinwait | lobby&tab=fr&cd=3 (+ &fakenet=1: sahte varlık verisi, yalnızca ekran görüntüsü için)
      ===================================================================== */
   function devFakeResult() {
     const rs = (S.racers || []).slice(0, 10);

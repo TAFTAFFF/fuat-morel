@@ -85,8 +85,12 @@
     return s;
   }
   const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  // tablo anahtarı mı? (yalnız KENDİ alanı: ağdan gelen '__proto__' / 'constructor' gibi adlar geçemez)
+  const own = (T, k) => typeof k === 'string' && !!T && Object.prototype.hasOwnProperty.call(T, k);
+  const isChar = c => own(FM.CH, c);
   const str = (v, max, def) => (typeof v === 'string' && v.length <= max) ? v : def;
-  const tok = (v, def) => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v)) ? v : def;   // kısa kimlik/anahtar
+  // kısa kimlik/anahtar. Nesne anahtarı olarak kullanılır: '__proto__', 'constructor' gibi adlar REDDEDİLİR (prototip kirletme)
+  const tok = (v, def) => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v) && !(v in Object.prototype)) ? v : def;
   function cleanNick(s) {
     s = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f<>"'`\\]/g, '').replace(/\s+/g, ' ').trim();
     return Array.from(s).slice(0, 14).join('').trim();
@@ -121,7 +125,7 @@
     }
     keptPid = sv.pid;
     if (typeof sv.nick !== 'string' || !cleanNick(sv.nick)) {
-      const base = cleanNick(sv.selChar && FM.CH && FM.CH[sv.selChar] ? sv.selChar : '') || 'Oyuncu';
+      const base = cleanNick(isChar(sv.selChar) ? sv.selChar : '') || 'Oyuncu';
       sv.nick = base; sv.nickSet = false; ch = true;
     } else if (typeof sv.nickSet !== 'boolean') { sv.nickSet = true; ch = true; }
     if (ch && typeof FM.persist === 'function') FM.persist();
@@ -404,7 +408,7 @@
 
   function myProfile() {
     const sv = FM.save || {}, P = R.prof || {};
-    const c = (P.char && FM.CH && FM.CH[P.char]) ? P.char : ((sv.selChar && FM.CH && FM.CH[sv.selChar]) ? sv.selChar : 'TAFTAF');
+    const c = isChar(P.char) ? P.char : (isChar(sv.selChar) ? sv.selChar : 'TAFTAF');
     const eq = isObj(sv.equipped) ? sv.equipped : {};
     return {
       n: cleanNick(P.nick) || myNick(), c,
@@ -416,7 +420,7 @@
   function sanitizeEntry(p) {
     if (!isObj(p) || !tok(p.id, null)) return null;
     return {
-      id: p.id, n: cleanNick(p.n) || 'Oyuncu', c: (typeof p.c === 'string' && FM.CH && FM.CH[p.c]) ? p.c : 'TAFTAF',
+      id: p.id, n: cleanNick(p.n) || 'Oyuncu', c: isChar(p.c) ? p.c : 'TAFTAF',
       sk: tok(p.sk, 'klasik'), tr: tok(p.tr, 'dust'), pl: tok(p.pl, 'basic'),
       rd: p.rd ? 1 : 0, w: p.w ? 1 : 0, o: p.o ? 1 : 0, sn: tok(p.sn, '')
     };
@@ -1169,7 +1173,7 @@
   function sanitizeCard(c, pid) {
     if (!isObj(c) || !tok(pid, null)) return null;
     const I = (v, max) => fin(v) && v >= 0 ? Math.min(max, Math.floor(v)) : 0;
-    const okc = v => typeof v === 'string' && FM.CH && FM.CH[v];
+    const okc = isChar;
     return {
       pid, nick: cleanNick(c.nick) || 'Oyuncu', char: okc(c.char) ? c.char : 'TAFTAF', skin: tok(c.skin, 'klasik'),
       lvl: fin(c.lvl) ? Math.max(1, Math.min(999, Math.floor(c.lvl))) : 1, tr: I(c.tr, 1e7), play: I(c.play, 1e9),
@@ -1236,7 +1240,7 @@
     const code = m.st === 'lobby' && pc ? pc.code : null;
     const card = P.cards[pid];
     const d = {
-      pid, nick: cleanNick(m.nick) || (card ? card.nick : '') || 'Oyuncu', char: (typeof m.char === 'string' && FM.CH && FM.CH[m.char]) ? m.char : (card ? card.char : 'TAFTAF'),
+      pid, nick: cleanNick(m.nick) || (card ? card.nick : '') || 'Oyuncu', char: isChar(m.char) ? m.char : (card ? card.char : 'TAFTAF'),
       st: m.st, code, n: fin(m.n) ? Math.max(0, Math.min(MAXP, m.n | 0)) : null, max: fin(m.max) ? Math.max(1, Math.min(MAXP, m.max | 0)) : null,
       open: !!(m.open && code)
     };
@@ -1245,8 +1249,9 @@
     Object.assign(e, d); e.t = t;
     e.sns[sn] = t + (m.st === 'away' ? AWAY_TTL : ONLINE_MS);
     let k = 0; for (const s in e.sns) if (++k > 4) delete e.sns[s];      // aynı kimlikle en fazla birkaç sekme
-    if (m.st !== 'away') { P.ls[pid] = Date.now(); delete P.gone[pid]; }
     if (!wasOn && m.st !== 'away') pCame(e);
+    if (m.st !== 'away') { P.ls[pid] = Date.now(); delete P.gone[pid]; }
+    if (!wasOn) pReply();
     if (code && code !== prevCode) pLobbyOpen(e);
     pChanged();
   }
@@ -1267,6 +1272,11 @@
     P.cards[pid] = c;
     if (!retain && P.peers[pid] && P.peers[pid].st !== 'away') P.ls[pid] = Date.now();
     pChanged();
+  }
+  // yeni biri belirdi: kendi nabzımızı kısa bir rastgele beklemeyle hemen yolla (yeni açan listeyi 5 sn beklemesin; en sık 1 sn'de bir)
+  function pReply() {
+    if (P.replyT || now() - (P.replyAt || -1e9) < 1000 || typeof setTimeout !== 'function') return;
+    P.replyT = setTimeout(guard(function () { P.replyT = null; P.replyAt = now(); pBeat(true); }, 'pReply'), 150 + Math.random() * 600);
   }
   function pGone(pid) { delete P.peers[pid]; P.gone[pid] = now(); }
   function pView(e, t) {
@@ -1379,8 +1389,8 @@
   function pHidden(h) {
     if (!P.on || P.halt) return;
     if (h) { P.hiddenAt = now(); pBeat(true); pCardPub(1); return; }     // gizlenme anı = son görülme
+    // askıya alınmış sayfanın bayat listesi için ısınmayı tik boşluğu (pTick) başlatır; sadece gizli kalmak liste bayatlatmaz
     const away = P.hiddenAt ? now() - P.hiddenAt : 0; P.hiddenAt = 0;
-    if (away > 10000) P.warmUntil = now() + WARM_MS;
     const m = pMq(); if (m) { m.probe(); pBeat(true); if (away > 10000) pCardPub(1); } else pRoute();
   }
   // sayfa kapanıyor: önce son görülme kartı + 'off' (paylaşılan bağlantı oda çıkışıyla kapanmadan), sonra varlık durur
@@ -1662,7 +1672,7 @@
       switch (f[2]) {
         case 'p': case 'i': case 't': if (typeof v === 'number' && isFinite(v)) r[f[0]] = v; else if (!ALWAYS[f[0]]) r[f[0]] = 0; break;
         case 'b': r[f[0]] = !!v; break;
-        case 's': r[f[0]] = (typeof v === 'string' && (f[0] !== 'item' || !FM.ITEMS || FM.ITEMS[v])) ? v : null; break;
+        case 's': r[f[0]] = (typeof v === 'string' && v.length <= 24 && (f[0] !== 'item' || !FM.ITEMS || own(FM.ITEMS, v))) ? v : null; break;
       }
     }
     if (typeof d.fc === 'number') r.face = d.fc >= 0 ? 1 : -1; else r.face = r.face || 1;

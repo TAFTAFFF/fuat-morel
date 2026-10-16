@@ -65,6 +65,8 @@ async function openPage(name, query) {
     if (m.method === 'Runtime.consoleAPICalled' && (m.params.type === 'error' || m.params.type === 'assert')) page.errs.push('console.' + m.params.type + ': ' + m.params.args.map(a => a.value || a.description || '').join(' ').slice(0, 400));
   });
   await page.send('Runtime.enable'); await page.send('Page.enable');
+  // gerçek telefon görüntü alanı: headless pencerede tarayıcı çubuğu ~190 px yer kaplar → 844×390 görüntü alanını zorla
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: false });
   await waitFor(() => page.eval('!!(window.FM && FM.ui && FM.ui.state && FM.netgame && FM.S && FM.S.mode !== "boot")'), 25000, name + ' oyun yüklendi');
   await page.eval('window.__ev = []; for (const e of ["mp:start","mp:end","mp:final","mp:lobby","mp:emote","net:error","mp:left"]) FM.on(e, d => __ev.push(e)); true');
   page.name = name;
@@ -131,7 +133,8 @@ const ui = p => p.eval('FM.ui.state()');
     if (MODE !== 'classic') {
       for (let i = 0; i < 5 && (await A.eval('FM.net.lobby().cfg.mode')) !== MODE; i++) await tap(A, '[data-act="lcfg"][data-k="mode"][data-d="1"]', 'A mod ileri');
     }
-    await waitFor(() => B.eval(`FM.net.lobby().cfg.rounds === ${ROUNDS} && FM.net.lobby().cfg.mode === ${JSON.stringify(MODE)}`), 8000, 'B ayarları görüyor');
+    try { await waitFor(() => B.eval(`FM.net.lobby().cfg.rounds === ${ROUNDS} && FM.net.lobby().cfg.mode === ${JSON.stringify(MODE)}`), 8000, 'B ayarları görüyor'); }
+    catch (e) { console.log('teşhis: A cfg ' + (await A.eval('JSON.stringify(FM.net.lobby().cfg)')) + ' | B cfg ' + (await B.eval('JSON.stringify(FM.net.lobby().cfg)'))); await A.shot(path.join(OUT, 'a-cfgfail.png')); throw e; }
     ok(true, 'oda ayarları karşıya geçti (' + MODE + ', ' + ROUNDS + ' tur)');
     // emoji (lobi)
     await tap(B, '[data-act="lbemo"]', 'B emoji paneli');
@@ -217,10 +220,12 @@ const ui = p => p.eval('FM.ui.state()');
     await waitFor(async () => (await ui(A)).screen === 'lobby' && (await ui(B)).screen === 'lobby', 15000, 'iki taraf lobiye döndü');
     ok(true, 'lobiye dönüş (' + back + ')');
     await sleep(800);
-    ok(await A.eval('FM.net.players().every(p => !p.ready || p.off)'), 'lobiye dönünce hazırlar sıfırlandı');
+    console.log('teşhis hazır bayrakları: A R.ready=' + (await A.eval('FM.net._dbg.R.ready')) + ' B R.ready=' + (await B.eval('FM.net._dbg.R.ready')) + ' A lobi rd=' + (await A.eval('JSON.stringify(FM.net._dbg.R.lob.p.map(p=>[p.id.slice(0,4),p.rd]))')) + ' cd=' + (await A.eval('FM.netgame.countdown()')));
+    const rdyNow = await A.eval('JSON.stringify(FM.net.players().map(p => [p.nick, !!p.ready, !!p.off]))');
+    ok(await A.eval('FM.net.players().every(p => !p.ready || p.off)'), 'lobiye dönünce hazırlar sıfırlandı ' + rdyNow);
     await A.shot(path.join(OUT, 'a-lobby2.png'));
     // ---------- B sayfayı yeniler: odaya geri dön ----------
-    if (await B.eval('typeof FM.netgame.rejoinInfo === "function" && !!FM.netgame.rejoinInfo()')) {
+    if (await B.eval('typeof FM.netgame.rejoin === "function" && typeof FM.netgame.rejoinInfo === "function"')) {   // (odadayken rejoinInfo() null döner; yenileyince dolar)
       await B.send('Page.navigate', { url: 'file:///' + root.split(path.sep).join('/') + '/index.html?dev=1&scene=menu&run=1&mobile=1' + (BROKER ? '&brokerUrl=' + encodeURIComponent(BROKER) : '') });
       await sleep(1500);
       await waitFor(() => B.eval('!!(window.FM && FM.ui && FM.ui.state && FM.S && FM.S.mode !== "boot")'), 25000, 'B yeniden yüklendi');
@@ -235,7 +240,7 @@ const ui = p => p.eval('FM.ui.state()');
       await waitFor(async () => (await ui(B)).screen === 'lobby', 30000, 'B odaya geri döndü');
       await waitFor(() => A.eval('FM.net.players().filter(p => !p.off).length === 2'), 15000, 'A, B\'yi yine odada görüyor');
       ok(true, 'sayfa yenilendi → odaya geri dönüldü (' + (auto ? 'otomatik' : 'ODAYA GERİ DÖN düğmesiyle') + ')');
-    } else console.log('NOT  FM.netgame.rejoinInfo yok (AĞ ajanı bekleniyor): geri dönüş testi atlandı');
+    } else console.log('NOT  FM.netgame.rejoin/rejoinInfo yok (AĞ ajanı bekleniyor): geri dönüş testi atlandı');
     // ---------- B ayrılır ----------
     await tap(B, '[data-act="lbleave"]', 'B AYRIL');
     await tap(B, '[data-act="mok"]', 'B onay');

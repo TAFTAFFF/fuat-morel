@@ -1,6 +1,7 @@
 // Kullanım: node dev/net-test.js [aracı: 0 | 1 | 2 | all | cerceve | yerel]   (0 EMQX, 1 Mosquitto, 2 HiveMQ; varsayılan all; cerceve = yalnız çevrimdışı)
 //   yerel = dev/broker.js ile bu süreçte yerel aracı başlatır (herkese açık aracıya ulaşılamayan ortamlar); ya da NET_BROKER=ws://.../mqtt
 //   verilirse tüm istemciler (?brokerUrl=) o aracıya bağlanır. Yerel aracıyla oda testlerine ek olarak VARLIK testleri de koşar.
+//   varlik = yalnız varlık testleri (yerel aracı başlatılır).
 // Ortam: NET_TEST_DUMP=1 → başarısız adımda istemci durumları + net.log() kuyruğu; NET_TEST_OUT=dosya.json → ölçümleri yaz.
 // js/core.js + js/net.js'i her sahte oyuncu için ayrı bir vm bağlamında yükler (Node 24 global WebSocket) ve GERÇEK
 // herkese açık MQTT aracısına karşı oda akışını uçtan uca dener: kurma, katılma, lobi eşitlemesi, ayarlar, hazır,
@@ -367,6 +368,155 @@ async function runBroker(bi) {
   return res;
 }
 
+// VARLIK (TUR5 §8): çevrimiçi listesi + profil kartları. Yalnız yerel/özel aracıyla (herkese açık aracıya test kartı yazılmasın).
+async function presenceTest() {
+  const res = { broker: 'varlık', ok: [], fail: [], olc: {} };
+  const ok = m => { res.ok.push(m); console.log('  ✓ ' + m); }, bad = m => { res.fail.push(m); console.log('  ✗ ' + m); };
+  const mine = [];
+  const mk = (n, o) => { const c = client(n, o); mine.push(c); c.FM.save.nick = n; c.FM.save.nickSet = true; for (const e of ['net:online', 'net:profiles', 'net:came', 'net:lobby-open', 'net:presence']) c.FM.on(e, d => c.ev.push({ e, d, t: performance.now() })); return c; };
+  async function step(name, fn) { try { await fn(); } catch (e) { bad(name + ' — ' + (e && e.message)); } }
+  const names = c => c.net.online().map(x => x.nick).sort().join(',');
+  const has = (c, who) => c.net.online().some(x => x.pid === who.net.pid());
+  console.log('\n=== Varlık (çevrimiçi listesi + profil kartları) ===');
+  const A = mk('Ali'), B = mk('Kral'), Cc = mk('Şükrü');
+  B.FM.save.selChar = 'Kral'; B.FM.save.level = 7;
+  await step('üç oyuncu birbirini görür', async () => {
+    const t0 = performance.now();
+    for (const c of [A, B, Cc]) c.net.presence(true);
+    await waitFor(() => [A, B, Cc].every(c => c.net.online().length === 3), 8000, 'herkes 3 kişi');
+    res.olc.liste_ms = Math.round(performance.now() - t0);
+    const l = A.net.online();
+    if (!l[0].me || l[0].pid !== A.net.pid() || l.filter(x => x.me).length !== 1) throw new Error('kendin ilk sırada değil: ' + JSON.stringify(l));
+    const kb = l.find(x => x.pid === B.net.pid());
+    if (kb.nick !== 'Kral' || kb.char !== 'Kral' || kb.st !== 'menu' || kb.code !== null) throw new Error('nabız alanları: ' + JSON.stringify(kb));
+    const e = last(A, 'net:online'); if (!e || e.d.n !== 2) throw new Error('net:online n: ' + JSON.stringify(e && e.d.n));
+    if (A.net.presence().conn !== 'open' || A.net.presence().shared) throw new Error('varlık durumu: ' + JSON.stringify(A.net.presence()));
+    ok('3 oyuncu ' + res.olc.liste_ms + ' ms içinde birbirini çevrimiçi görüyor (kendin ilk sırada, me=true; net:online n=2)');
+  });
+  let D = null;
+  await step('profil kartları (retain) + net:came', async () => {
+    await sleep(7600);                                    // A/B/C'nin ısınma süresi (7 sn) geçsin (ilk liste bildirim üretmez)
+    D = mk('Dönerci'); D.net.presence(true);
+    const tD = performance.now();
+    await waitFor(() => { const p = D.net.profiles(); return p.length === 4 && p.filter(x => !x.me).every(x => x.lvl != null); }, 6000, 'D kartları aldı');
+    res.olc.kartlar_ms = Math.round(performance.now() - tD);
+    await waitFor(() => D.net.profiles().filter(x => x.online).length === 4, 3000, 'D herkesi çevrimiçi görür');
+    res.olc.yeni_gelen_liste_ms = Math.round(performance.now() - tD);
+    const pb = D.net.profiles().find(x => x.pid === B.net.pid());
+    if (pb.lvl !== 7 || pb.char !== 'Kral' || typeof pb.ls !== 'number' || pb.online !== true) throw new Error('kart: ' + JSON.stringify(pb));
+    await waitFor(() => [A, B, Cc].every(c => c.ev.some(x => x.e === 'net:came' && x.d.p.pid === D.net.pid())), 4000, 'net:came');
+    await sleep(1500);
+    if ([A, B, Cc].some(c => c.ev.filter(x => x.e === 'net:came').length !== 1)) throw new Error('net:came sayısı: ' + [A, B, Cc].map(c => c.ev.filter(x => x.e === 'net:came').length));
+    if (D.ev.some(x => x.e === 'net:came')) throw new Error('yeni açan ilk listede bildirim aldı');
+    ok('yeni gelen retain kartları ' + res.olc.kartlar_ms + ' ms içinde aldı (seviye, karakter, son görülme), herkesi ' + res.olc.yeni_gelen_liste_ms + ' ms içinde çevrimiçi gördü; diğer 3 kişiye tam 1 kez net:came, yeni gelene (ilk liste) hiç');
+  });
+  await step('temiz çıkış (pagehide) anında düşer', async () => {
+    const t0 = performance.now();
+    D.net._dbg.pagehide();
+    await waitFor(() => !has(A, D) && !has(B, D), 3000, 'D listeden çıktı');
+    res.olc.temiz_cikis_ms = Math.round(performance.now() - t0);
+    const pd = A.net.profiles().find(x => x.pid === D.net.pid());
+    if (!pd || pd.online || pd.st !== 'off' || Date.now() - pd.ls > 5000) throw new Error('profil: ' + JSON.stringify(pd));
+    ok('pagehide → ' + res.olc.temiz_cikis_ms + ' ms içinde listeden düştü; profilde çevrimdışı, son görülme ' + Math.round((Date.now() - pd.ls) / 1000) + ' sn önce');
+    // yenileme gibi kısa kesinti: aynı kimlikle hemen geri gelince bildirim yok
+    const D2 = mk('Dönerci', { store: D.store }); D2.net.presence(true);
+    try {
+      await waitFor(() => has(A, D2), 4000, 'D geri geldi');
+      await sleep(800);
+      const n = A.ev.filter(x => x.e === 'net:came' && x.d.p.pid === D.net.pid()).length;
+      if (n > 1) throw new Error('yenilemede tekrar bildirim: ' + n);
+      ok('aynı kimlik hemen geri geldi (sayfa yenileme) → listede, ama tekrar "çevrimiçi oldu" bildirimi yok');
+    } finally { D2.net._dbg.pagehide(); }
+  });
+  await step('kopan (pagehide yok) ~12 sn içinde düşer', async () => {
+    await waitFor(() => has(A, Cc), 3000, 'C listede');
+    const P = Cc.net._dbg.P;
+    P.halt = true; clearInterval(P.iv); Cc.net._dbg.pkill();     // uygulama öldü: 'off' gitmez
+    const lastBeat = () => { const e = A.net._dbg.P.peers[Cc.net.pid()]; return e ? e.t : null; };
+    const lb = lastBeat();
+    await waitFor(() => !has(A, Cc), 16000, 'C düştü');
+    const after = performance.now() - lb;
+    res.olc.kopma_dusme_ms = Math.round(after);
+    if (after < 11000 || after > 13800) throw new Error('son nabızdan ' + Math.round(after) + ' ms sonra düştü (beklenen ~12 sn)');
+    ok('pagehide göndermeden kopan, son nabzından ' + res.olc.kopma_dusme_ms + ' ms sonra listeden düştü (çevrimiçi = son ~12 sn içinde nabız)');
+  });
+  await step('uzakta (60 sn+ gizli)', async () => {
+    const BP = B.net._dbg.P;
+    B.net._dbg.hidden(true); BP.hiddenAt = B.net.now() - 61000;
+    await waitFor(() => { const x = A.net.online().find(q => q.pid === B.net.pid()); return x && x.st === 'away'; }, 4000, 'B uzakta');
+    await waitFor(() => { const e = last(A, 'net:online'); return e && e.d.list.some(q => q.pid === B.net.pid() && q.st === 'away'); }, 2000, 'net:online olayı');
+    const e = last(A, 'net:online'), pb = A.net.profiles().find(x => x.pid === B.net.pid());
+    if (e.d.n !== 0 || pb.online || !pb.away) throw new Error('uzakta çevrimiçi sayıldı: n=' + e.d.n + ' ' + JSON.stringify(e.d.list.map(q => q.nick + ':' + q.st)) + ' ' + JSON.stringify(pb));
+    B.net._dbg.hidden(false);
+    await waitFor(() => { const x = A.net.online().find(q => q.pid === B.net.pid()); return x && x.st === 'menu'; }, 4000, 'B döndü');
+    if (A.ev.some(x => x.e === 'net:came' && x.d.p.pid === B.net.pid())) throw new Error('uzaktan dönüşte bildirim');
+    ok('60 sn\'den uzun gizli → "away" (çevrimiçi sayılmaz, n=0); görünür olunca hemen "menu"');
+  });
+  await step('açık lobi: kod, paylaşılan bağlantı, net:lobby-open', async () => {
+    A.net.createRoom({ cfg: {} });
+    await waitFor(() => A.net.inRoom() && A.net.presence().shared, 8000, 'A odada + paylaşılan bağlantı');
+    const code = A.net.code();
+    await waitFor(() => { const x = B.net.online().find(q => q.pid === A.net.pid()); return x && x.st === 'lobby' && x.code === code && x.open && x.n === 1; }, 4000, 'B, A\'nın lobisini görür');
+    // prototip kirletme denemesi: oda konularına '__proto__' kimlikli ping/durum/katılma
+    { const R = 'fuatmorel/v1/' + code + '/', raw = A.net._dbg.C.mq;
+      for (const [t, m] of [['ping', { f: '__proto__', sn: 'x', cn: 'y', t: 1, r: 5 }], ['s/__proto__', { t: 1, s: { x: 1 }, cn: 'z', sn: 'q', r: 3 }], ['join', { f: 'constructor', sn: 'a', v: 1, n: 'K', c: '__proto__' }]]) raw.publish(R + t, JSON.stringify(m), false); }
+    await sleep(600);
+    if (({}).cn !== undefined || ({}).rtt !== undefined || ({}).sn !== undefined || A.FM.net.players().some(p => p.pid === 'constructor')) throw new Error('prototip kirlendi / geçersiz kimlik kabul edildi');
+    await waitFor(() => last(B, 'net:lobby-open') && last(B, 'net:lobby-open').d.p.code === code, 3000, 'net:lobby-open');
+    if (A.net._dbg.P.mq) throw new Error('paylaşırken ikinci varlık soketi açık');
+    B.net.joinRoom(code);
+    await waitFor(() => B.net.inRoom() && B.net.presence().shared, 8000, 'B odada');
+    await waitFor(() => { const x = B.net.online().find(q => q.pid === A.net.pid()); return x && x.n === 2; }, 7000, 'kişi sayısı 2');
+    if (A.ev.some(x => x.e === 'net:lobby-open')) throw new Error('kendi odası için lobby-open');
+    A.net.leaveRoom(); B.net.leaveRoom();
+    await waitFor(() => !A.net.presence().shared && A.net.presence().conn === 'open' && B.net.presence().conn === 'open', 8000, 'kendi bağlantısına döndü');
+    await waitFor(() => { const x = B.net.online().find(q => q.pid === A.net.pid()); return x && x.st === 'menu' && !x.code; }, 7000, 'A menüde');
+    ok('oda kurunca nabızda kod + kişi sayısı, arkadaşa net:lobby-open; oda bağlantısı paylaşıldı (ikinci soket yok); çıkınca kendi bağlantısına geçti');
+  });
+  await step('kötü niyetli / bozuk mesajlar', async () => {
+    const url = A.net.BROKERS[1].url, Mq = A.net._dbg.Mq;
+    const raw = await new Promise((res, rej) => { const m = new Mq(url, { cid: 'kotu' + Date.now(), keep: 20, will: null, onOpen: () => res(m), onClose: r => rej(new Error(r)), onMsg() { } }); m.open(); });
+    const R = 'fuatmorel/v1/';
+    raw.publish(R + '_on/pkotu1', JSON.stringify({ pid: 'baska', nick: 'x', st: 'menu' }));                           // pid uyuşmuyor
+    raw.publish(R + '_on/pkotu2', JSON.stringify({ pid: 'pkotu2', nick: '<img src=x onerror=alert(1)>Hain', char: '__proto__', st: 'lobby', code: 'ZZZZZ', n: 1e9, open: true }));
+    raw.publish(R + '_on/pkotu3', JSON.stringify({ pid: 'pkotu3', st: 'yarışta', nick: 'Y' }));                       // geçersiz durum
+    raw.publish(R + '_on/pkotu4', '{bozuk json');
+    raw.publish(R + '_on/pkotu5', JSON.stringify({ pid: 'pkotu5', nick: 'Z'.repeat(5000), st: 'menu' }));            // çok büyük
+    raw.publish(R + '_pr/pkotu6', JSON.stringify({ pid: 'pkotu6', nick: 'Kart', lvl: 1e12, tr: -5, play: 'çok', char: 'constructor', since: 1, ls: Date.now() + 9e9, toString: 5 }), true);
+    for (let i = 0; i < 320; i++) raw.publish(R + '_pr/psahte' + i, JSON.stringify({ pid: 'psahte' + i, nick: 'S' + i, lvl: 1, ls: Date.now() - i * 1000 }), true);
+    await sleep(2500);
+    const on = A.net.online(), pr = A.net.profiles();
+    const k2 = on.find(x => x.pid === 'pkotu2'), k6 = pr.find(x => x.pid === 'pkotu6');
+    if (on.some(x => x.pid === 'pkotu1' || x.pid === 'pkotu3' || x.pid === 'pkotu4' || x.pid === 'pkotu5')) throw new Error('geçersiz nabız listede');
+    if (!k2 || /[<>"]/.test(k2.nick) || k2.char !== 'TAFTAF' || k2.code !== null || k2.open || k2.n !== 10) throw new Error('süzülmemiş nabız: ' + JSON.stringify(k2));
+    if (!k6 || k6.lvl !== 999 || k6.tr !== 0 || k6.play !== 0 || k6.char !== 'TAFTAF' || k6.since !== null || k6.ls > Date.now()) throw new Error('süzülmemiş kart: ' + JSON.stringify(k6));
+    if (pr.length > 302) throw new Error('kart sayısı sınırsız: ' + pr.length);
+    for (let i = 0; i < 320; i++) raw.publish(R + '_pr/psahte' + i, '', true);                                       // test kartlarını sil
+    raw.publish(R + '_pr/pkotu6', '', true);
+    await sleep(800);
+    raw.disconnect();
+    ok('bozuk/kötü niyetli nabız ve kartlar süzüldü (pid uyuşmazlığı, geçersiz durum/kod, HTML, aşırı sayılar, 320 sahte kart → en çok 300 tutuldu: ' + pr.length + ')');
+  });
+  await step('aracıya ulaşılamıyor', async () => {
+    const Z = client('Ulaşılamaz'); mine.push(Z);
+    Z.net._dbg.P;                                                                                                        // erişim denetimi
+    const zp = Z.FM.net.BROKERS[0].url;
+    // bu istemci kapalı bir porta bağlanmaya çalışır: oyun etkilenmez, liste boş, istisna yok
+    const sbUrl = 'ws://127.0.0.1:9/mqtt';
+    const Y = (() => { const prev = BURL; BURL = sbUrl; const c = client('Kapalı'); BURL = prev; return c; })(); mine.push(Y);
+    Y.net.presence(true);
+    await sleep(3000);
+    const st = Y.net.presence();
+    if (st.conn === 'open' || Y.net.online().length !== 0 || Y.net.profiles().length !== 1) throw new Error('durum: ' + JSON.stringify(st) + ' ' + Y.net.online().length);
+    if (Y.net.log().some(l => l.indexOf('HATA') >= 0)) throw new Error('yakalanan hata: ' + Y.net.log().filter(l => l.indexOf('HATA') >= 0)[0]);
+    Y.net.presence(false);
+    ok('aracıya ulaşılamayınca varlık sessizce bekliyor (durum "' + st.conn + '", liste boş, profilde yalnız kendin, hata yok); ' + (zp ? '' : ''));
+  });
+  for (const c of mine) { const h = c.net.log().filter(l => l.indexOf('HATA') >= 0); if (h.length) bad(c.name + ' net.js içinde yakalanan hata: ' + h.slice(0, 3).join(' | ')); }
+  for (const c of mine) { try { c.net.leaveRoom(); c.net.presence(false); } catch (e) { } }
+  return res;
+}
+
 // Çevrimdışı: MQTT çerçeve ayrıştırıcısı — parçalı/birleşik WebSocket mesajları, 1-2-3 baytlık uzunluk, UTF-8, bozuk çerçeve
 function frameTest() {
   const c = client('çerçeve'), D = c.net._dbg;
@@ -395,13 +545,14 @@ function frameTest() {
 (async () => {
   const arg = process.argv[2] || (BURL ? 'yerel' : 'all');
   let broker = null;
-  if (arg === 'yerel' && !BURL) { broker = await require('./broker.js').start({ port: 0, delay: +(process.env.NET_DELAY || 0) }); BURL = broker.url; console.log('Yerel aracı: ' + BURL); }
+  if ((arg === 'yerel' || arg === 'varlik') && !BURL) { broker = await require('./broker.js').start({ port: 0, delay: +(process.env.NET_DELAY || 0) }); BURL = broker.url; console.log('Yerel aracı: ' + BURL); }
   const list = arg === 'yerel' ? [1] : arg === 'all' ? [0, 1, 2] : arg === 'cerceve' ? [] : [+arg];
   const out = [];
   console.log('=== Çevrimdışı ===');
   const frameFail = frameTest();
   if (frameFail) out.push({ broker: 'çerçeve', ok: [], fail: ['çerçeve ayrıştırıcı'], olc: {} });
-  for (const bi of list) { out.push(await runBroker(bi)); await sleep(1500); }
+  if (arg !== 'varlik') for (const bi of list) { out.push(await runBroker(bi)); await sleep(1500); }
+  if (BURL && (arg === 'yerel' || arg === 'varlik')) out.push(await presenceTest());
   console.log('\n=== ÖZET ===');
   let fails = 0;
   for (const r of out) { fails += r.fail.length; console.log(r.broker + ': ' + r.ok.length + ' geçti, ' + r.fail.length + ' kaldı ' + JSON.stringify(r.olc)); for (const f of r.fail) console.log('   ✗ ' + f); }

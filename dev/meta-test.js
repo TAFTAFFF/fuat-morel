@@ -179,8 +179,8 @@ function boot(store, v) {
 
     // (e) profil kartı biçimi
     F = boot({}, virt(T0));
-    const keys = ['nick', 'char', 'skin', 'lvl', 'tr', 'play', 'races', 'wins', 'kills', 'best', 'since', 'lg'];
-    const typeOk = c => ['nick', 'char', 'skin', 'best', 'lg'].every(k => typeof c[k] === 'string' && c[k]) && ['lvl', 'tr', 'play', 'races', 'wins', 'kills', 'since'].every(k => Number.isInteger(c[k]) && c[k] >= 0);
+    const keys = ['nick', 'char', 'skin', 'hat', 'lvl', 'tr', 'play', 'races', 'wins', 'kills', 'best', 'since', 'lg'];
+    const typeOk = c => ['nick', 'char', 'skin', 'hat', 'best', 'lg'].every(k => typeof c[k] === 'string' && c[k]) && ['lvl', 'tr', 'play', 'races', 'wins', 'kills', 'since'].every(k => Number.isInteger(c[k]) && c[k] >= 0);
     let c = F.meta.card();
     ok(deq(Object.keys(c).sort(), keys.slice().sort()) && typeOk(c), 'card() biçimi ' + JSON.stringify(c));
     ok(JSON.stringify(c).length < 300 && deq(JSON.parse(JSON.stringify(c)), c), 'card() küçük düz JSON değil');
@@ -300,6 +300,91 @@ function boot(store, v) {
     let Fz = null, bozukHata = '';
     try { Fz = boot(bz, virt(T0)); const cz = Fz.meta.card(); ok(typeOk(cz) && cz.tr === 0 && cz.play === 0 && cz.char === 'TAFTAF', 'bozuk kayıt kartı ' + JSON.stringify(cz)); Fz.save.stats = null; Fz.meta.card(); Fz.save.stats = {}; Fz.save.trophies = null; Fz.save.nick = null; Fz.meta.card(); Fz.meta.h2h(); Fz.meta.playTime(); } catch (e) { bozukHata = String(e && e.stack || e); }
     ok(!bozukHata, 'bozuk kayıt istisna: ' + bozukHata);
+  }
+  // 7c) MAĞAZA 2.0: katalog, nadirlik/fiyat tutarlılığı, yeni türler (hats/wins/deaths), günün vitrini, indirimli satın alma, eski kayıt uyumu
+  {
+    const T0 = 1.75e12, deq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    let F = boot({}, virt(T0));
+    const C = F.COSMETICS, types = ['skins', 'trails', 'plates', 'hats', 'wins', 'deaths'];
+    ok(deq(F.COS_TYPES, types) && types.every(t => Array.isArray(C[t]) && C[t].length >= 8), 'katalog türleri/eksik liste');
+    const RR = { c: [0, 600, 0, 0], r: [700, 1200, 0, 0], e: [1500, 2600, 20, 30], l: [0, 0, 45, 60] };   // [altın min, altın max, elmas min, elmas max]
+    let badPrice = [], ids = {}, dup = [], badName = [];
+    const nickRe = /taftaf|caner|\blul\b|ertan|kral|nuss|baso/i;
+    for (const t of types) {
+      ids[t] = {};
+      for (const it of C[t]) {
+        if (ids[t][it.id]) dup.push(t + ':' + it.id); ids[t][it.id] = 1;
+        if (!/^[a-z0-9_]+$/.test(it.id) || typeof it.n !== 'string' || !it.n || !RR[it.rar]) badPrice.push(t + ':' + it.id + ':alan');
+        if (nickRe.test(it.n) || nickRe.test(it.d || '')) badName.push(t + ':' + it.id);
+        const r = RR[it.rar] || RR.c, p = it.price | 0, g = it.cur === 'gems';
+        const okP = g ? (p >= r[2] && p <= r[3]) : (p >= r[0] && p <= r[1]);
+        if (!okP) badPrice.push(t + ':' + it.id + ':' + it.rar + ':' + p + (g ? 'g' : ''));
+      }
+    }
+    ok(!dup.length, 'çift id: ' + dup.join());
+    ok(!badPrice.length, 'nadirlik/fiyat tutarsız: ' + badPrice.join(' '));
+    ok(!badName.length, 'katalogda klan takma adı geçiyor: ' + badName.join());
+    ok(['klasik', 'altin', 'gece', 'neon', 'buz'].every(id => ids.skins[id]) && ['none', 'dust', 'fire', 'rainbow', 'stars', 'spades', 'hearts'].every(id => ids.trails[id]) && ['basic', 'gold', 'clan', 'neon', 'fire'].every(id => ids.plates[id]), 'eski kozmetik id\'leri korunmalı');
+    ok(C.skins.length >= 15 && C.hats.length >= 13 && C.wins.length >= 7 && C.deaths.length >= 7 && C.trails.length >= 13 && C.plates.length >= 11, 'katalog boyutu ' + types.map(t => C[t].length).join('/'));
+    ok(C.hats.every(h => ['head', 'face', 'neck'].indexOf(h.slot) >= 0) && C.wins.every(w => typeof w.pose === 'string') && C.deaths.slice(1).every(d => d.fx && d.fx.k), 'hats slot / wins pose / deaths fx');
+    // nadirlik
+    const rar = F.meta.rarity;
+    ok(rar('c').n === 'Sıradan' && rar('r').n === 'Nadir' && rar('e').n === 'Destansı' && rar('l').n === 'Efsanevi' && rar('x').id === 'c' && rar({ rar: 'l' }).idx === 3 && /^#[0-9a-f]{6}$/i.test(rar('e').col), 'rarity()');
+    ok(F.meta.cosTypes().length === 6 && F.meta.cosTypes()[0].type === 'skins' && F.meta.typeName('hats') === 'Aksesuarlar', 'cosTypes/typeName');
+    // yeni türlerde varsayılanlar / sahiplik / kuşanma
+    ok(F.meta.equipped('hats') === 'none' && F.meta.equipped('wins') === 'none' && F.meta.equipped('deaths') === 'none' && F.meta.equipped('hat') === 'none', 'yeni tür varsayılanları');
+    ok(F.meta.owns('hats', 'none') && !F.meta.owns('hats', 'kasket') && !F.meta.owns('wins', 'konfeti') && F.meta.equip('hats', 'kasket') === false, 'sahip olmadan kuşanma');
+    ok(F.meta.equipped('yok') === null && F.meta.cosmetics('yok').length === 0 && F.meta.buyCosmetic('hats', 'olmayan') === false, 'geçersiz tür/öğe');
+    const lo = F.meta.loadout('Kral');
+    ok(deq(Object.keys(lo), ['skin', 'trail', 'plate', 'hat', 'win', 'death']) && lo.skin === 'klasik' && lo.hat === 'none' && lo.trail === 'dust', 'loadout()');
+    F.save.coins = 5000; F.save.gems = 100;
+    ok(F.meta.buyCosmetic('hats', 'kasket') === true && F.save.coins === 4600 && F.meta.equipped('hats') === 'kasket' && F.meta.owns('hats', 'kasket'), 'kasket satın alma/otomatik kuşanma ' + F.save.coins);
+    ok(F.meta.buyCosmetic('wins', 'dans') === true && F.save.gems === 78 && F.meta.equipped('wins') === 'dans', 'elmaslı kutlama');
+    ok(F.meta.buyCosmetic('deaths', 'hayalet') === true && F.meta.equipped('deaths') === 'hayalet' && F.meta.equip('deaths', 'none') === true && F.meta.equipped('deaths') === 'none', 'ölüm efekti kuşan/çıkar');
+    const cK = F.save.coins;
+    ok(F.meta.buyCosmetic('hats', 'kasket') === true && F.save.coins === cK, 'sahipli öğe tekrar ücretlendirildi');
+    ok(F.save.stats.styleBought === 3 && F.meta.collection().owned === 3 && F.meta.collection().total > 60, 'styleBought/collection ' + JSON.stringify(F.meta.collection()));
+    const hv = F.meta.cosmetics('hats').find(x => x.id === 'kasket');
+    ok(hv && hv.owned && hv.equipped && hv.rar === 'c' && hv.rarN === 'Sıradan' && hv.type === 'hats' && hv.slot === 'head' && hv.base === 400, 'cosmetics(hats) görünümü ' + JSON.stringify(hv));
+    const ach = F.meta.missions('ach').find(a => a.key === 'style');
+    ok(ach && ach.value === 3 && ach.goal === 2 && ach.done && /süs/.test(ach.desc), 'Tarz Sahibi yeni türleri saymalı ' + JSON.stringify(ach));
+    // kayıt kalıcılığı + eski kayıt (yeni alanlar yok) uyumu
+    F.persist(true);
+    const stx = {}; stx.fuatmorel_save_v2 = JSON.stringify(Object.assign(JSON.parse(JSON.stringify(F.save)), { owned: { skins: {}, trails: ['none', 'dust', 'fire'], plates: ['basic'] }, equipped: { skin: {}, trail: 'fire', plate: 'basic' } }));
+    const Fo = boot(stx, virt(T0));
+    ok(deq(Fo.save.owned.hats, ['none']) && deq(Fo.save.owned.wins, ['none']) && deq(Fo.save.owned.deaths, ['none']) && Fo.save.equipped.hat === 'none' && Fo.save.equipped.win === 'none' && Fo.save.equipped.death === 'none' && Fo.meta.equipped('trails') === 'fire', 'eski kayıt yeni alanları almadı ' + JSON.stringify(Fo.save.owned));
+    const nx = F.normSave({ trReset: 1, owned: { hats: 'x', wins: 5 }, equipped: { hat: 3, death: null } });
+    ok(deq(nx.owned.hats, ['none']) && deq(nx.owned.wins, ['none']) && nx.equipped.hat === 'none' && nx.equipped.death === 'none', 'normSave bozuk yeni alanlar');
+    F.save.owned.hats = ['none', 'sahte', 'tiara', 'tiara']; F.save.equipped.hat = 'sahte'; F.save.equipped.win = 'yok'; F.meta._normalize();
+    ok(deq(F.save.owned.hats, ['none', 'tiara']) && F.save.equipped.hat === 'none' && F.save.equipped.win === 'none' && F.meta.owns('wins', 'dans'), 'normalize sahte/çift id temizliği ' + JSON.stringify(F.save.owned.hats) + ' ' + F.save.equipped.hat);
+    // günün vitrini: deterministik, 6 öğe, türler farklı, tek indirim, gün değişince yenilenir
+    const v = virt(T0); F = boot({}, v);
+    const d1 = F.meta.dailyShop();
+    ok(d1.day === F.meta.todayKey() && d1.items.length === 6 && d1.resetsIn > 0 && d1.resetsIn <= 86400000 && typeof d1.resetsText === 'string', 'dailyShop biçimi ' + JSON.stringify(d1).slice(0, 200));
+    ok(d1.items.filter(x => x.off === 30).length === 1 && d1.items.every(x => x.off === 0 || x.off === 30), 'tek indirimli öğe: ' + d1.items.map(x => x.off).join());
+    ok(d1.items.every(x => x.base > 0 && x.price > 0 && (x.off ? x.price < x.base : x.price === x.base) && x.rarN && x.typeN && typeof x.owned === 'boolean'), 'vitrin fiyat alanları ' + JSON.stringify(d1.items.map(x => [x.type, x.id, x.base, x.price, x.off])));
+    ok(new Set(d1.items.map(x => x.type)).size >= 5 && d1.items[0].featured && (d1.items[0].rar === 'l' || d1.items[0].rar === 'e') && d1.items[1].rar === 'e' && d1.items[2].rar === 'r' && d1.items[4].rar === 'c', 'vitrin dizilimi ' + d1.items.map(x => x.type + ':' + x.rar).join());
+    const F1b = boot({}, virt(T0)), d1b = F1b.meta.dailyShop();
+    ok(deq(d1.items.map(x => [x.type, x.id, x.off]), d1b.items.map(x => [x.type, x.id, x.off])), 'vitrin herkese aynı değil');
+    const seen = new Set(); for (let i = 0; i < 30; i++) seen.add(F.meta._genShop('2026-10-' + (i < 9 ? '0' : '') + (i + 1)).map(x => x.id).join());
+    ok(seen.size >= 25, 'vitrin günden güne değişmiyor: ' + seen.size);
+    const disc = d1.items.find(x => x.off === 30);
+    const expect = disc.cur === 'gems' ? Math.max(1, Math.round(disc.base * 0.7)) : Math.max(10, Math.round(disc.base * 0.7 / 10) * 10);
+    ok(disc.price === expect && F.meta.price(disc.type, disc.id) === expect && F.meta.basePrice(disc.type, disc.id) === disc.base, 'indirimli fiyat ' + disc.price + ' beklenen ' + expect);
+    F.save.coins = 100000; F.save.gems = 1000; const c0 = F.save[disc.cur];
+    let bought = null; F.on('meta:buy', e => { bought = e; });
+    ok(F.meta.buyCosmetic(disc.type, disc.id, 'TAFTAF') === true && F.save[disc.cur] === c0 - expect && bought && bought.off === 30 && bought.base === disc.base && F.save.stats.dealsBought === 1, 'indirimli satın alma ' + (c0 - F.save[disc.cur]));
+    ok(F.meta.dailyShop().items.find(x => x.id === disc.id && x.type === disc.type).owned === true, 'vitrin sahipliği güncellenmeli');
+    const full = d1.items.find(x => x.off === 0 && x.cur === 'coins'); const c1 = F.save.coins;
+    ok(F.meta.buyCosmetic(full.type, full.id, 'TAFTAF') === true && F.save.coins === c1 - full.base, 'indirimsiz vitrin öğesi liste fiyatından');
+    v.advance(86400000 + 1000);
+    const d2 = F.meta.dailyShop();
+    ok(d2.day !== d1.day && !deq(d1.items.map(x => x.id), d2.items.map(x => x.id)), 'gün değişince vitrin yenilenmedi');
+    ok(F.meta.price(disc.type, disc.id) === disc.base || F.meta.dailyShop().items.some(x => x.id === disc.id && x.off), 'indirim ertesi gün kalkmalı');
+    // dışa/içe aktarma yeni alanları taşır
+    F.save.pid = 'pX'; F.meta.buyCosmetic('hats', 'hale'); F.meta.buyCosmetic('wins', 'konfeti');
+    const code = await F.meta.exportCode(); const Fi = boot({}, virt(T0)); const pv = await Fi.meta.importCode(code);
+    ok(pv.ok && pv.apply() === true && Fi.meta.equipped('hats') === 'hale' && Fi.meta.owns('wins', 'konfeti') && Fi.meta.card().hat === 'hale', 'içe aktarma şapka/kutlama taşımadı');
   }
   // 8) bulut (isteğe bağlı, gerçek aracı)
   if (process.argv[2] === 'bulut') {

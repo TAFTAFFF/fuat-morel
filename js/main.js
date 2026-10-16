@@ -57,8 +57,9 @@
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
     V.dpr = dpr; V.W = cv.width; V.H = cv.height;
-    // Telefonda (kısa ekran) kamera yakınlaşır: karakterler parmak ucu kadar küçük kalmasın.
-    V.VH = (touch || h < 520) ? 440 : C.VH;
+    // Telefonda (kısa ekran) kamera yakınlaşır: karakterler parmak ucu kadar küçük kalmasın (5. tur: 440 → 400).
+    // Uzun dokunmatik ekranda (tablet) yakınlık kademeli azalır: CSS yüksekliği 480 → 400, ~1080 → 540 (masaüstü).
+    V.VH = (touch || h < 520) ? Math.round(FM.clamp(CAM.VH_TOUCH + Math.max(0, h - 480) * .35, CAM.VH_TOUCH, C.VH)) : C.VH;
     V.S = cv.height / V.VH; V.VW = cv.width / V.S;
     V.mobile = touch;
     measureSafe();
@@ -94,6 +95,10 @@
      oyuncu ekranın üst %16'sına girerse yukarı kayar; son zeminin altına düşerken aşağıyı gösterir;
      sert sınırlar sayesinde oyuncu hızlı düşüşte ya da mantar fırlatmasında ekrandan çıkmaz. */
   const cam = { t: null, gy: null };
+  /* Kamera ayarları (5. tur, docs/TUR5.md §4): zemin telefonda ekranın üstten ~%71'inde, masaüstünde ~%68'inde
+     ("harita üstte kalıyor" şikâyeti); telefonda görünen dünya yüksekliği 400 (karakterler biraz büyük). */
+  const CAM = { VH_TOUCH: 400, KF_TOUCH: .71, KF_DESK: .68 };
+  FM.CAM = CAM;
   function camTarget() {
     if (S.mode === 'demo') { // demoda öndekini izle
       let lead = S.racers[0];
@@ -120,7 +125,7 @@
     if (dead) cam.gy = null;
     else if (t.onGround || t.climb) cam.gy = feet;
     const g = cam.gy != null ? cam.gy : feet;
-    const kF = touch ? .60 : .64;                         // zemindeyken ayakların ekran yüksekliğindeki yeri
+    const kF = touch ? CAM.KF_TOUCH : CAM.KF_DESK;       // zemindeyken ayakların ekran yüksekliğindeki yeri
     let ty = g - VH * kF;
     const fall = !dead && t.vy > 0 && feet > g + 4;       // son basılan zeminin altına iniyor (basamak inişi / çukur)
     if (fall) ty = Math.max(ty, feet - VH * kF + cl(t.vy * .1, 0, 90));   // düşerken aşağıyı göster
@@ -164,6 +169,7 @@
     call(R.drawRacers, ctx);
     call(R.drawParticles, ctx);
     call(R.drawWorldFront, ctx);
+    if (S.aim && typeof R.drawAim === 'function') call(R.drawAim, ctx);   // nişan önizlemesi (dünya koordinatı)
     // 3) ekran efektleri + HUD
     ctx.setTransform(V.S, 0, 0, V.S, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     call(R.drawScreenFX, ctx);
@@ -229,6 +235,39 @@
     }
   }
 
+  /* ---------- vuruş anı (hit-stop): yalnızca YEREL his ----------
+     Yerel oyuncu birini öldürünce ya da ölünce dünya çok kısa "donar". Tek oyunculuda gerçek yavaşlama (sim ×0.08);
+     çok oyunculu yarışta hafif (×0.4, en çok 60 ms) ve kaybedilen süre hemen ardından geri ödenir → seviye saati ve ağ
+     eşitliği bozulmaz (sapma < 40 ms; netgame 120 ms altını düzeltmez bile). "Ekran sarsıntısı" kapalıysa hiç yok. */
+  let hsT = 0, hsK = 1, hsDebt = 0;
+  FM.hitStop = function (sec) {
+    if (settings().shake === false || !(sec > 0)) return;
+    const mp = mpLive();
+    hsT = Math.max(hsT, Math.min(mp ? .06 : .12, sec));
+    hsK = mp ? .4 : .08;
+  };
+  FM.on('death', d => {
+    const P = S.player;
+    if (!d || S.mode !== 'race' || !P || P.ghost) return;
+    if (d.r === P) FM.hitStop(.09);
+    else if (d.killer === P) FM.hitStop(.07);
+  });
+  FM.on('race:start', () => { hsT = 0; hsDebt = 0; });
+  function simDt(dt) {
+    if (hsT > 0) {
+      const k = Math.min(dt, hsT), lost = k * (1 - hsK);
+      hsT -= k;
+      if (mpLive()) hsDebt += lost;
+      return dt - lost;
+    }
+    if (hsDebt > 0) {
+      if (!mpLive()) { hsDebt = 0; return dt; }
+      const add = Math.min(hsDebt, dt * .5); hsDebt -= add;
+      return dt + add;
+    }
+    return dt;
+  }
+
   /* ---------- ana döngü (sabit adımlı fizik) ---------- */
   let last = performance.now(), acc = 0, loopErrs = 0;
   function loop(now) {
@@ -239,11 +278,12 @@
       if (pendingDpr && S.mode !== 'race') applyPendingDpr();   // çözünürlük düşürme yarış dışında (takılma görünmesin)
       watchPerf(dt);
       if ((!S.paused || mpLive()) && S.L) {
-        acc += dt;
+        const sdt = simDt(dt);                                   // hit-stop: kısa yavaşlama (+ çok oyunculuda geri ödeme)
+        acc += sdt;
         let n = 0;
         while (acc >= C.STEP && n < 12) { FM.game.step(C.STEP); acc -= C.STEP; n++; }
         if (n >= 12) acc = 0;
-        frameUpdate(dt);
+        frameUpdate(sdt);
       }
       if (shouldRender(now)) render();
     } catch (e) {
@@ -262,7 +302,7 @@
   const ITEM_KEYS = ['KeyE', 'ShiftLeft', 'ShiftRight', 'KeyJ'], AB_KEYS = ['KeyQ', 'KeyF', 'KeyK'];
   const DIR_KEYS = { ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0], ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1] };
   const aimKeys = new Set(), aimDirs = new Set();   // nişanı tutan tuşlar / nişan sırasında basılan yön tuşları
-  let lastDir = null;                                // son sıfırdan farklı yön {x, y, t} (bırakma anı toleransı için)
+  let curDir = null, prevDir = null, prevEnd = 0;    // şu anki yön; bir önceki yön ve bittiği an (bırakma toleransı)
   function dirNow() {
     let x = 0, y = 0;
     for (const k of aimDirs) { const d = DIR_KEYS[k]; if (d) { x += d[0]; y += d[1]; } }
@@ -270,22 +310,23 @@
     const l = Math.hypot(x, y);
     return l ? { x: Math.round(x / l * 100) / 100, y: Math.round(y / l * 100) / 100 } : null;
   }
-  function setAimDir() {
+  function setAimDir(firing) {
     const d = dirNow(), now = performance.now();
-    if (d) {
-      // çapraz tuşlar tam aynı anda bırakılmaz: çapraz yön 90 ms içinde tek eksene düştüyse çaprazı koru
-      if (lastDir && lastDir.x && lastDir.y && (!d.x || !d.y) && now - lastDir.t < 90 && aimDirs.size < 2) { I.ax = lastDir.x; I.ay = lastDir.y; return; }
-      lastDir = { x: d.x, y: d.y, t: now }; I.ax = d.x; I.ay = d.y;
-    } else if (lastDir && now - lastDir.t < 150) { I.ax = lastDir.x; I.ay = lastDir.y; }   // yön tuşu atıştan hemen önce bırakıldı
-    else { I.ax = 0; I.ay = 0; }
+    if (!(d === curDir || (d && curDir && d.x === curDir.x && d.y === curDir.y))) { if (curDir) { prevDir = curDir; prevEnd = now; } curDir = d; }
+    let u = d;
+    if (firing && prevDir) {
+      if (!d && now - prevEnd < 150) u = prevDir;                                          // yön tuşu atıştan hemen önce bırakıldı
+      else if (d && (!d.x || !d.y) && prevDir.x && prevDir.y && now - prevEnd < 90) u = prevDir;   // çapraz tuşlar tam aynı anda bırakılmadı
+    }
+    I.ax = u ? u.x : 0; I.ay = u ? u.y : 0;
   }
   // nişanı bitir: fire = true → bırakma darbesi (use/ab), false → iptal (odak kaybı, yarış dışı)
   function endAim(fire) {
     const k = I.aim;
-    if (k && fire) { setAimDir(); if (k === 'item') I.use = true; else I.ab = true; }
+    if (k && fire) { setAimDir(true); if (k === 'item') I.use = true; else I.ab = true; }
     else { I.ax = 0; I.ay = 0; }
     aimKeys.clear(); aimDirs.clear();
-    I.aim = null; lastDir = null;
+    I.aim = null; curDir = prevDir = null;
   }
   const aimable = kind => !!(FM.game && typeof FM.game.aimable === 'function' && FM.game.aimable(kind));
   window.addEventListener('keydown', e => {
@@ -299,7 +340,7 @@
     if (kind) {
       if (I.aim === kind) { aimKeys.add(c); return; }                         // aynı nişanın ikinci tuşu
       if (I.aim) endAim(true);                                               // diğer nişan sürerken: onu at
-      if (aimable(kind)) { I.aim = kind; aimKeys.add(c); aimDirs.clear(); lastDir = null; I.ax = 0; I.ay = 0; }
+      if (aimable(kind)) { I.aim = kind; aimKeys.add(c); aimDirs.clear(); curDir = prevDir = null; I.ax = 0; I.ay = 0; }
       else if (kind === 'item') I.use = true; else I.ab = true;              // yönsüz: hemen
       return;
     }
@@ -338,7 +379,11 @@
   // çok oyunculu yarışta odak/görünürlük kaybı duraklatma menüsü açmaz (yarış zaten durmaz)
   // odak kaybı: basılı tuşların keyup'ı gelmez → tutma ve nişan durumu sıfırlanır (nişan ATILMADAN iptal)
   window.addEventListener('blur', () => { I.jh = I.dh = false; endAim(false); if (S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { toggle: false, force: true }); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { force: true }); last = performance.now(); dirty = true; });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { I.jh = I.dh = false; endAim(false); }
+    if (document.hidden && S.mode === 'race' && !S.paused && !mpLive()) FM.emit('ui:pause', { force: true });
+    last = performance.now(); dirty = true;
+  });
   if (document.fonts && document.fonts.addEventListener) { try { document.fonts.addEventListener('loadingdone', () => { dirty = true; }); } catch (e) { } }
 
   /* ---------- geliştirici modu: ?dev=1&scene=race&t=6&char=Kral&theme=2&seed=5 ----------
@@ -361,6 +406,12 @@
       if (scene === 'podium') { S.mode = 'podium'; S.podiumT = 2; FM.emit('ui:podium', S.lastResult); for (let i = 0; i < 120; i++) frameUpdate(1 / 60); }
       updateCamera(0, true);
       for (let i = 0; i < 30; i++) frameUpdate(1 / 120);
+      // nişan önizlemesi (yalnızca geliştirici): &aim=item|ab&item=dyn&ax=0.7&ay=-0.7 → oyuncuya eşya/dolu güç + nişan
+      if ((P.aim === 'item' || P.aim === 'ab') && S.player) {
+        const pl = S.player;
+        if (P.aim === 'item') pl.item = FM.ITEMS[P.item] ? P.item : (pl.item || 'dyn'); else pl.charge = 100;
+        I.aim = P.aim; I.ax = +P.ax || 0; I.ay = +P.ay || 0;
+      }
       S.paused = P.run !== '1';
     } else {
       // menü / ui ekranları: demo arka planda

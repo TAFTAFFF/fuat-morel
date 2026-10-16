@@ -1,4 +1,5 @@
-// Kullanım: node dev/net-browser.js [aracı 0|1|2]   (varsayılan: tercih edilen ilk aracı)
+// Kullanım: node dev/net-browser.js [aracı 0|1|2] [--yerel]   (varsayılan: tercih edilen ilk aracı)
+//   --yerel: dev/broker.js yerel aracısını başlatır; sayfa ?brokerUrl= ile, node oyuncular da ona bağlanır (NET_BROKER=ws://.../mqtt de olur).
 // GERÇEK oyunu (index.html) tek bir headless Chrome'da açar (DevTools protokolü), sayfayı EV SAHİBİ yapar; node'da 2 sahte oyuncu
 // (js/core.js + js/net.js, vm) katılır. Dener: tarayıcı WebSocket yolu, kayıtta pid, lobi, start, iki yönlü durum akışı + olaylar,
 // sayfa DONDURMA (telefon arka plana atıldı: Page.setWebLifecycleState frozen) → ev sahibi göçü → geri dönüş, toLobby,
@@ -13,6 +14,7 @@ const netSrc = fs.readFileSync(path.join(root, 'js', 'net.js'), 'utf8');
 const chromePath = [process.env.CHROME, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(p => p && fs.existsSync(p));
 if (!chromePath) { console.error('Chrome/Edge bulunamadı'); process.exit(1); }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+let BURL = process.env.NET_BROKER || null;
 function waitFor(fn, ms, what) {
   return new Promise((res, rej) => {
     const t0 = Date.now();
@@ -26,7 +28,7 @@ function client(name) {
   const store = {};
   const sb = { console, Math, Date, JSON, setTimeout, clearTimeout, setInterval, clearInterval, performance, crypto: globalThis.crypto, TextEncoder, TextDecoder, WebSocket, URL, URLSearchParams,
     localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
-    location: { search: '', href: 'https://ornek.github.io/fuat-morel/index.html' }, navigator: { maxTouchPoints: 0, onLine: true }, history: { replaceState() { } },
+    location: { search: BURL ? '?brokerUrl=' + encodeURIComponent(BURL) : '', href: 'https://ornek.github.io/fuat-morel/index.html' }, navigator: { maxTouchPoints: 0, onLine: true }, history: { replaceState() { } },
     document: { hidden: false, addEventListener() { } }, addEventListener() { } };
   sb.window = sb; vm.createContext(sb);
   vm.runInContext(coreSrc, sb, { filename: 'core.js' }); vm.runInContext(netSrc, sb, { filename: 'net.js' });
@@ -56,8 +58,10 @@ function cdp(wsUrl) {
 }
 
 (async () => {
+  let broker = null;
+  if (process.argv.includes('--yerel') && !BURL) { broker = await require('./broker.js').start({ port: 0 }); BURL = broker.url; console.log('Yerel aracı: ' + BURL); }
   const profile = path.join(os.tmpdir(), 'fm-netb-' + process.pid);
-  const url = 'file:///' + root.split(path.sep).join('/') + '/index.html?mobile=1';
+  const url = 'file:///' + root.split(path.sep).join('/') + '/index.html?mobile=1' + (BURL ? '&pres=0&brokerUrl=' + encodeURIComponent(BURL) : '');
   const ch = spawn(chromePath, ['--headless=new', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []), '--disable-gpu', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-allow-origins=*',
     '--user-data-dir=' + profile, '--window-size=844,390', url], { stdio: 'ignore' });
   const killChrome = () => { try { ch.kill(); } catch (e) { } };
@@ -79,7 +83,7 @@ function cdp(wsUrl) {
     });
     await page.send('Runtime.enable'); await page.send('Page.enable');
     await waitFor(() => page.eval('!!(window.FM && FM.net && FM.S && FM.S.mode !== "boot")'), 20000, 'oyun yüklendi');
-    const bi = process.argv[2] != null ? +process.argv[2] : await page.eval('FM.net.PREF[0]');
+    const bi = process.argv[2] != null && /^\d$/.test(process.argv[2]) ? +process.argv[2] : await page.eval('FM.net.PREF[0]');
     console.log('=== Tarayıcı ev sahibi, aracı ' + bi + ' ===');
 
     // kimlik kayıtta
@@ -151,7 +155,7 @@ function cdp(wsUrl) {
     await sleep(800);
 
     // ?oda=KOD linkiyle açılış
-    await page.send('Page.navigate', { url: url.replace('?mobile=1', '?oda=' + code.toLowerCase()) });
+    await page.send('Page.navigate', { url: url.replace('?mobile=1', '?oda=' + code.toLowerCase() + '&mobile=1') });
     await waitFor(() => page.eval('!!(window.FM && FM.net)'), 15000, 'link sayfası');
     const lk = await page.eval('({c: FM.net.codeFromUrl(), cleared: (FM.net.clearUrlCode(), location.search.indexOf("oda=") < 0)})');
     if (lk.c === code && lk.cleared) pass('?oda=' + code.toLowerCase() + ' linkinden kod okundu, clearUrlCode adres çubuğunu temizledi'); else fail('link açılışı: ' + JSON.stringify(lk));
@@ -167,5 +171,6 @@ function cdp(wsUrl) {
   console.log('\nSONUÇ: ' + ok.length + ' geçti, ' + bad.length + ' kaldı');
   await sleep(700);
   try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { }
+  if (broker) await broker.close();
   process.exit(bad.length ? 1 : 0);
 })();

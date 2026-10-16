@@ -42,10 +42,11 @@
   /* =================== yardımcılar =================== */
   const now = () => (FM.net && FM.net.now ? FM.net.now() : Date.now());
   const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const hasKey = (T, k) => typeof k === 'string' && !!T && Object.prototype.hasOwnProperty.call(T, k);   // '__proto__' vb. geçemez
   const num = v => typeof v === 'number' && isFinite(v);
   const int = (v, d) => num(v) ? Math.round(v) : (d || 0);
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
-  const tok = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v);
+  const tok = v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(v) && !(v in Object.prototype);   // '__proto__' vb. kimlik olamaz
   const r1 = v => num(v) ? Math.round(v * 10) / 10 : undefined;
   const r2 = v => num(v) ? Math.round(v * 100) / 100 : undefined;
   const cx = r => r.x + r.w / 2, cy = r => r.y + r.h / 2;
@@ -172,7 +173,7 @@
     r.h = num(s.h) && s.h > 4 && s.h < 120 ? s.h : C.RH;
     for (const t of TIM) { const v = s[t[1]]; r[t[0]] = num(v) && v > 0 ? v : 0; }
     for (const t of INT) { const v = s[t[1]]; r[t[0]] = num(v) ? Math.round(v) : 0; }
-    r.item = typeof s.it === 'string' && FM.ITEMS && FM.ITEMS[s.it] ? s.it : null;
+    r.item = hasKey(FM.ITEMS, s.it) ? s.it : null;
     r.stale = !!s._stale;
     if (!r.onGround) r._avy = r.vy;
     const nearR = !r.dead && game.near && game.near(r);
@@ -367,7 +368,7 @@
   const H = {
     // eşya: aynı varlık herkesin dünyasında (sahibi = o yarışçı, hedefler kimlikle)
     it(from, d) {
-      const r = own(from, d.r); if (!r || !FM.ITEMS[d.k] || !num(d.x) || !num(d.y)) return;
+      const r = own(from, d.r); if (!r || !hasKey(FM.ITEMS, d.k) || !num(d.x) || !num(d.y)) return;
       const p = unpackAim(d, { x: d.x, y: d.y, vx: num(d.vx) ? d.vx : 0, vy: num(d.vy) ? d.vy : 0, rx: num(d.rx) ? d.rx : r.x });
       if (d.k === 'mis') p.tgt = byRid.get(d.t) || null;
       if (d.k === 'bolt') p.tg = (Array.isArray(d.ts) ? d.ts.slice(0, 6) : []).map(id => byRid.get(id)).filter(Boolean);
@@ -446,7 +447,7 @@
   };
 
   /* =================== start / next =================== */
-  function validChar(c) { return typeof c === 'string' && FM.CH && FM.CH[c] ? c : 'TAFTAF'; }
+  function validChar(c) { return hasKey(FM.CH, c) ? c : 'TAFTAF'; }
   function validCos(type, id, def) { const L = FM.COSMETICS && FM.COSMETICS[type]; return tok(id) && (!L || L.some(x => x.id === id)) ? id : def; }
   function sanitizeStart(P) {
     if (!isObj(P)) return null;
@@ -501,7 +502,7 @@
     K.q = Math.abs(d.seed | 0) % 100000;                // tur anahtarı: eski turun tampondaki örnekleri yok sayılır
     const mods = FM.meta && typeof FM.meta.mods === 'function' ? FM.meta.mods(null, { room: d.mods || true }) : null;
     // insanlar: lobi sırasıyla; takma ad aynıysa "Ali 2"
-    const racers = [], nickN = {};
+    const racers = [], nickN = Object.create(null);
     d.roster.forEach((p, i) => {
       const r = game.mkRacer(p.char, i, false);
       nickN[p.nick] = (nickN[p.nick] || 0) + 1;
@@ -511,7 +512,7 @@
       racers.push(r);
     });
     // botlar: yalnızca ev sahibinde simüle edilir; aynı karakterden ikinci bot "Kral 2"
-    const botN = {};
+    const botN = Object.create(null);
     d.bots.forEach((b, j) => {
       const r = game.mkRacer(b.char, d.roster.length + j, host);
       botN[b.char] = (botN[b.char] || 0) + 1;

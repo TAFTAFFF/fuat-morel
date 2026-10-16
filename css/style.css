@@ -3157,3 +3157,7 @@ a.btn { text-decoration: none; }
 .tbtn.cancel .tb-in { background: rgba(255, 77, 94, .88) !important; }
 .tbtn.cancel::after { content: '✕ İPTAL'; position: absolute; inset: 0; display: grid; place-items: center; font: clamp(11px, 2.6vh, 15px)/1 var(--fh); color: #fff; pointer-events: none; text-shadow: 0 1px 0 #600; z-index: 3; }
 .tbtn.cancel .tb-in > * { opacity: 0; }
+
+/* İpucu: yaklaşan engel için basılacak tuş nabız atar */
+.tbtn.hint .tb-in { animation: tbHint .32s ease-in-out infinite alternate; border-color: #fff !important; }
+@keyframes tbHint { from { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, .0); } to { transform: scale(1.1); box-shadow: 0 0 0 .8vh rgba(255, 255, 255, .55), 0 0 2.4vh 1vh rgba(120, 200, 255, .8); } }

@@ -3019,6 +3019,42 @@
       document.fonts.addEventListener('loadingdone', () => { twCache.clear(); hcache.clear(); iconCache.clear(); urlCache.clear(); });
     }
   } catch (e) { }
+  /* Ne yapmalı? (game.js FM.S.hint): yaklaşan engel için oyuncunun başının üstünde işaret (ZIPLA ↑, ÇİFT ↑↑, KAY ↓, TIRMAN)
+     ve engelin başında yerde ünlem. Ayarlar › İpuçları (varsayılan açık). Kare başına birkaç yol çizimi: ucuz. */
+  const HINT = { jump: ['#4fb3ff', 'ZIPLA'], dbl: ['#4fb3ff', 'ÇİFT ZIPLA'], slide: ['#ffb020', 'KAY'], climb: ['#5ee07a', 'TIRMAN'] };
+  function arrow(g, x, y, s, up) {
+    g.beginPath();
+    const d = up ? -1 : 1;
+    g.moveTo(x, y + d * s); g.lineTo(x + s * .9, y); g.lineTo(x + s * .36, y); g.lineTo(x + s * .36, y - d * s * .9);
+    g.lineTo(x - s * .36, y - d * s * .9); g.lineTo(x - s * .36, y); g.lineTo(x - s * .9, y); g.closePath();
+  }
+  function drawHint(ctx, S, P) {
+    const st = FM.save && FM.save.settings;
+    const H = S.hint;
+    if (!H || !P || P.dead > 0 || P.frozen > 0 || S.mode !== 'race' || (st && st.hints === false)) return;
+    const k = HINT[H.act]; if (!k || !(H.eta < 1.3)) return;
+    const cam = S.cam, t = performance.now() / 1000, urg = Math.max(0, Math.min(1, 1 - H.eta / 1.3));
+    const px = P.x + P.w + 24 - cam.x, py = P.y - cam.y + 2, sc = .85 + urg * .35 + Math.sin(t * 16) * .04 * urg;   // karakterin önünde (plaka ile çakışmasın)
+    ctx.save(); ctx.globalAlpha = .55 + urg * .45;
+    ctx.translate(px, py); ctx.scale(sc, sc);
+    ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fillStyle = 'rgba(16,10,40,.78)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = k[0]; ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    if (H.act === 'slide') { arrow(ctx, 0, 1, 10, false); ctx.fill(); }
+    else if (H.act === 'dbl') { arrow(ctx, 0, -3, 7, true); ctx.fill(); arrow(ctx, 0, 7, 7, true); ctx.fill(); }
+    else if (H.act === 'climb') { arrow(ctx, -2, 2, 9, true); ctx.fill(); ctx.fillRect(9, -12, 3, 24); }
+    else { arrow(ctx, 0, 2, 10, true); ctx.fill(); }
+    ctx.restore();
+    // engelin başında yerde nabız atan işaret
+    if (typeof H.x === 'number' && typeof H.y === 'number') {
+      const gx = H.x - cam.x, gy = H.y - cam.y;
+      if (gx > -20 && gx < FM.view.VW + 20) {
+        ctx.save(); ctx.globalAlpha = .35 + urg * .5;
+        ctx.beginPath(); ctx.ellipse(gx, gy - 2, 16 + Math.sin(t * 10) * 3, 5, 0, 0, Math.PI * 2); ctx.fillStyle = k[0]; ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
   /* Buzu kır: yerel oyuncu donmuşken ortada "BUZU KIR!" + kaç basış kaldığı (game.js ICE_TAPS = 4; ice:crack olayı) */
   {
     const base = R.drawHUD;
@@ -3028,6 +3064,7 @@
       base.call(this, ctx);
       try {
         const S = FM.S, P = S.player, V = FM.view;
+        drawHint(ctx, S, P);
         if (!P || !(P.frozen > 0) || P.dead > 0 || S.mode !== 'race' || !ctx || !FM.gfx) return;
         const need = 4, left = Math.max(0, need - (P.iceHits | 0)), t = performance.now() / 1000;
         crackT = Math.max(0, crackT - 1 / 60);

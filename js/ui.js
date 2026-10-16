@@ -84,7 +84,7 @@
   function click() { try { if (FM.audio && typeof FM.audio.click === 'function') FM.audio.click(); } catch (e) { /* ses yok */ } }
   function sfx(name) { try { if (FM.audio && typeof FM.audio.play === 'function') FM.audio.play(name); } catch (e) { /* ses yok */ } }
   /* ---------- ayarlar (tanımsız = varsayılan; eski kayıtlar yeni anahtarları bilmez) ---------- */
-  const SET_DEF = { haptic: true, shake: true, aimAssist: true, notify: false, lefty: false, btnSize: 'M' };
+  const SET_DEF = { haptic: true, shake: true, aimAssist: true, notify: false, lefty: false, btnSize: 'M', hints: true, fps: false };
   function setting(k) {
     const s = (FM.save && FM.save.settings) || {};
     const v = s[k];
@@ -1420,6 +1420,7 @@
           : iosTab() ? '<div class="srow"><span class="s-ic">' + svg('full') + '</span><span class="s-l">Tam ekran (iPhone)</span><button class="btn sm b-gold" data-act="iosfull">NASIL?</button></div>' : '') +
         toggleRow('shake', 'Ekran sarsıntısı', 'shake') +
         toggleRow('fps', 'FPS göstergesi', 'sparkle') +
+        toggleRow('hints', 'İpuçları (ne yapmalı?)', 'info') +
       '</div>';
     // oyun hissi: dokunmatik düzen + titreşim + nişan yardımı
     const canVib = touchMode || (typeof navigator !== 'undefined' && !!navigator.vibrate);
@@ -2542,6 +2543,14 @@
       if (P.id !== tcS.ch) {
         tcS.ch = P.id; const b = $('.tb-pp', Ls.race); if (b) b.innerHTML = pt(P.id, 72, { ring: false });
         tcEls.power.classList.toggle('can-aim', aimable('ab'));
+      }
+      // ne yapmalı? (game.js FM.S.hint): yaklaşan engelin tuşu yanıp söner — Ayarlar › İpuçları (varsayılan açık)
+      const H = setting('hints') !== false && S.mode === 'race' && P.dead <= 0 ? S.hint : null;
+      const hk = H && H.eta < .8 ? (H.act === 'slide' ? 'slide' : (H.act === 'jump' || H.act === 'dbl' || H.act === 'climb') ? 'jump' : '') : '';
+      if (hk !== tcS.hint) {
+        tcS.hint = hk;
+        tcEls.jump.classList.toggle('hint', hk === 'jump');
+        tcEls.slide.classList.toggle('hint', hk === 'slide');
       }
     }
     tcRaf = requestAnimationFrame(tcLoop);

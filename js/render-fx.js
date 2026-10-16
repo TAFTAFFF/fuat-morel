@@ -271,6 +271,23 @@
     });
   }
 
+  /* TEHLİKE DİLİ: her zararlı varlığın arkasında aynı sıcak kırmızı-turuncu hale (önbellekli sprite, source-over →
+     açık şeker/çöl göğünde de koyu kale/uzay göğünde de okunur), hafif nabız. Dost nesneler (ped, mantar, altın) bunu KULLANMAZ. */
+  function dangerSprite() {
+    return sp('danger', 96, 96, 48, 48, g => {
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, 48);
+      gr.addColorStop(0, 'rgba(255,130,60,.72)'); gr.addColorStop(.3, 'rgba(255,60,36,.7)'); gr.addColorStop(.62, 'rgba(255,40,30,.32)'); gr.addColorStop(1, 'rgba(255,40,30,0)');
+      g.fillStyle = gr; g.fillRect(-48, -48, 96, 96);
+    });
+  }
+  function danger(ctx, x, y, r, a) {
+    const pulse = .82 + .18 * Math.sin(FXT * 9 + x * .013);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = (a == null ? .9 : a) * pulse;
+    spr(ctx, dangerSprite(), x, y, 0, r / 48);
+    ctx.globalAlpha = 1;
+  }
+
   function starSprite(hex) {
     return sp('star:' + hex, 34, 34, 17, 17, g => {
       const halo = g.createRadialGradient(0, 0, 2, 0, 0, 16);
@@ -787,8 +804,14 @@
       g.closePath();
       const tg = g.createLinearGradient(-20, -20, 20, 20);
       tg.addColorStop(0, '#f7f9fc'); tg.addColorStop(.5, '#b8c1cf'); tg.addColorStop(1, '#5a6475');
-      g.lineWidth = 3.4; g.strokeStyle = '#161a24'; g.stroke();
+      g.lineWidth = 4.2; g.strokeStyle = '#161a24'; g.stroke();
       g.fillStyle = tg; g.fill();
+      // TEHLİKE DİLİ: dişler kırmızı-turuncu (nötr gri disk "zararsız" okunuyordu)
+      g.save(); g.clip();
+      const dg = g.createRadialGradient(0, 0, R1 - 1.5, 0, 0, R2);
+      dg.addColorStop(0, 'rgba(232,32,46,0)'); dg.addColorStop(.3, 'rgba(232,32,46,.55)'); dg.addColorStop(1, 'rgba(255,96,60,.95)');
+      g.fillStyle = dg; g.fillRect(-24, -24, 48, 48);
+      g.restore();
       // diş kenarı bileme parlaması
       g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = .8;
       g.beginPath();
@@ -1307,6 +1330,7 @@
     }
     const vx = num(e.vx, 0), dir = vx < 0 ? -1 : 1, spd = Math.abs(vx);
     const rotS = sawRotSprite(), blurS = sawBlurSprite();
+    danger(ctx, x, y, 42 * sc, a);
     for (let i = 3; i >= 1; i--) {
       ctx.globalAlpha = a * .13 * (4 - i) / 3 * clamp(spd / 500, 0, 1);
       spr(ctx, rotS, x - dir * i * 7 * clamp(spd / 700, .3, 1.4), y, v.rot - dir * i * .35, s2);
@@ -1336,6 +1360,7 @@
     const v = vis(e), age = num(e.age, 0), fuse = Math.max(.1, num(e.fuse, 1));
     const prog = clamp(age / fuse, 0, 1);
     const tip = dynTip(e, v);
+    danger(ctx, x, y, 30, .55 + .4 * prog);
     // uyarı nabzı (fitil sonuna doğru hızlanır)
     if (prog > .45) {
       const f = 10 + 40 * prog, pulse = .5 + .5 * Math.sin(age * f);
@@ -1382,10 +1407,8 @@
     if (!inView(x, y, 60)) return;
     const v = vis(e), age = num(e.age, 0), life = num(e.life, 10);
     if (e.fly) {
-      // fırlatılan tuzak (yönlü atış): havada takla atan kapalı çeneler + hafif ışık izi
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .35;
-      spr(ctx, glowSprite('#cfd6e4'), x, y - h / 2, 0, .8);
-      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      // fırlatılan tuzak (yönlü atış): havada takla atan kapalı çeneler + tehlike halesi
+      danger(ctx, x, y - h / 2, 26, .7);
       spr(ctx, trapClosedSprite(), x, y - h / 2 + 4, num(v.spin, 0), .66 * TRAP_SC, .66 * TRAP_SC);
       resetXf(ctx);
       return;
@@ -1403,6 +1426,7 @@
       const t = age - .5;
       const sy = t < .16 ? lerp(.55, 1.18, t / .16) : t < .3 ? lerp(1.18, 1, (t - .16) / .14) : 1;
       const sx = t < .16 ? lerp(1.1, .94, t / .16) : t < .3 ? lerp(.94, 1, (t - .16) / .14) : 1;
+      danger(ctx, x, y - 5, 34, a * .8);   // kurulu tuzak: zeminde kırmızı tehlike halesi
       ctx.globalAlpha = a;
       spr(ctx, trapOpenSprite(), x, y, 0, sx * TRAP_SC, sy * TRAP_SC);
       // dişler boyunca kayan tehlike parıltısı
@@ -1468,6 +1492,7 @@
     // ağ
     const mx = x + 4, my = y + 2, mw = w - 8, mh = h - 8;
     const meshA = active ? 1 : clamp((age - .25) / .35, 0, 1) * .45;
+    if (active) danger(ctx, x + w / 2, y + h * .55, 52, a * .55);   // aktif ağ: ortak tehlike halesi (mavi arklar kimliği korur)
     if (meshA > 0) {
       const flick = active ? .82 + .18 * Math.sin(age * 31 + v.seed) * Math.sin(age * 17) : 1;
       const r1 = Math.max(.02, Math.min(1, rise)), top = my + mh * (1 - r1);
@@ -1539,6 +1564,7 @@
     const bob = flying ? 0 : Math.sin(age * 7) * 2;
     const ca = Math.cos(ang), sa = Math.sin(ang);
     const nx = x - ca * 21 * MIS_SC, ny = y + bob - sa * 21 * MIS_SC;
+    danger(ctx, x, y + bob, 36, flying ? .95 : .6);
     // egzoz alevi + ışık
     const fl = flying ? 1.05 + rnd() * .3 : .38 + rnd() * .14;
     ctx.globalCompositeOperation = 'lighter';
@@ -1617,6 +1643,7 @@
         ctx.beginPath(); ctx.ellipse(cx, fy, 18 + 6 * fl, 4.5 + 1.5 * fl, 0, 0, TAU); ctx.stroke();
       }
     }
+    danger(ctx, cx, cy + 2, 46 * app, .7);   // fırtına bulutu: tehlike halesi
     // yağmur
     ctx.strokeStyle = '#a9c8ff'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -1779,7 +1806,7 @@
       ctx.globalAlpha = .55; ctx.lineWidth = 2.6; ctx.strokeStyle = '#ff2a2a'; ctx.stroke();
       ctx.globalCompositeOperation = 'source-over';
     }
-    ctx.globalAlpha = 1;
+    danger(ctx, x, y, 30, .85);   // kara karga koyu göklerde kayboluyordu
     spr(ctx, crowSprite(f), x, y, 0, sc * fx * pop, sc * pop);
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = .7 + .3 * Math.sin(age * 20);
@@ -1804,6 +1831,7 @@
     if (fade <= 0) return;
     // dalga +x yönünde çizilir; geri/eğik gidiyorsa ön cephe etrafında döndürülür (aynalama dahil)
     const ang = waveAng(e);
+    danger(ctx, x, y, 48, fade * .55);
     ctx.save();
     if (ang) { ctx.translate(x, y); ctx.rotate(ang); ctx.translate(-x, -y); }
     try { drawWaveBody(ctx, e, x, y, age, fade); }
@@ -2101,6 +2129,14 @@
               P({ k: 'spark', x: e.x - dir * 5 + (rnd() - .5) * 4, y: e.y + r - 1, vx: -dir * (140 + rnd() * 260), vy: -(90 + rnd() * 260), life: .16 + rnd() * .22, c: rnd() < .5 ? '#fff2a8' : '#ffb347', s: 1.6 + rnd(), g: 900, add: true });
             }
             if (rnd() < dt * 8) P({ k: 'puff', x: e.x - dir * 8, y: e.y + r - 2, vx: -dir * 40, vy: -20, life: .35, c: 'rgba(200,200,210,.6)', s: 5 + rnd() * 3, g: -20, drag: 3 });
+          } else if (Math.abs(num(e.vx, 0)) > 150 && inView(e.x, e.y, 120) && budget()) {
+            // havada: kısa kızıl kıvılcım izi (tehlike dili: "bu şey geliyor")
+            v.acc += dt * 22;
+            const dir = num(e.vx, 0) < 0 ? -1 : 1;
+            while (v.acc >= 1) {
+              v.acc -= 1;
+              P({ k: 'spark', x: e.x - dir * 6, y: e.y + (rnd() - .5) * 10, vx: -dir * (80 + rnd() * 120), vy: (rnd() - .5) * 80, life: .16 + rnd() * .16, c: rnd() < .5 ? '#ff6a3a' : '#ffb347', s: 1.8, g: 300, add: true });
+            }
           }
           break;
         }
@@ -2331,6 +2367,28 @@
       P({ k: 'glow', x, y: y - 8, vx: 0, vy: 0, life: .2, c: '#ffffff', s: 40, add: true });
     }
   });
+  /* Zıplama / kayma / çakılma geri bildirimi (yerel oyuncuda daha güçlü, rakiplerde yarım) */
+  const ownR = r => r === S.player;
+  const feetOf = r => [rcx(r), num(r.y, 0) + num(r.h, 42)];
+  FM.on('jump', d => {
+    const r = d && d.r; if (!r || !inView(rcx(r), num(r.y, 0), 120) || !budget()) return;
+    const [x, y] = feetOf(r), k = ownR(r) ? 1 : .5;
+    if (d.dbl) {   // çift zıplama: parlak halka + ışıltı
+      if (FM.fx && FM.fx.ring) FM.fx.ring(x, y - 10, ownR(r) ? 36 : 26, '#e8fbff', .32, 5);
+      for (let i = 0; i < 6 * k; i++) P({ k: 'twinkle', x: x + (rnd() - .5) * 30, y: y - 6 + (rnd() - .5) * 16, vx: (rnd() - .5) * 60, vy: 20 + rnd() * 60, life: .3 + rnd() * .2, c: '#e8fbff', s: 10 + rnd() * 8, add: true, rot: rnd() });
+    } else for (let i = 0; i < 5 * k; i++) P({ k: 'puff', x: x + (rnd() - .5) * 18, y: y - 2, vx: (rnd() - .5) * 120, vy: -10 - rnd() * 40, life: .3 + rnd() * .2, c: 'rgba(255,255,255,.75)', s: 7 + rnd() * 5, g: -30, drag: 3 });
+  });
+  FM.on('slide', d => {
+    const r = d && d.r; if (!r || !inView(rcx(r), num(r.y, 0), 120) || !budget()) return;
+    const [x, y] = feetOf(r), face = r.face === -1 ? -1 : 1, k = ownR(r) ? 1 : .5;
+    for (let i = 0; i < 6 * k; i++) P({ k: 'puff', x: x - face * (6 + rnd() * 10), y: y - 3, vx: -face * (60 + rnd() * 120), vy: -(10 + rnd() * 30), life: .35 + rnd() * .2, c: 'rgba(255,255,255,.8)', s: 8 + rnd() * 6, g: -30, drag: 2.5 });
+    for (let i = 0; i < 3 * k; i++) P({ k: 'spark', x: x - face * 10, y: y - 6 - i * 6, vx: -face * (260 + rnd() * 160), vy: 0, life: .18 + rnd() * .1, c: 'rgba(255,255,255,.85)', s: 2.4, g: 0 });   // alçak hız çizgileri
+  });
+  FM.on('slamLand', d => {
+    const r = d && d.r; if (!r || !inView(rcx(r), num(r.y, 0), 120)) return;
+    const [x, y] = feetOf(r);
+    if (FM.fx && FM.fx.ring) FM.fx.ring(x, y - 2, ownR(r) ? 70 : 46, '#fff2c0', .4, 7);
+  });
   FM.on('race:start', () => { snaps.length = 0; ink.on = false; ink.blobs = []; ink.last = 0; frost.t = 0; });
   FM.on('match:start', () => { snaps.length = 0; ink.on = false; ink.blobs = []; ink.last = 0; });
 
@@ -2468,7 +2526,7 @@
     }
     // ana gövde
     const gr = g.createRadialGradient(-R0 * .25, -R0 * .3, R0 * .1, 0, 0, R0 * 1.3);
-    gr.addColorStop(0, '#2c2444'); gr.addColorStop(.6, INK_COL); gr.addColorStop(1, '#0a0810');
+    gr.addColorStop(0, 'rgba(52,42,80,.95)'); gr.addColorStop(.6, 'rgba(21,17,31,.92)'); gr.addColorStop(1, 'rgba(10,8,16,.8)');   // yarı saydam gövde
     g.fillStyle = gr;
     body(); g.fill();
     // uydu damlacıklar
@@ -2496,14 +2554,16 @@
   function startInk() {
     const VW = V.VW || 1000, VH = V.VH || 540;
     ink.on = true; ink.t0 = FXT; ink.blobs = []; ink.drips = [];
-    const n = 4 + ((rnd() * 2) | 0);
+    // göz konforu: 3 küçük leke, en çok ~.7 alfa, yerel oyuncunun çevresi (ekran konumu) boş bırakılır
+    const n = 3;
+    const pl = S.player, px = pl ? rcx(pl) - S.cam.x : VW * .4, py = pl ? rcy(pl) - S.cam.y : VH * .55;
     const placed = [];
     for (let i = 0; i < n; i++) {
       let x = 0, y = 0, R0 = 0;
-      for (let tries = 0; tries < 12; tries++) {
-        if (i === 0) { x = VW * (.36 + rnd() * .28); y = VH * (.34 + rnd() * .22); R0 = 82 + rnd() * 24; }
-        else { x = VW * (.08 + rnd() * .84); y = VH * (.1 + rnd() * .72); R0 = 38 + rnd() * 40; }
-        let ok = true;
+      for (let tries = 0; tries < 16; tries++) {
+        if (i === 0) { x = VW * (.3 + rnd() * .45); y = VH * (.2 + rnd() * .4); R0 = 54 + rnd() * 18; }
+        else { x = VW * (.08 + rnd() * .84); y = VH * (.1 + rnd() * .72); R0 = 30 + rnd() * 26; }
+        let ok = Math.hypot(x - px, y - py) > R0 + 70;
         for (const q of placed) if (Math.hypot(q.x - x, q.y - y) < (q.R + R0) * .95) { ok = false; break; }
         if (ok) break;
       }
@@ -2521,7 +2581,7 @@
   }
   function drawInk(ctx, amount) {
     const age = FXT - ink.t0;
-    const fade = clamp(amount / .7, 0, 1);
+    const fade = clamp(amount / .7, 0, 1) * .68;   // en çok ~.7: sert siyah duvar değil, yarı saydam leke
     for (const b of ink.blobs) {
       const t = age - b.delay;
       if (t <= 0) continue;
@@ -2678,7 +2738,7 @@
       const key = Math.round(VW) + 'x' + Math.round(VH);
       if (!frost.c || frost.key !== key) buildFrost();
       const a = Math.min(1, frost.t / .18) * Math.min(1, num(p.frozen, 0) / .45);
-      ctx.globalAlpha = a * .92;
+      ctx.globalAlpha = a * .7;   // göz konforu: kırağı göz almasın
       ctx.drawImage(frost.c, 0, 0, VW, VH);
       ctx.globalAlpha = 1;
     }
@@ -2689,7 +2749,7 @@
     if (inRace && p && p.dead > 0) {
       const d = num(p.dead, 0);
       const a = Math.min(1, (1.1 - d) / .12) * Math.min(1, d / .5);
-      if (a > 0) { ctx.globalAlpha = a * .85; ctx.drawImage(redC, 0, 0, VW, VH); }
+      if (a > 0) { ctx.globalAlpha = a * .7; ctx.drawImage(redC, 0, 0, VW, VH); }
     }
     // her zaman hafif vinyet (+ kar/kale tema tonu aynı tuvalde pişmiş: tek tam ekran geçiş)
     ctx.globalAlpha = 1;
@@ -2699,7 +2759,7 @@
     // renkli tam ekran flaş
     const fl = S.flash;
     if (fl && fl.a > .003) {
-      ctx.globalAlpha = Math.min(1, fl.a);
+      ctx.globalAlpha = Math.min(.55, fl.a);   // tam ekran flaş en çok .55: kör etmesin
       ctx.fillStyle = fl.col || '#ffffff';
       ctx.fillRect(0, 0, VW, VH);
     }

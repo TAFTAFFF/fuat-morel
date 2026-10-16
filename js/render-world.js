@@ -207,14 +207,15 @@
      yarışçılar (oyun katmanı) bunun ÜSTÜNE çizildiğinden öne çıkar. Açık temalarda açık pus rengi, koyu temalarda
      orta-koyu doygunluğu düşük bir ton (parlak pencereler/yıldızlar yumuşar). Perde aşağı (oyun alanına) doğru güçlenir. */
   const VEIL = {
-    forest: { c: '#d4e8ff', a0: .05, a1: .21 },
-    candy: { c: '#ffe6f4', a0: .06, a1: .24 },
-    snow: { c: '#e2efff', a0: .05, a1: .21 },
-    castle: { c: '#6a4a72', a0: .08, a1: .24 },
-    desert: { c: '#ffecc8', a0: .05, a1: .22 },
-    space: { c: '#23244e', a0: .10, a1: .28 },
-    city: { c: '#2a1f44', a0: .10, a1: .28 },
-    tropic: { c: '#d6f2fc', a0: .05, a1: .21 }
+    // 6. tur (göz konforu): perde güçlendi — arka plan daha soluk/düşük kontrast, oyun katmanı daha baskın
+    forest: { c: '#d4e8ff', a0: .08, a1: .30 },
+    candy: { c: '#f3e6ee', a0: .12, a1: .40 },
+    snow: { c: '#e2efff', a0: .08, a1: .30 },
+    castle: { c: '#6a4a72', a0: .10, a1: .30 },
+    desert: { c: '#f6e6c8', a0: .08, a1: .30 },
+    space: { c: '#23244e', a0: .12, a1: .32 },
+    city: { c: '#2a1f44', a0: .12, a1: .32 },
+    tropic: { c: '#d6f2fc', a0: .08, a1: .30 }
   };
   function drawVeil(ctx, P, VW, VH) {
     const v = VEIL[P.id] || VEIL.forest;
@@ -378,7 +379,7 @@
       }
       ctx.closePath();
       ctx.save(); ctx.translate(0, y0 - hg - 30);
-      ctx.fillStyle = cg(ctx, 'snow:aur' + k, g => LG(g, 0, 0, 0, hg + 60, [[0, rgba(cols[k], 0)], [.5, rgba(cols[k], .16)], [.86, rgba(cols[k], .42)], [1, rgba(cols[k], 0)]]));
+      ctx.fillStyle = cg(ctx, 'snow:aur' + k, g => LG(g, 0, 0, 0, hg + 60, [[0, rgba(cols[k], 0)], [.5, rgba(cols[k], .09)], [.86, rgba(cols[k], .24)], [1, rgba(cols[k], 0)]]));
       ctx.fill();
       ctx.restore();
     }
@@ -721,8 +722,9 @@
     if (yb + 160 < VH) { ctx.fillStyle = rgba(o.fog, .55); ctx.fillRect(0, yb + 160, VW, VH - yb - 160 + 1); }
   }
   const BUSH = {
-    forest: { salt: 610, f: .38, fy: .2, base: 488, sp: 30, r0: 16, r1: 30, amp: 14, p: .7, dark: '#245a2e', lit: '#357a3c', hi: 'rgba(160,230,120,0.35)', dots: ['#ff5a6e', '#ffd84a', '#ffffff'], fog: '#0f2e1c' },
-    candy: { salt: 620, f: .38, fy: .2, base: 490, sp: 30, r0: 16, r1: 30, amp: 14, p: 2.2, dark: '#c95a9c', lit: '#e47fbb', hi: 'rgba(255,230,245,0.6)', dots: ['#ff3d6a', '#3fd07a', '#ffcf3a', '#5ac8ff'], fog: '#6a1e4a' },
+    // göz konforu: en yakın arka katman düşük kontrast; parlak noktalar (altın/eşya sanılıyordu) kaldırıldı
+    forest: { salt: 610, f: .38, fy: .2, base: 488, sp: 30, r0: 16, r1: 30, amp: 14, p: .7, dark: '#2d643a', lit: '#3b7e45', hi: 'rgba(160,230,120,0.18)', dots: null, fog: '#0f2e1c' },
+    candy: { salt: 620, f: .38, fy: .2, base: 490, sp: 30, r0: 16, r1: 30, amp: 14, p: 2.2, dark: '#d58fbe', lit: '#e6abd0', hi: 'rgba(255,240,248,0.35)', dots: null, fog: '#6a1e4a' },
     snow: { salt: 630, f: .38, fy: .2, base: 492, sp: 30, r0: 16, r1: 30, amp: 14, p: 1.4, dark: '#9fb9dc', lit: '#d8e7f8', hi: 'rgba(255,255,255,0.9)', dots: null, fog: '#2a4672' },
     castle: { salt: 640, f: .38, fy: .2, base: 500, sp: 34, r0: 12, r1: 24, amp: 14, p: 3.1, dark: '#160a20', lit: '#3a1a3a', hi: null, dots: null, fog: '#07020c', crag: true }
   };
@@ -974,10 +976,11 @@
      TEMA ARKA PLANLARI
      ===================================================================== */
   const MT = {
-    forest: { top: '#9ab9e6', bot: '#b9d3f2', shadow: 'rgba(58,84,150,0.42)', snow: '#dce9fb', snowLine: .62, rim: 'rgba(255,255,255,0.55)', haze: '#cfe8ff', hazeA: .75, gully: 'rgba(60,80,140,0.14)' },
-    forest2: { top: '#7fb0d8', bot: '#a9cde8', shadow: 'rgba(40,80,120,0.4)', snow: null, snowLine: 0, rim: 'rgba(255,255,255,0.4)', haze: '#cfe8ff', hazeA: .7, gully: 'rgba(40,70,110,0.16)' },
-    snow: { top: '#d3e2f7', bot: '#a6bfe3', shadow: 'rgba(50,78,150,0.45)', snow: '#e6f0ff', snowLine: .72, rim: 'rgba(255,255,255,0.8)', haze: '#e1eeff', hazeA: .7, gully: 'rgba(40,70,140,0.18)' },
-    snow2: { top: '#88a8d8', bot: '#6c8ec4', shadow: 'rgba(30,50,110,0.45)', snow: '#dce8fa', snowLine: .52, rim: 'rgba(255,255,255,0.6)', haze: '#d6e6fb', hazeA: .6, gully: 'rgba(20,40,100,0.2)' },
+    // göz konforu: dağ gölgeleri yumuşadı, alt pus arttı (uzak katman düşük kontrast)
+    forest: { top: '#9ab9e6', bot: '#b9d3f2', shadow: 'rgba(58,84,150,0.28)', snow: '#dce9fb', snowLine: .62, rim: 'rgba(255,255,255,0.4)', haze: '#cfe8ff', hazeA: .82, gully: 'rgba(60,80,140,0.1)' },
+    forest2: { top: '#7fb0d8', bot: '#a9cde8', shadow: 'rgba(40,80,120,0.3)', snow: null, snowLine: 0, rim: 'rgba(255,255,255,0.3)', haze: '#cfe8ff', hazeA: .76, gully: 'rgba(40,70,110,0.12)' },
+    snow: { top: '#d3e2f7', bot: '#a6bfe3', shadow: 'rgba(50,78,150,0.3)', snow: '#e6f0ff', snowLine: .72, rim: 'rgba(255,255,255,0.6)', haze: '#e1eeff', hazeA: .8, gully: 'rgba(40,70,140,0.12)' },
+    snow2: { top: '#88a8d8', bot: '#6c8ec4', shadow: 'rgba(30,50,110,0.32)', snow: '#dce8fa', snowLine: .52, rim: 'rgba(255,255,255,0.45)', haze: '#d6e6fb', hazeA: .72, gully: 'rgba(20,40,100,0.14)' },
     castle: { top: '#5b2f73', bot: '#8a4677', shadow: 'rgba(25,8,45,0.5)', snow: null, snowLine: 0, rim: 'rgba(255,170,110,0.75)', haze: '#ff9868', hazeA: .55, gully: 'rgba(20,0,30,0.2)' }
   };
   const BG = {};
@@ -1019,16 +1022,16 @@
       col: { lit: '#fff0fb', mid: '#ffd6f0', shade: '#f6b3e2', deep: '#d995e6' } });
     const tcF = { k: 'c1', ol: null, trunk: '#fff1f6', dark: '#ff7fb6', mid: '#ffffff', lit: '#ffd0e6', hi: null };
     // arka plan şekerleri oyun katmanıyla yarışmasın: küçük, pusa karışmış (soldurulmuş) renkler, kontursuz
-    const cs = c => mix(c, P.haze, .3);
+    const cs = c => mix(c, P.haze, .5);   // göz konforu: arka şekerler iyice pusa karışık (eskiden .3)
     hills(ctx, P, { salt: 414, f: .13, fy: .07, base: 378, amp: 58, k1: .005, k2: .012, p: 2.1,
-      stops: [[0, '#bff3dc'], [.35, '#94e2c4'], [1, '#79cdb2']], rim: '#fff8fc', rimW: 6,
+      stops: [[0, mix('#bff3dc', P.haze, .3)], [.35, mix('#94e2c4', P.haze, .3)], [1, mix('#79cdb2', P.haze, .3)]], rim: 'rgba(255,248,252,0.7)', rimW: 4,
       trees: { sp: 46, prob: .55, kinds: ['lolli', 'cane', 'puff'], sc0: .4, sc1: .56, sink: 10,
         spr: (k, v) => bgTree('candy', k, v, k === 'cane' ? { k: 'c1c', dark: '#fff6fa', mid: cs('#ff5f8f') } : k === 'puff' ? { k: 'c1p', ol: null, trunk: '#ffe9a8', dark: '#e98fd8', mid: '#f7b2e6', lit: '#ffd8f3', hi: null } : Object.assign({}, tcF, { dark: cs(['#ff7fb6', '#8fd3ff', '#ffd36b'][v]), mid: '#fff6fa', k: 'c1' + v })) },
       after: (ctx2, off, yb, o) => candyDrips(ctx2, off, yb, o, '#fff8fc', 30, 6) });
     haze(ctx, P, ly(398, .07), 70, .4);
     const olN = mix('#8a2a62', P.haze, .5);
     hills(ctx, P, { salt: 515, f: .25, fy: .13, base: 420, amp: 44, k1: .0068, k2: .018, p: 3.3,
-      stops: [[0, '#b0703f'], [.4, '#8a4a26'], [1, '#6a3418']], rim: '#ff9fcd', rimW: 8,
+      stops: [[0, '#b0703f'], [.4, '#8a4a26'], [1, '#6a3418']], rim: 'rgba(255,170,210,0.75)', rimW: 4,
       trees: { sp: 34, prob: .72, kinds: ['lolli', 'puff', 'lolli', 'cane'], sc0: .5, sc1: .72, sink: 14,
         spr: (k, v) => bgTree('candy', k, v, k === 'cane' ? { k: 'c2c', dark: '#fff6fa', mid: mix('#e8283c', P.haze, .25) } : k === 'puff' ? { k: 'c2p' + v, ol: olN, trunk: '#fff1c8', dark: cs(['#c86ad6', '#59b8e6', '#ff8fb8'][v]), mid: cs(['#de8ae6', '#7fd0f2', '#ffb0cc'][v]), lit: cs(['#f2b8f2', '#b8ecff', '#ffd6e6'][v]), hi: 'rgba(255,255,255,0.35)' } : { k: 'c2l' + v, trunk: '#fff6fa', dark: mix(['#ff4f8f', '#3fb7ff', '#ffb52e'][v], P.haze, .25), mid: '#fff6fa' }) },
       after: (ctx2, off, yb, o) => candyDrips(ctx2, off, yb, o, '#ff9fcd', 24, 9) });
@@ -1050,7 +1053,7 @@
     ctx.fill();
   }
   BG.snow = function (ctx, P, VW) {
-    stars(ctx, 50, 5150, 170, .55);
+    stars(ctx, 50, 5150, 170, .4);
     if (!lowQ()) aurora(ctx);
     sunDisk(ctx, P, VW * P.sun.x, ly(P.sun.y, .025));
     clouds(ctx, P, { salt: 121, f: .012, fy: .012, wind: 5, slot: 380, prob: .55, y0: 60, y1: 150, sc0: .4, sc1: .6, a: .7 });
@@ -1076,7 +1079,7 @@
     birds(ctx, 'rgba(30,50,90,0.6)', 3, 99, false);
   };
   BG.castle = function (ctx, P, VW) {
-    stars(ctx, 80, 7310, 230, .9);
+    stars(ctx, 80, 7310, 230, .6);
     sunDisk(ctx, P, VW * P.sun.x, ly(P.sun.y, .03));
     clouds(ctx, P, { salt: 131, f: .012, fy: .012, wind: 3, slot: 420, prob: .7, y0: 70, y1: 190, sc0: .55, sc1: .85, a: .85, sx: 1.8, sy: .42 });
     mountains(ctx, { salt: 242, f: .035, fy: .03, base: 352, slot: 240, sc0: .75, sc1: 1.1, nv: 4, w: 520,
@@ -1120,9 +1123,10 @@
      ZEMİN: dokular (desen), bloklar, tema kapakları, yüzen platformlar
      ===================================================================== */
   const GP = {
-    forest: { ol: '#2b170a', deep: '#1c0d05', deepA: .62, body: '#8c5a31', rim: 'rgba(255,214,160,0.28)' },
-    candy: { ol: '#5a1838', deep: '#5e1a3a', deepA: .5, body: '#f2c07c', rim: 'rgba(255,255,255,0.4)' },
-    snow: { ol: '#1c2f52', deep: '#0d1d42', deepA: .58, body: '#7898bd', rim: 'rgba(220,240,255,0.45)' },
+    // göz konforu: zemin gövdesi yüzeyden aşağı daha hızlı koyulaşır (deepA ↑), kapak/yüzey kenarı parlak kalır
+    forest: { ol: '#2b170a', deep: '#1c0d05', deepA: .7, body: '#7e5230', rim: 'rgba(255,214,160,0.28)' },
+    candy: { ol: '#5a1838', deep: '#5e1a3a', deepA: .64, body: '#dcae72', rim: 'rgba(255,255,255,0.4)' },
+    snow: { ol: '#1c2f52', deep: '#0d1d42', deepA: .66, body: '#7898bd', rim: 'rgba(220,240,255,0.45)' },
     castle: { ol: '#120818', deep: '#07030c', deepA: .62, body: '#5d4b7c', rim: 'rgba(255,170,120,0.3)' }
   };
   const patCache = {};
@@ -1156,14 +1160,15 @@
   /* ---- desen karoları ---- */
   function tileDirt(g, W, H) {
     const rnd = mrng(11);
-    g.fillStyle = '#8c5a31'; g.fillRect(0, 0, W, H);
+    // göz konforu: daha koyu, daha seyrek ve düşük kontrastlı doku (yüzey kenarı parlak kalır)
+    g.fillStyle = '#7e5230'; g.fillRect(0, 0, W, H);
     for (let i = 0; i < 30; i++) {
       const x = rnd() * W, y = rnd() * H, rx = 6 + rnd() * 18, ry = 4 + rnd() * 9;
-      const col = rnd() < .55 ? 'rgba(108,64,30,0.5)' : 'rgba(170,114,64,0.38)';
+      const col = rnd() < .55 ? 'rgba(100,58,28,0.4)' : 'rgba(160,106,60,0.26)';
       wrapDo(W, H, x, y, rx + 2, (xx, yy) => E(g, xx, yy, rx, ry, col));
     }
-    for (let i = 0; i < 110; i++) {
-      const x = rnd() * W, y = rnd() * H, s = .8 + rnd() * 1.6, col = rnd() < .6 ? 'rgba(70,40,18,0.6)' : 'rgba(214,170,120,0.5)';
+    for (let i = 0; i < 60; i++) {
+      const x = rnd() * W, y = rnd() * H, s = .8 + rnd() * 1.6, col = rnd() < .6 ? 'rgba(70,40,18,0.5)' : 'rgba(200,160,115,0.35)';
       g.fillStyle = col; g.fillRect(x, y, s, s);
     }
     for (let i = 0; i < 3; i++) {
@@ -1176,9 +1181,9 @@
         g.beginPath(); g.moveTo(xx, yy - 1); g.quadraticCurveTo(xx + Math.cos(a) * l * .5 + 8, yy + Math.sin(a) * l * .5 - 1, xx + Math.cos(a) * l, yy + Math.sin(a) * l * .7 - 1); g.stroke();
       });
     }
-    for (let i = 0; i < 11; i++) {
+    for (let i = 0; i < 6; i++) {
       const x = rnd() * W, y = rnd() * H, rx = 3 + rnd() * 6, ry = 2.4 + rnd() * 3.6, gray = rnd() < .45;
-      const c0 = gray ? '#a19a92' : '#b48558', c1 = gray ? '#d2ccc4' : '#dcb388', c2 = gray ? '#5e5850' : '#5a3a1e';
+      const c0 = gray ? '#948d85' : '#a67c52', c1 = gray ? '#b8b1a8' : '#c6a070', c2 = gray ? '#5e5850' : '#5a3a1e';
       wrapDo(W, H, x, y, rx + 3, (xx, yy) => {
         E(g, xx, yy + 1, rx + 1.3, ry + 1.3, c2);
         E(g, xx, yy, rx, ry, c0);
@@ -1188,11 +1193,12 @@
   }
   function tileCake(g, W, H) {
     const rnd = mrng(22);
-    g.fillStyle = '#f3c27d'; g.fillRect(0, 0, W, H);
-    for (let i = 0; i < 140; i++) {
+    // göz konforu: pandispanya daha koyu/sakin; krema-reçel şeridi yarı saydam (yatay parlak çizgi dikkat çekmesin)
+    g.fillStyle = '#dcae72'; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i++) {
       const x = rnd() * W, y = rnd() * H, r = .8 + rnd() * 2.4;
       if (y > 36 && y < 62) continue;
-      E(g, x, y, r * 1.3, r, rnd() < .7 ? 'rgba(206,140,70,0.55)' : 'rgba(255,232,180,0.7)');
+      E(g, x, y, r * 1.3, r, rnd() < .7 ? 'rgba(190,128,64,0.4)' : 'rgba(255,232,180,0.4)');
     }
     // krema katmanı
     const cream = new Path2D();
@@ -1200,16 +1206,16 @@
     for (let x = 0; x <= W; x += 4) cream.lineTo(x, 41 + Math.sin(x / W * TAU * 3) * 1.6);
     for (let x = W; x >= 0; x -= 4) cream.lineTo(x, 52 + Math.sin(x / W * TAU * 4 + 1) * 1.4);
     cream.closePath();
-    g.fillStyle = '#fff6fb'; g.fill(cream);
-    g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(0, 42.5, W, 1.4);
+    g.fillStyle = 'rgba(255,246,251,0.55)'; g.fill(cream);
+    g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(0, 42.5, W, 1.4);
     // reçel
     const jam = new Path2D();
     jam.moveTo(0, 52);
     for (let x = 0; x <= W; x += 4) jam.lineTo(x, 52 + Math.sin(x / W * TAU * 4 + 1) * 1.4);
     for (let x = W; x >= 0; x -= 4) jam.lineTo(x, 58.5 + Math.sin(x / W * TAU * 2 + 2) * 1.2);
     jam.closePath();
-    g.fillStyle = '#e2457a'; g.fill(jam);
-    g.fillStyle = 'rgba(255,140,180,0.8)'; g.fillRect(0, 53.4, W, 1.2);
+    g.fillStyle = 'rgba(214,80,130,0.6)'; g.fill(jam);
+    g.fillStyle = 'rgba(255,140,180,0.4)'; g.fillRect(0, 53.4, W, 1.2);
     g.fillStyle = 'rgba(120,30,40,0.25)'; g.fillRect(0, 59, W, 2);
     // çikolata parçacıkları
     for (let i = 0; i < 5; i++) {
@@ -1224,7 +1230,7 @@
     for (let i = 0; i < 40; i++) E(g, rnd() * W, rnd() * H, 3 + rnd() * 8, 2 + rnd() * 4, 'rgba(25,40,70,0.35)');
     // düzensiz kaya parçaları (farklı boylar, ızgarasız)
     const rocks = [];
-    for (let tries = 0; tries < 400 && rocks.length < 17; tries++) {
+    for (let tries = 0; tries < 400 && rocks.length < 12; tries++) {
       const x = rnd() * W, y = rnd() * H, r = 9 + rnd() * 15;
       let ok = true;
       for (const q of rocks) {
@@ -1243,7 +1249,7 @@
         const p = new Path2D(); smoothClosed(p, pts.map(t => [t[0] + xx, t[1] + yy]));
         g.fillStyle = col; g.fill(p);
         g.save(); g.clip(p);
-        g.fillStyle = 'rgba(214,236,255,0.55)'; g.beginPath(); g.ellipse(xx - q[2] * .25, yy - q[2] * .55, q[2] * .8, q[2] * .32, -.25, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(214,236,255,0.32)'; g.beginPath(); g.ellipse(xx - q[2] * .25, yy - q[2] * .55, q[2] * .8, q[2] * .32, -.25, 0, TAU); g.fill();
         g.fillStyle = 'rgba(20,36,70,0.32)'; g.beginPath(); g.ellipse(xx + q[2] * .3, yy + q[2] * .7, q[2] * 1.1, q[2] * .4, -.15, 0, TAU); g.fill();
         g.restore();
         g.lineWidth = 1.4; g.strokeStyle = 'rgba(22,38,72,0.7)'; g.stroke(p);
@@ -1261,7 +1267,7 @@
         g.beginPath(); pts.forEach((t, j) => j ? g.lineTo(t[0] + dx, t[1] + dy) : g.moveTo(t[0] + dx, t[1] + dy)); g.stroke();
       });
     }
-    for (let i = 0; i < 50; i++) { g.fillStyle = rnd() < .7 ? 'rgba(255,255,255,0.65)' : 'rgba(180,230,255,0.8)'; g.fillRect(rnd() * W, rnd() * H, 1.3, 1.3); }
+    for (let i = 0; i < 28; i++) { g.fillStyle = rnd() < .7 ? 'rgba(255,255,255,0.45)' : 'rgba(180,230,255,0.55)'; g.fillRect(rnd() * W, rnd() * H, 1.3, 1.3); }
   }
   function tileBrick(g, W, H) {
     const rnd = mrng(44);
@@ -2326,6 +2332,10 @@
       p.closePath();
       g.lineJoin = 'round'; g.lineWidth = 5.4; g.strokeStyle = MET.ol; g.stroke(p);
       g.fillStyle = RG(g, -8, -8, 2, 0, 0, R0 + 5, [[0, '#ffffff'], [.35, '#d3d9e3'], [.75, '#9aa3b4'], [1, '#606a7c']]); g.fill(p);
+      // TEHLİKE DİLİ: dişler kırmızı-turuncu (bütün zararlı nesnelerde aynı sıcak kırmızı kenar)
+      g.save(); g.clip(p);
+      g.fillStyle = RG(g, 0, 0, R0 - 8, 0, 0, R0 + 5, [[0, 'rgba(232,32,46,0)'], [.3, 'rgba(232,32,46,0.5)'], [1, 'rgba(255,96,60,0.95)']]); g.fillRect(-40, -40, 80, 80);
+      g.restore();
       // kırmızı tehlike halkası (dişlerin dibinde): testere uzaktan "tehlike" diye okunsun
       g.strokeStyle = 'rgba(232,32,46,0.85)'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, R0 - 5.5, 0, TAU); g.stroke();
       g.strokeStyle = 'rgba(40,46,60,0.55)'; g.lineWidth = 1.6; g.beginPath(); g.arc(0, 0, R0 - 9, 0, TAU); g.stroke();
@@ -2337,7 +2347,7 @@
     });
   }
   function drawSaws(ctx, L, vx0, vx1) {
-    const bl = sawBladeSpr();
+    const bl = sawBladeSpr(), sawHalo = G.glowSprite('rgba(255,60,40,0.62)', 40);
     for (const s of L.saws) {
       if (s.cx < vx0 - 70 || s.cx > vx1 + 70) continue;
       const px = s.px != null ? s.px : s.cx, py = s.py != null ? s.py : s.cy;
@@ -2390,6 +2400,9 @@
       // bıçak + hareket bulanıklığı (hız: seviye saatinden — game.js ile aynı evre)
       const vy = dphs * s.amp * s.sp;
       const ang = tk * 13;
+      // tehlike halesi (önbellekli, source-over: açık gökte de okunur), hafif nabız
+      ctx.save(); ctx.globalAlpha = .42 + .14 * Math.sin(tk * 8 + s.cx * .01);
+      ctx.drawImage(sawHalo.c, px - 60, py - 60, 120, 120); ctx.restore();
       ctx.save();
       ctx.globalAlpha = .16; ctx.translate(px, py - vy * .045); ctx.rotate(ang - .5); ctx.drawImage(bl.c, -38, -38, 76, 76); ctx.restore();
       ctx.save();
@@ -3506,7 +3519,7 @@
   }
   /** Dekor sprite'ı (varyant önbellekli) */
   /** mode: undefined = normal, 'b' = arka katman (tema pusu ile tonlanmış, derinlik), 'f' = bastırılmış ön süs (koyu ton) */
-  const BACK_TINT = { forest: [null, .3], candy: [null, .3], snow: [null, .3], castle: ['#7a3e6e', .3] };
+  const BACK_TINT = { forest: [null, .42], candy: [null, .52], snow: [null, .42], castle: ['#7a3e6e', .4] };   // göz konforu: arka dekor daha puslu
   function decorSpr(type, v, mode) {
     const d = DEC[type];
     if (!mode) return spr('dc:' + type + ':' + v, d.w, d.h, d.w / 2, d.h - d.base, g => d.draw(g, v));
@@ -3563,7 +3576,7 @@
      ÖN PLAN: ortam parçacıkları (kendi listemiz, ekran içinde sarmalanan, parallax'lı) + ön tutamlar
      ===================================================================== */
   const amb = [];
-  const AMB_N = { forest: 30, candy: 30, snow: 56, castle: 38 };
+  const AMB_N = { forest: 14, candy: 14, snow: 30, castle: 18 };   // göz konforu: ortam parçacıkları yarıya indi
   function ambInit(id) {
     amb.length = 0;
     const n = Math.round((AMB_N[id] || 30) * (lowQ() ? .5 : 1));
@@ -3615,13 +3628,13 @@
       switch (p.k) {
         case 1: {
           ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot); ctx.scale(p.s * p.z, p.s * p.z * (.6 + .4 * Math.abs(Math.sin(p.ph * 2.5))));
-          ctx.globalAlpha = .9 * far; ctx.drawImage(leafSpr(p.c).c, -9, -6, 18, 12); ctx.restore();
+          ctx.globalAlpha = .7 * far; ctx.drawImage(leafSpr(p.c).c, -9, -6, 18, 12); ctx.restore();
           break;
         }
         case 2: case 4: {
           const tw = .5 + .5 * Math.sin(p.ph * 2 + i);
           ctx.save(); ctx.globalCompositeOperation = 'lighter';
-          ctx.globalAlpha = (.25 + tw * .45) * far;
+          ctx.globalAlpha = (.14 + tw * .26) * far;
           const gl = G.glowSprite(p.k === 2 ? 'rgba(255,250,190,0.9)' : 'rgba(255,255,255,0.95)', 8);
           const r = 8 * p.s * p.z;
           ctx.drawImage(gl.c, x - r, y - r, r * 2, r * 2);
@@ -3638,7 +3651,7 @@
         }
         case 5: {
           const r = p.s * p.z * 1.6;
-          ctx.globalAlpha = (p.z > 1.2 ? .55 : .9);
+          ctx.globalAlpha = (p.z > 1.2 ? .4 : .7);
           ctx.drawImage(flakeSpr().c, x - r, y - r, r * 2, r * 2);
           ctx.globalAlpha = 1;
           break;
@@ -3646,7 +3659,7 @@
         case 6: {
           const fl = .6 + .4 * Math.sin(p.ph * 9 + i * 3);
           ctx.save(); ctx.globalCompositeOperation = 'lighter';
-          ctx.globalAlpha = fl * .8 * far;
+          ctx.globalAlpha = fl * .5 * far;
           const gl = G.glowSprite('rgba(255,140,50,0.95)', 10);
           const r = 9 * p.s * p.z;
           ctx.drawImage(gl.c, x - r, y - r, r * 2, r * 2);
@@ -3752,7 +3765,8 @@
   function sunGlow(g, P, x, y) {
     const s = P.sun, r = s.r;
     const halo = bsprite(P.id + ':halo', r * 14, r * 14, r * 7, r * 7, h => {
-      h.fillStyle = RG(h, 0, 0, 0, 0, 0, r * 7, [[0, rgba(s.halo, .95)], [.1, rgba(s.halo, .6)], [.3, rgba(s.halo, .2)], [.6, rgba(s.halo, .06)], [1, rgba(s.halo, 0)]]);
+      // göz konforu: hale yarı yoğunlukta (parlak gök lekesi oyun katmanıyla yarışmasın)
+      h.fillStyle = RG(h, 0, 0, 0, 0, 0, r * 7, [[0, rgba(s.halo, .6)], [.1, rgba(s.halo, .36)], [.3, rgba(s.halo, .12)], [.6, rgba(s.halo, .035)], [1, rgba(s.halo, 0)]]);
       h.fillRect(-r * 7, -r * 7, r * 14, r * 14);
     }, .3);
     g.save();
@@ -3766,7 +3780,7 @@
           h.beginPath(); h.moveTo(0, 0); h.arc(0, 0, 500, a - w, a + w); h.closePath(); h.fill();
         }
       }, .25);
-      g.globalAlpha = s.raysA * .92; g.translate(x, y); g.rotate(.21);
+      g.globalAlpha = s.raysA * .5; g.translate(x, y); g.rotate(.21);
       g.drawImage(rays.c, -500, -500, 1000, 1000);
     }
     g.restore();
@@ -3797,8 +3811,8 @@
   const FAR = {
     candy(g, P, VW) {
       const cx = VW * .3, cy = 500, cols = ['#ff5e86', '#ffa64d', '#ffe066', '#7fe39a', '#6ec8ff', '#b892ff'];
-      g.save(); g.globalAlpha = .3; g.lineWidth = 12;
-      for (let i = 0; i < cols.length; i++) { g.strokeStyle = cols[i]; g.beginPath(); g.arc(cx, cy, 360 - i * 11.5, PI * 1.02, PI * 1.98); g.stroke(); }
+      g.save(); g.globalAlpha = .13; g.lineWidth = 10;   // göz konforu: gökkuşağı silik bir iz (eskiden .3)
+      for (let i = 0; i < cols.length; i++) { g.strokeStyle = cols[i]; g.beginPath(); g.arc(cx, cy, 360 - i * 10, PI * 1.02, PI * 1.98); g.stroke(); }
       g.restore();
     },
     space(g, P, VW, VH) {
@@ -3994,7 +4008,7 @@
   }
   Object.assign(BUSH, {
     desert: { salt: 650, f: .38, fy: .2, base: 498, sp: 38, r0: 12, r1: 24, amp: 12, p: 1.9, dark: '#9e5c2c', lit: '#c98244', hi: null, dots: null, fog: '#3a1a06', crag: true },
-    tropic: { salt: 680, f: .38, fy: .2, base: 494, sp: 30, r0: 15, r1: 28, amp: 13, p: 2.6, dark: '#1f6a4a', lit: '#2f8c52', hi: 'rgba(190,255,150,0.35)', dots: ['#ff5a8a', '#ffd84a', '#ff8a3a', '#ffffff'], fog: '#06302a' }
+    tropic: { salt: 680, f: .38, fy: .2, base: 494, sp: 30, r0: 15, r1: 28, amp: 13, p: 2.6, dark: '#2a7254', lit: '#3a925c', hi: 'rgba(190,255,150,0.18)', dots: null, fog: '#06302a' }
   });
   BG.desert = function (ctx, P, VW) {
     sunDisk(ctx, P, VW * P.sun.x, ly(P.sun.y, .02));
@@ -4174,7 +4188,7 @@
     ctx.restore();
   }
   BG.space = function (ctx, P, VW) {
-    stars(ctx, 70, 9151, 300, .95);
+    stars(ctx, 70, 9151, 300, .7);
     sunDisk(ctx, P, VW * P.sun.x, ly(P.sun.y, .01));
     planet(ctx, P);
     shootingStar(ctx, 41);
@@ -4211,8 +4225,8 @@
      GECE ŞEHRİ — arka plan
      ===================================================================== */
   const CT = {
-    far: { body: '#2c2362', win: '#b9a4ff', winA: .45, neon: null, haze: '#6e3586', hazeA: .3, top: 'rgba(255,120,190,0.35)' },
-    mid: { body: '#170f38', win: '#ffd27a', winB: '#9fe6ff', winA: .9, neon: ['#ff4fa8', '#39e6ff', '#ffe14a', '#7dff6a'], haze: '#6e3586', hazeA: .06, top: 'rgba(255,95,162,0.55)' }
+    far: { body: '#2c2362', win: '#b9a4ff', winA: .3, neon: null, haze: '#6e3586', hazeA: .36, top: 'rgba(255,120,190,0.25)' },
+    mid: { body: '#170f38', win: '#ffd27a', winB: '#9fe6ff', winA: .72, neon: ['#ff4fa8', '#39e6ff', '#ffe14a', '#7dff6a'], haze: '#6e3586', hazeA: .1, top: 'rgba(255,95,162,0.45)' }
   };
   const NEON_TXT = ['ÇAY', 'BÜFE', 'OTEL', 'SİNEMA', 'DÖNER', 'BAR'];
   function skySpr(key, v, c) {
@@ -4301,7 +4315,7 @@
     ctx.restore();
   }
   BG.city = function (ctx, P, VW) {
-    stars(ctx, 36, 6161, 200, .7);
+    stars(ctx, 36, 6161, 200, .5);
     sunDisk(ctx, P, VW * P.sun.x, ly(P.sun.y, .015));
     clouds(ctx, P, { salt: 161, f: .012, fy: .012, wind: 4, slot: 480, prob: .55, y0: 70, y1: 170, sc0: .55, sc1: .85, a: .55, sx: 2, sy: .38 });
     searchlights(ctx);
@@ -4440,15 +4454,15 @@
      ZEMİN: yeni desenler, kapaklar, gömülü süsler, yüzen platformlar
      ===================================================================== */
   Object.assign(GP, {
-    desert: { ol: '#3e1f08', deep: '#2a1204', deepA: .55, body: '#d29a5c', rim: 'rgba(255,236,190,0.35)' },
-    space: { ol: '#070814', deep: '#04040e', deepA: .6, body: '#353d56', rim: 'rgba(120,230,255,0.4)' },
-    city: { ol: '#0a0612', deep: '#05030a', deepA: .6, body: '#4a3448', rim: 'rgba(255,120,190,0.3)' },
-    tropic: { ol: '#2c1c0a', deep: '#1a1206', deepA: .5, body: '#d9b67a', rim: 'rgba(255,246,210,0.35)' }
+    desert: { ol: '#3e1f08', deep: '#2a1204', deepA: .66, body: '#c48e52', rim: 'rgba(255,236,190,0.35)' },
+    space: { ol: '#070814', deep: '#04040e', deepA: .64, body: '#353d56', rim: 'rgba(120,230,255,0.4)' },
+    city: { ol: '#0a0612', deep: '#05030a', deepA: .64, body: '#4a3448', rim: 'rgba(255,120,190,0.3)' },
+    tropic: { ol: '#2c1c0a', deep: '#1a1206', deepA: .64, body: '#c9a66c', rim: 'rgba(255,246,210,0.35)' }
   });
   function tileSandstone(g, W, H) {
     const rnd = mrng(55);
     g.fillStyle = '#8a582a'; g.fillRect(0, 0, W, H);
-    const cols = ['#d9a566', '#cf9a5a', '#e2b072', '#c98f52', '#d8a262', '#d09c5e'];
+    const cols = ['#c8955a', '#be8a50', '#d09f66', '#b8804a', '#c6925a', '#c08c54'];   // göz konforu: taşlar daha koyu
     let ci = 0;
     for (let r = 0; r < 3; r++) {
       const off = (r % 2) * 32;
@@ -4457,7 +4471,7 @@
         const p = new Path2D(); rrp(p, x + 1.6, y + 1.6, 60.8, 28.8, 4);
         g.fillStyle = col; g.fill(p);
         g.save(); g.clip(p);
-        g.fillStyle = 'rgba(255,236,190,0.4)'; g.fillRect(x, y + 1.5, 64, 3);
+        g.fillStyle = 'rgba(255,236,190,0.24)'; g.fillRect(x, y + 1.5, 64, 3);
         g.fillStyle = 'rgba(110,60,20,0.28)'; g.fillRect(x, y + 25, 64, 6);
         for (let k = 0; k < 12; k++) { g.fillStyle = rnd() < .5 ? 'rgba(120,70,30,0.35)' : 'rgba(255,240,200,0.35)'; g.fillRect(x + 4 + rnd() * 56, y + 5 + rnd() * 20, 1.5, 1.5); }
         for (let k = 0; k < 2; k++) E(g, x + 8 + rnd() * 48, y + 8 + rnd() * 14, 2 + rnd() * 3, 1.4 + rnd() * 1.6, 'rgba(120,70,30,0.3)');
@@ -4467,7 +4481,7 @@
     // oyma hiyeroglifler (birkaç taşta)
     g.lineCap = 'round'; g.lineJoin = 'round';
     const glyph = (x, y, k) => {
-      const dk = 'rgba(105,58,22,0.42)', lt = 'rgba(255,232,186,0.32)';
+      const dk = 'rgba(105,58,22,0.24)', lt = 'rgba(255,232,186,0.16)';   // göz konforu: hiyeroglifler silik
       for (let pass = 0; pass < 2; pass++) {
         g.strokeStyle = pass ? dk : lt; g.lineWidth = 1.6;
         const o = pass ? 0 : .9;
@@ -4488,7 +4502,7 @@
       const p = new Path2D(); rrp(p, x + 1.5, y + 1.5, 61, 61, 5);
       g.fillStyle = LG(g, x, y, x + 40, y + 64, [[0, ['#4a5574', '#434d6a', '#4e5878', '#465070'][k]], [1, ['#2c334a', '#283044', '#2e354c', '#2a3146'][k]]]); g.fill(p);
       g.save(); g.clip(p);
-      g.fillStyle = 'rgba(190,210,255,0.22)'; g.fillRect(x, y + 2, 64, 2); g.fillRect(x + 2, y, 2, 64);
+      g.fillStyle = 'rgba(190,210,255,0.12)'; g.fillRect(x, y + 2, 64, 2); g.fillRect(x + 2, y, 2, 64);
       g.fillStyle = 'rgba(0,0,10,0.3)'; g.fillRect(x, y + 59, 64, 4);
       if (k === 1) { g.fillStyle = '#0e1220'; for (let i = 0; i < 5; i++) { g.beginPath(); rrp(g, x + 14, y + 14 + i * 8, 36, 4, 2); g.fill(); } g.fillStyle = 'rgba(160,190,255,0.2)'; for (let i = 0; i < 5; i++) g.fillRect(x + 15, y + 18 + i * 8, 34, 1); }
       else if (k === 2) { g.save(); g.beginPath(); g.rect(x + 6, y + 26, 52, 12); g.clip(); g.fillStyle = '#a8862e'; g.fillRect(x + 6, y + 26, 52, 12); g.fillStyle = '#2a2a34'; for (let s = -10; s < 60; s += 10) { g.beginPath(); g.moveTo(x + s, y + 38); g.lineTo(x + s + 5, y + 38); g.lineTo(x + s + 17, y + 26); g.lineTo(x + s + 12, y + 26); g.closePath(); g.fill(); } g.restore(); g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x + 6, y + 38, 52, 1.5); }
@@ -4518,7 +4532,7 @@
   }
   function tileTropic(g, W, H) {
     const rnd = mrng(88);
-    g.fillStyle = '#dcb97c'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#c9a66c'; g.fillRect(0, 0, W, H);   // göz konforu: kum daha koyu, taş/kabuk daha seyrek
     // tabakalar
     for (let k = 0; k < 5; k++) {
       const y0 = k * 26 + 6;
@@ -4528,12 +4542,12 @@
       for (let x = W; x >= 0; x -= 8) g.lineTo(x, y0 + 9 + Math.sin(x / W * TAU * 2 + k + 1) * 3);
       g.closePath(); g.fill();
     }
-    for (let i = 0; i < 90; i++) { g.fillStyle = rnd() < .6 ? 'rgba(130,90,40,0.45)' : 'rgba(255,248,220,0.6)'; g.fillRect(rnd() * W, rnd() * H, 1.4, 1.4); }
-    for (let i = 0; i < 9; i++) {
-      const x = rnd() * W, y = rnd() * H, rx = 3 + rnd() * 5, ry = 2.4 + rnd() * 3, col = ['#b8a890', '#9a8a78', '#c8b8a0'][i % 3];
-      wrapDo(W, H, x, y, rx + 3, (xx, yy) => { E(g, xx, yy + 1, rx + 1.2, ry + 1.2, '#6a5030'); E(g, xx, yy, rx, ry, col); E(g, xx - rx * .25, yy - ry * .38, rx * .5, ry * .34, 'rgba(255,255,255,0.5)'); });
+    for (let i = 0; i < 50; i++) { g.fillStyle = rnd() < .6 ? 'rgba(130,90,40,0.35)' : 'rgba(255,248,220,0.4)'; g.fillRect(rnd() * W, rnd() * H, 1.4, 1.4); }
+    for (let i = 0; i < 5; i++) {
+      const x = rnd() * W, y = rnd() * H, rx = 3 + rnd() * 5, ry = 2.4 + rnd() * 3, col = ['#aa9c86', '#8e806f', '#b8aa94'][i % 3];
+      wrapDo(W, H, x, y, rx + 3, (xx, yy) => { E(g, xx, yy + 1, rx + 1.2, ry + 1.2, '#6a5030'); E(g, xx, yy, rx, ry, col); E(g, xx - rx * .25, yy - ry * .38, rx * .5, ry * .34, 'rgba(255,255,255,0.3)'); });
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 2; i++) {
       const x = 10 + rnd() * (W - 20), y = 10 + rnd() * (H - 20);
       g.save(); g.translate(x, y); g.rotate(rnd() * TAU);
       g.fillStyle = '#6a4a2a'; g.beginPath(); g.moveTo(0, -5); g.quadraticCurveTo(5, -4, 5, 3); g.lineTo(-5, 3); g.quadraticCurveTo(-5, -4, 0, -5); g.fill();
@@ -5286,7 +5300,7 @@
   /* =====================================================================
      ORTAM PARÇACIKLARI (yeni temalar)
      ===================================================================== */
-  Object.assign(AMB_N, { desert: 40, space: 34, city: 30, tropic: 30 });
+  Object.assign(AMB_N, { desert: 20, space: 16, city: 16, tropic: 14 });
   const AMB_NEW = {
     desert(p, i, rnd) { if (i % 3) { p.k = 8; p.vx = -90 - rnd() * 80; p.vy = 6 + rnd() * 8; p.s = .6 + rnd() * 1.2; } else { p.k = 2; p.vx = -10; p.vy = -3; p.s = .5 + rnd() * .5; } },
     space(p, i, rnd) { p.k = 9; p.c = i % 3; p.vx = -4 + rnd() * 8; p.vy = -6 - rnd() * 10; p.s = .5 + rnd() * .9; },
@@ -5304,7 +5318,7 @@
       }
       case 9: {
         const tw = .5 + .5 * Math.sin(p.ph * 2.2 + i);
-        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (.25 + tw * .5) * far2;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (.14 + tw * .3) * far2;
         const gl = G.glowSprite(MOTE_COL[p.c], 8), r = 7 * p.s * p.z;
         ctx.drawImage(gl.c, x - r, y - r, r * 2, r * 2);
         ctx.restore();
@@ -5477,6 +5491,9 @@
       }
       const end = b.k > .9 ? (b.k - .9) / .1 : 0;
       E(ctx, b.bx, b.y + 1, r * .95 * (1 - end * .5), 5, 'rgba(0,0,0,0.3)');
+      // tehlike halesi (yuvarlanan kaya zararlı: ortak kırmızı dil)
+      ctx.save(); ctx.globalAlpha = (1 - end) * (.5 + .15 * Math.sin(tk * 9));
+      ctx.drawImage(G.glowSprite('rgba(255,60,40,0.62)', 40).c, b.bx - r * 1.9, b.by - r * 1.9, r * 3.8, r * 3.8); ctx.restore();
       // arkasında toz (sağda: kaya sola yuvarlanır)
       for (let i = 0; i < 4; i++) {
         const q = (tk * 3 + i * .25) % 1;
@@ -5845,6 +5862,8 @@
     safe(drawAbyss, ctx, L, P, vx0, vx1, vy0, vy1);
     // sıvı zeminin ARKASINDA: yalnızca çukurlarda görünür (bloklar suya batmış gibi durmasın)
     safe(drawLiquid, ctx, L, vx0, vx1, vy1);
+    // ortam parçacıkları oyun katmanının ARKASINDA (göz konforu: yaprak/kıvılcım/kar yarışçı ve eşyaların önüne gelmez)
+    safe(drawAmbient, ctx);
     const nw = !!L.lowg;   // yeni öğe dizileri (eski kayıtlı/harici seviye nesnelerinde olmayabilir)
     if (nw && L.lowg.length) safe(drawLowG, ctx, L, vx0, vx1, vy0, vy1);
     safe(drawDecor, ctx, L, 'back', vx0, vx1);
@@ -5882,7 +5901,6 @@
     ctx.save();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     safe(drawFgTufts, ctx, P, vx0, vx1);
-    safe(drawAmbient, ctx);
     ctx.restore();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   };

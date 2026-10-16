@@ -1595,12 +1595,13 @@ kbd {
   transition: transform .07s ease, background-color .1s, box-shadow .15s;
   pointer-events: none;
 }
-.tbtn .tb-ico { width: 44%; height: 44%; color: #fff; filter: drop-shadow(0 .3vh 0 rgba(26, 11, 46, .55)); }
-.tbtn b { --o: rgba(26, 11, 46, .95); font: clamp(12px, 2.8vh, 16px)/1 var(--fh); font-weight: 400; letter-spacing: .04em; color: #fff; }
+.tbtn .tb-ico { width: 44%; height: 44%; color: #fff; filter: drop-shadow(0 .3vh 0 rgba(26, 11, 46, .95)) drop-shadow(0 0 .25vh rgba(26, 11, 46, .9)); }
+.tbtn b { --o: #1a0b2e; font: clamp(12px, 2.8vh, 16px)/1 var(--fh); font-weight: 400; letter-spacing: .04em; color: #fff; }
 .tbtn.down .tb-in { transform: scale(.9); background: radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .62), rgba(255, 255, 255, .2) 55%, rgba(0, 0, 0, .1)), var(--tbd); }
-/* ZIPLA + KAY sol altta (kullanıcı isteği), EŞYA + GÜÇ sağ altta; Solak düzende kümeler yer değiştirir */
-.tb-jump { --sz: var(--jz); --tb: rgba(46, 176, 76, .62); --tbd: rgba(80, 230, 110, .85); left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); }
-.tb-slide { --sz: var(--sz2); --tb: rgba(40, 124, 236, .62); --tbd: rgba(70, 170, 255, .85); left: calc(var(--g) + var(--sl) + var(--jz) + 1.2vh); bottom: calc(var(--g) + var(--sb) + var(--jz) * .1); }
+/* ZIPLA + KAY sol altta (kullanıcı isteği), EŞYA + GÜÇ sağ altta; Solak düzende kümeler yer değiştirir.
+   Okunurluk (oyuncu geri bildirimi): ZIPLA/KAY neredeyse opak, kenar beyaz, ikon/yazı kalın koyu konturlu. */
+.tb-jump { --sz: var(--jz); --tb: rgba(46, 176, 76, .9); --tbd: rgba(80, 230, 110, .95); --rim: #ffffff; left: calc(var(--g) + var(--sl)); bottom: calc(var(--g) + var(--sb)); }
+.tb-slide { --sz: var(--sz2); --tb: rgba(40, 124, 236, .9); --tbd: rgba(70, 170, 255, .95); --rim: #ffffff; left: calc(var(--g) + var(--sl) + var(--jz) + 1.2vh); bottom: calc(var(--g) + var(--sb) + var(--jz) * .1); }
 .tb-item { --sz: var(--iz); --tb: rgba(122, 64, 214, .7); --tbd: rgba(170, 110, 255, .88); right: calc(var(--g) + var(--sr)); bottom: calc(var(--g) + var(--sb)); }
 /* GÜÇ: EŞYA'nın solunda ve biraz yukarıda (koşu yönündeki zemin bandını kapatmasın) */
 .tb-power { --sz: var(--pz); --tb: rgba(224, 112, 20, .66); --tbd: rgba(255, 170, 60, .88); right: calc(var(--g) + var(--sr) + var(--iz) + 1.2vh); bottom: calc(var(--g) + var(--sb) + var(--iz) * .16); }

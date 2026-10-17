@@ -37,6 +37,9 @@ Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 - 🔨 "İnsanlar ne yapacağını anlamıyor" → ipucu sistemi (ZIPLA/ÇİFT/KAY/TIRMAN işareti + tuş nabzı), motor FM.S.hint
 - 🔨 "Lav da dahil hiçbir yere düşüp ölme olmasın" (Fun Run 4 gibi) → motor ajanı
 - 🔨 **BÜYÜK GÜNCELLEME / App Store**: docs/APP-STORE-PLANI.md — Türk tiplemeleri (ilk parti: Almancı Dayı, Terlikli Teyze, Simitçi Martı), futbol renkleri formaları, ekonomi/sezon bileti, öğretici giriş, sunucu planı
+  - 🔨 İlk 3 tipleme: çizim + animasyon ✅, karakter açma (10.000 altın ya da 100 elmas, kilitli kart, AÇ düğmeleri, LAFLARI) ✅, özel güçler (motor) 🔨, kadroya ekleme 📋
+  - ✅ Futbol formaları (yalnızca renk): kalın şeritli forma + kısa kol + şort + tozluk, mağazada takım renkli forma kartı
+  - 🔨 İlk deneyim: hoş geldin ekranı + antrenman yarışı (koç zamanı yavaşlatıp ZIPLA/KAY/TIRMAN/ÇİFT/EŞYA/GÜÇ gösterir) ✅; kolay botlar + sabit kolay pist (motor) 📋
 - Not: Fable'ı az kullan (kullanıcı: çok token yiyor) → küçük işleri ana ajan yapar, Fable yalnızca gerçek çizim işlerinde ve kısa görevle
 - Not: "Karakterler güzel, eline sağlık" → karakter tasarımlarının ana hatları korunur.
 

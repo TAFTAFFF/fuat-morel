@@ -30,7 +30,18 @@
   function clearInput() { const I = FM.input; if (I) { I.jp = I.dp = I.use = I.ab = false; if (!I.aim) I.ax = I.ay = 0; } }
   /* ---- yönlü atış sabitleri (gerçek varlıklar ve aimPreview AYNI değerleri kullanır) ---- */
   const AIM_ITEMS = { saw: 1, dyn: 1, trap: 1, net: 1, mis: 1 };           // yönlü eşyalar
-  const AIM_ABS = { TAFTAF: 1, Caner: 1, Kral: 1, baso: 1, Nuss: 1 };      // yönlü özel güçler
+  const AIM_ABS = { TAFTAF: 1, Caner: 1, Kral: 1, baso: 1, Nuss: 1, Teyze: 1 };      // yönlü özel güçler
+  /* Türk tiplemeleri (FM.CH tag 'tipleme'):
+     Almancı Dayı — Alman Arabası: CAR_T sn araba (r.car = kalan sn): yerde ×CAR_MUL hız, çevre tehlikelerine/tuzak/ağ/çamur/kuma
+       bağışık (eşyalar yine vurur), dokunduğunu savurur; tek kısa zıplama (çift zıplama/kayma yok); duvara takılırsa ya da
+       sersemletilirse araba biter; inişte 0.5 sn dokunulmazlık.
+     Terlikli Teyze — Uçan Terlik: nişanlı, hedefi yumuşak izleyen terlik (dönüş hızı sınırlı → doğru anda zıplayan kaçar;
+       hedefi geçerse izlemeyi bırakır), vurduğunu 1.5 sn sersemletir, bir kez en yakın ikinci rakibe seker.
+     Simitçi Martı — Simit Kapma: öndeki (≤ STEAL_R px) eşyası olan en yakın rakibin eşyasını kapar ('steal'); kimsede eşya yoksa
+       yerde yuvarlanan simit atar (çarptığını SIMIT_SLOW sn yavaşlatır; zıplanarak aşılır). */
+  const CAR_T = 2, CAR_MUL = 1.35, CAR_KNOCK = 1, CAR_HOP = .8;
+  const TERLIK_V = 680, TERLIK_TURN = 3, TERLIK_STUN = 1.5, TERLIK_LIFE = 2.6, TERLIK_R = 13;
+  const SIMIT_V = 520, SIMIT_SLOW = 2.2, SIMIT_R = 16, STEAL_R = 900;
   const SAW_V = 560, DYN_V = 720, DYN_LOB = 240, TRAP_V = 560, TRAP_LOB = 220, NET_V = 600, NET_LOB = 260;
   // Kar Fırtınası: kısa hazırlık → atandan yayılan buz dalgası (ulaştığı herkes donar). Mürekkep: ileri fışkıran mürekkep cephesi
   const FROST_WIND = .22, FROST_SP = 1700, FROST_R = 1600, INK_SP = 1900, INK_R = 2600;
@@ -60,16 +71,20 @@
   let curEnt = null;
 
   /* =================== YARIŞÇI =================== */
+  // görünen ad: FM.CH[id].n varsa o (ör. 'Almancı Dayı'), yoksa kimlik; kimlik (id) mantık/ağ için aynen kalır
+  const dispName = id => (FM.CH[id] && typeof FM.CH[id].n === 'string' && FM.CH[id].n) || id;
+  game_dispName = dispName;
   function mkRacer(id, idx, bot) {
+    const nm = dispName(id);
     return {
-      id, idx, name: id, nick: id, bot, ctrl: bot ? 'bot' : 'local', pid: null,
+      id, idx, name: nm, nick: nm, bot, ctrl: bot ? 'bot' : 'local', pid: null,
       x: 0, y: 0, w: RW, h: RH, vx: 0, vy: 0, onGround: false, coy: 0, jumps: 0,
       out: false, elim: false, outN: 0, outT: 0, gates: 0, gateT: null, tp: 0,
       portCd: 0, ventCd: 0, bounceT: 0, onIce: false, onSand: false, inLift: false,
       slide: false, slideT: 0, climb: false, blocked: false, slam: false,
       item: null, charge: 0, boost: 0, shield: 0, balloon: false, padT: 0,
       dead: 0, inv: 0, stun: 0, frozen: 0, netted: 0, slowT: 0, pull: 0, inked: 0, ccImm: 0,
-      dash: 0, sled: 0, fly: 0, dashX: 1, dashY: 0, flyMul: 1.3,
+      dash: 0, sled: 0, fly: 0, dashX: 1, dashY: 0, flyMul: 1.3, car: 0, carBlk: 0,
       jbuf: 0, landT: 9, perfT: 0, perfCd: 0, slamPerf: false, draft: 0, draftT: 0, nmCd: 0, nmPend: null,
       onMud: false, onBelt: false, safe: { x: 60, y: 460 },
       finished: false, place: 0, ftime: 0, rp: 0, total: 0, deaths: 0, kills: 0, coins: 0, ph: 0,
@@ -159,7 +174,7 @@
     for (const r of rs) {
       cnt[r.id] = (cnt[r.id] || 0) + 1;
       if (cnt[r.id] > 1) {
-        r.name = r.nick = r.id + ' ' + cnt[r.id];
+        r.name = r.nick = dispName(r.id) + ' ' + cnt[r.id];
         const sk = FM.COSMETICS.skins;
         if (r.bot) r.skin = sk[(cnt[r.id] - 1) % sk.length].id;
       }

@@ -1059,6 +1059,24 @@ kbd {
 .cd-foot { flex: none; display: flex; justify-content: center; padding: .7rem 1rem .5rem; border-top: .14rem solid rgba(255, 255, 255, .06); background: rgba(0, 0, 0, .18); }
 .btn-sel { font-size: 2rem; min-width: 16rem; }
 .btn-sel.is-static { filter: saturate(.55); }
+.cd-foot .btn-unl { gap: .3em; font-size: 1.6rem; margin: 0 .35rem; }
+.btn-unl .fu-ic { font-size: .9em; }
+.btn-unl .bi { margin-left: .15em; }
+/* Türk tiplemeleri: kilitli kart (soluk), fiyat çipi, TİPLEME rozeti, uzun adlar iki satıra sığar */
+.cc.is-lock .cc-pt { filter: grayscale(.5) brightness(.78); }
+.cc-pr { display: inline-flex; align-items: center; gap: .15rem; padding: .12rem .45rem .14rem .3rem; border-radius: .6rem; font: 1rem/1 var(--fh); color: #ffd23f; background: rgba(0, 0, 0, .42); border: .12rem solid rgba(0, 0, 0, .5); }
+.cc-pr .ico { width: 1rem; height: 1rem; color: #fff; }
+.cc-pr .bi { width: 1.4rem; height: 1.4rem; }
+.cc-tip { position: absolute; top: 46%; left: .15rem; transform: rotate(-10deg); padding: .14rem .35rem .16rem; border-radius: .45rem; font: .8rem/1 var(--fh); letter-spacing: .04em; color: #fff; background: linear-gradient(180deg, #ffb347, #e8590c); border: .12rem solid var(--ink); }
+.cc.is-tip .cc-n { font-size: 1.12rem; white-space: normal; text-align: center; line-height: 1.02; }
+.ab-lock { display: flex; align-items: center; gap: .5rem; margin-top: .55rem; padding: .55rem .7rem; border-radius: .8rem; background: rgba(0, 0, 0, .3); font: 500 max(11.5px, 1.1rem)/1.25 var(--fb); color: var(--txt2); }
+.ab-lock .ico { flex: none; width: 1.4rem; height: 1.4rem; color: #ffd23f; }
+.says { display: flex; flex-wrap: wrap; gap: .45rem; }
+.say { position: relative; padding: .45rem .75rem .5rem; border-radius: 1rem 1rem 1rem .25rem; background: #fff; color: #2b165e; font: 600 max(11.5px, 1.1rem)/1.15 var(--fb); box-shadow: 0 .18rem 0 rgba(0, 0, 0, .35); }
+.cpk.lock .cpk-pt { filter: grayscale(.55) brightness(.75); }
+.cpk-pt { position: relative; }
+.cpk-lk { position: absolute; right: .1rem; bottom: .1rem; width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; background: rgba(0, 0, 0, .6); color: #ffd23f; }
+.cpk-lk .ico { width: 1.25rem; height: 1.25rem; }
 
 /* ---------------------------------------------------------------------
    9) MAĞAZA
@@ -2586,7 +2604,7 @@ span.foot-up.maxed { align-items: center; gap: .3rem; }
 a.btn { text-decoration: none; }
 .pnl-cpk { width: min(70rem, calc(100vw - 4rem)); padding: 2.8rem 1.4rem 1rem; }
 .pnl-cpk > :not(.ribbon):not(.mdl-x) { position: relative; z-index: 1; }
-.cpk-g { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .6rem; }
+.cpk-g { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .6rem; }
 .cpk {
   --cc: #5b2a86; display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .4rem .2rem .55rem; border-radius: 1.1rem; color: #fff; pointer-events: auto; cursor: pointer;
   background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, .22), rgba(0, 0, 0, 0) 60%), linear-gradient(180deg, var(--cc), #1d0c40); border: .16rem solid var(--ink);

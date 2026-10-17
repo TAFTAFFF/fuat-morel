@@ -85,21 +85,32 @@ window.FM = window.FM || {};
     baso:   { role: 'Üye',                tr: 668,  species: 'Ayı',      ab: 'Bas Dalgası',        col: '#8b5a33', col2: '#3cb371', acc: '#e63946',
       d: 'Kulaklıktaki bası sonuna kadar açar: ileri (nişanla geri) giden ses dalgası çarptığı herkesi 3.2 sn yarı hıza düşürür.',
       look: 'Kahverengi ayı, yeşil kapüşonlu, siyah kafa bantlı kırmızı kulaklık' },
-    // ---- Türk tiplemeleri (tag: 'tipleme'; FM.ORDER'a ana ajan ekler) ----
-    Almanci: { n: 'Almancı Dayı', tag: 'tipleme', role: 'Gurbetçi', tr: 0, species: 'Sosis Köpeği', ab: 'Alman Arabası', col: '#b8703c', col2: '#ffd23f', acc: '#e8202e',
+    // ---- Türk tiplemeleri (tag: 'tipleme'): klan karakterleri ücretsiz, tiplemeler altınla (price) ya da elmasla (gems) açılır ----
+    Almanci: { n: 'Almancı Dayı', tag: 'tipleme', price: 10000, gems: 100, role: 'Gurbetçi', tr: 0, species: 'Sosis Köpeği', ab: 'Alman Arabası', col: '#b8703c', col2: '#ffd23f', acc: '#e8202e',
       d: 'Küçük arabasına atlayıp 2 sn yerde gazlar: yerdeki tehlikelere bağışık, çarptığı rakipleri savurur. Düt düt!',
       look: 'Kahverengi sosis köpeği, beyaz atlet, altın kolye, alna itilmiş güneş gözlüğü, bel çantası, beyaz çorap + sandalet, kendinden emin sırıtış',
       say: ['Bizim orda böyle değil!', 'Düt düt, yol verin!', 'Yazın geldik, kışın gideriz.', 'Bu araba Almanya\'dan!'] },
-    Teyze:   { n: 'Terlikli Teyze', tag: 'tipleme', role: 'Mahalle Teyzesi', tr: 0, species: 'Tavuk', ab: 'Uçan Terlik', col: '#f06292', col2: '#ffffff', acc: '#ff3fa0',
+    Teyze:   { n: 'Terlikli Teyze', tag: 'tipleme', price: 10000, gems: 100, role: 'Mahalle Teyzesi', tr: 0, species: 'Tavuk', ab: 'Uçan Terlik', col: '#f06292', col2: '#ffffff', acc: '#ff3fa0',
       d: 'Nişan alınabilen, hedefi izleyen terlik fırlatır: vurduğunu 1.5 sn sersemletir, bir kez seker. Kaç kere söyledim!',
       look: 'Krem tavuk, çene altından bağlı kırmızı benekli beyaz tülbent, çiçekli pembe ev elbisesi, pembe terlikler, elinde terlik, kalkık kaşlar, al yanaklar',
       say: ['Aç mısın evladım?', 'Kaç kere söyledim!', 'Hırkanı al, üşürsün!', 'Terlik geliyor!'] },
-    Marti:   { n: 'Simitçi Martı', tag: 'tipleme', role: 'Simitçi', tr: 0, species: 'Martı', ab: 'Simit Kapma', col: '#ffffff', col2: '#9aa8b8', acc: '#d9962e',
+    Marti:   { n: 'Simitçi Martı', tag: 'tipleme', price: 10000, gems: 100, role: 'Simitçi', tr: 0, species: 'Martı', ab: 'Simit Kapma', col: '#ffffff', col2: '#9aa8b8', acc: '#d9962e',
       d: 'Öndeki en yakın rakibin eşyasını kapıp kendine alır; eşya yoksa yolda yuvarlanan bir simit atar. Sıcak simiiit!',
       look: 'Beyaz martı, gri kanat-kollar, kırmızı benekli sarı gaga, gri kasket, kahverengi yelek, başında simit tablası, sinsi yarı kapalı gözler',
       say: ['Sıcak simiiit!', 'Taze taze, çıtır çıtır!', 'O simit benim!', 'Boğaz\'da yürüyorum bak.'] }
   };
   FM.ORDER = ['TAFTAF', 'Caner', 'LUL', 'ertan', 'Kral', 'Nuss', 'baso'];
+  /** Ekranda görünen karakter adı (tiplemelerde 'Almancı Dayı'; klan karakterlerinde kimliğin kendisi) */
+  FM.chName = id => (FM.CH[id] && FM.CH[id].n) || String(id || '');
+  /** Satın alınması gereken karakter mi (klan karakterleri ücretsiz) */
+  FM.chPaid = id => !!(FM.CH[id] && (FM.CH[id].price || FM.CH[id].gems));
+  /** Karakter bu kayıtta kullanılabilir mi (ücretsiz ya da satın alınmış) */
+  FM.chOwned = (id, s) => {
+    if (!FM.CH[id]) return false;
+    if (!FM.chPaid(id)) return true;
+    s = s || FM.save;
+    return !!(s && s.owned && Array.isArray(s.owned.chars) && s.owned.chars.indexOf(id) >= 0);
+  };
 
   /* ---------------- temalar ---------------- */
   // Renderer'lar ek alanları kendi içinde id'ye göre tanımlayabilir; burada çekirdek palet var.
@@ -336,7 +347,7 @@ window.FM = window.FM || {};
       trophies,
       upgrades: {},             // meta.js doldurur: { key: level } veya { 'key:charId': level }
       // kozmetik sahiplik: skins { charId: ['klasik', ...] }; diğer türler id dizisi (Mağaza 2.0: hats/wins/deaths eklendi)
-      owned: { skins: { }, trails: ['none', 'dust'], plates: ['basic'], hats: ['none'], wins: ['none'], deaths: ['none'] },
+      owned: { skins: { }, trails: ['none', 'dust'], plates: ['basic'], hats: ['none'], wins: ['none'], deaths: ['none'], chars: [] },
       equipped: { skin: {}, trail: 'dust', plate: 'basic', hat: 'none', win: 'none', death: 'none' },   // skin: { charId: 'klasik' }
       missions: null,           // meta.js yönetir
       stats: {},                // meta.js yönetir (toplam sayaçlar)
@@ -376,11 +387,13 @@ window.FM = window.FM || {};
     s.owned = Object.assign({}, d.owned, obj(s.owned) ? s.owned : {});
     if (!obj(s.owned.skins)) s.owned.skins = {};
     for (const t of ['trails', 'plates', 'hats', 'wins', 'deaths']) if (!Array.isArray(s.owned[t])) s.owned[t] = d.owned[t].slice();
+    // satın alınan tiplemeler: yalnızca geçerli, ücretli karakter kimlikleri, tekrarsız
+    s.owned.chars = (Array.isArray(s.owned.chars) ? s.owned.chars : []).filter((k, i, a) => typeof k === 'string' && FM.chPaid(k) && a.indexOf(k) === i);
     s.equipped = Object.assign({}, d.equipped, obj(s.equipped) ? s.equipped : {});
     if (!obj(s.equipped.skin)) s.equipped.skin = {};
     for (const k of ['trail', 'plate', 'hat', 'win', 'death']) if (typeof s.equipped[k] !== 'string') s.equipped[k] = d.equipped[k];
     s.settings = Object.assign({}, d.settings, obj(s.settings) ? s.settings : {});
-    if (typeof s.selChar !== 'string' || !FM.CH[s.selChar]) s.selChar = 'TAFTAF';
+    if (typeof s.selChar !== 'string' || !FM.CH[s.selChar] || !FM.chOwned(s.selChar, s)) s.selChar = 'TAFTAF';
     if (!FM.modeById(s.mode)) s.mode = 'classic';
     if (s.map !== 'random' && FM.themeIndex(s.map) < 0) s.map = 'random';
     s.rivals = Math.max(1, Math.min(FM.MAXR - 1, Math.round(num(s.rivals, d.rivals))));

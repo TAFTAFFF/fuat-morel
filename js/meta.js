@@ -408,6 +408,7 @@
     if (!isObj(s.owned)) s.owned = { skins: {}, trails: [], plates: [] };
     if (!isObj(s.owned.skins)) s.owned.skins = {};
     for (const k of Object.keys(s.owned.skins)) if (!charOk(k)) delete s.owned.skins[k];
+    s.owned.chars = (Array.isArray(s.owned.chars) ? s.owned.chars : []).filter((k, i, a) => typeof k === 'string' && FM.chPaid(k) && a.indexOf(k) === i);
     for (const c of FM.ORDER) {
       const a = Array.isArray(s.owned.skins[c]) ? s.owned.skins[c] : [];
       const out = [];
@@ -948,6 +949,33 @@
     persist(true);
     FM.emit('meta:buy', { type: t, id, charId: t === 'skins' ? charOr(charId) : null, price, cur, off: ep.off, base: ep.base, rar: rarOf(it) });
     FM.emit('meta:change', { reason: 'buy', type: t, id });
+    return true;
+  };
+  /* ---------------- karakter açma (Türk tiplemeleri) ----------------
+     Klan karakterleri ücretsiz. Tiplemeler bir kez açılır: altınla (FM.CH[id].price) ya da elmasla (FM.CH[id].gems).
+     Güç farkı yok (herkes eşit); açılan şey yeni karakter, yeni özel güç ve görünüştür. */
+  meta.ownsChar = function (id) { return !!(FM.chOwned && FM.chOwned(id, S())); };
+  /** charPrice(id) → null (ücretsiz/geçersiz) ya da {coins, gems} */
+  meta.charPrice = function (id) {
+    const c = FM.CH && FM.CH[id];
+    if (!c || !FM.chPaid(id)) return null;
+    return { coins: Math.floor(num0(c.price)), gems: Math.floor(num0(c.gems)) };
+  };
+  /** buyChar(id, 'coins'|'gems') → true (açıldı ya da zaten açık) / false (geçersiz ya da bakiye yetersiz). Açılan karakter seçilir. */
+  meta.buyChar = function (id, cur) {
+    if (!charOk(id)) return false;
+    if (meta.ownsChar(id)) return true;
+    const p = meta.charPrice(id); if (!p) return false;
+    cur = cur === 'gems' ? 'gems' : 'coins';
+    const n = p[cur]; if (!(n > 0)) return false;
+    if (!debit(cur, n)) return false;
+    const s = S();
+    s.owned.chars.push(id);
+    s.selChar = id;
+    checkMissions(false);
+    persist(true);
+    FM.emit('meta:buy', { type: 'char', id, charId: id, price: n, cur, off: 0, base: n, rar: 'l' });
+    FM.emit('meta:change', { reason: 'buy', type: 'char', id });
     return true;
   };
   function equipRaw(t, id, charId) {

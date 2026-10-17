@@ -916,7 +916,11 @@
     cd: null, lbTab: 'set', bestT: {}, fakeNet: null, hintShown: false, rejoining: false
   };
   function showLayer(name, on) { Ls[name].classList.toggle('on', !!on); }
-  function selChar() { const s = sv(); return FM.CH[s.selChar] ? s.selChar : 'TAFTAF'; }
+  function selChar() { const s = sv(); return FM.CH[s.selChar] && chOwn(s.selChar) ? s.selChar : 'TAFTAF'; }
+  /** Karakter kullanılabilir mi (klan karakterleri ücretsiz, tiplemeler açılınca) */
+  function chOwn(id) { return FM.chOwned ? FM.chOwned(id) : !!FM.CH[id]; }
+  /** Ekranda görünen karakter adı */
+  function chN(id) { return FM.chName ? FM.chName(id) : String(id || ''); }
   function roundsSel() { const r = +sv().rounds; return [1, 3, 5].indexOf(r) >= 0 ? r : 3; }
 
   /* =====================================================================
@@ -998,7 +1002,7 @@
         '<div class="sh-tr" title="Kupa">' + trophyI(48, 'sh-tri') + '<b>' + fmtN(trophies(id)) + '</b></div>' +
       '</div>' +
       '<div class="sh-info">' +
-        '<div class="sh-name">' + esc(id) + '</div>' +
+        '<div class="sh-name">' + esc(chN(id)) + '</div>' +
         '<div class="sh-meta">' + roleBadge(ch.role) + '<span class="sh-sp">' + esc(ch.species || '') + '</span></div>' +
         '<div class="sh-ab"><span class="ab-ic">' + svg('bolt') + '</span><span class="ab-n">' + esc(ch.ab || '') + '</span><span class="ab-lv">SV. ' + abLevel(id) + '</span></div>' +
       '</div>' +
@@ -1050,6 +1054,14 @@
       (lv >= max ? '<span class="maxed">MAKS</span>' : priceBtn('upg', 'data-key="' + esc(u.key) + '" data-ch="' + esc(ch) + '"', p)) +
     '</div>';
   }
+  function charPrice(id) { const m = FM.meta; return m && m.charPrice ? m.charPrice(id) : null; }
+  /** Kilitli tiplemenin alt çubuğu: altınla AÇ / elmasla AÇ (iki dokunuşla onay) */
+  function charBuyBtns(id) {
+    const p = charPrice(id); if (!p) return '';
+    const b = (cur, n) => '<button class="btn b-green buy btn-unl ' + (canAfford({ cur, n }) ? '' : 'poor') + '" data-act="buychar" data-id="' + esc(id) + '" data-cur="' + cur + '">' +
+      svg('lock', 'fu-ic') + '<span class="fu-t">AÇ</span>' + (cur === 'gems' ? gemI(28, 'bi') : coinI(28, 'bi')) + '<b>' + fmtN(n) + '</b></button>';
+    return (p.coins ? b('coins', p.coins) : '') + (p.gems ? b('gems', p.gems) : '');
+  }
   function renderChars() {
     const sel = selChar();
     const v = FM.CH[st.cview] ? st.cview : sel; st.cview = v;
@@ -1058,17 +1070,22 @@
     let cards = '';
     FM.ORDER.forEach((id, i) => {
       const c = FM.CH[id] || {};
-      cards += '<button class="cc ' + (id === sel ? 'is-sel ' : '') + (id === v ? 'is-view' : '') + '" data-act="cview" data-id="' + esc(id) + '" data-k="cc:' + esc(id) + '" style="--d:' + (i * .035).toFixed(3) + 's;--cc:' + esc(c.col2 || '#5b2a86') + '">' +
+      const own = chOwn(id), cp = own ? null : charPrice(id);
+      cards += '<button class="cc ' + (id === sel ? 'is-sel ' : '') + (id === v ? 'is-view ' : '') + (own ? '' : 'is-lock ') + (c.tag === 'tipleme' ? 'is-tip' : '') + '" data-act="cview" data-id="' + esc(id) + '" data-k="cc:' + esc(id) + '" style="--d:' + (i * .035).toFixed(3) + 's;--cc:' + esc(c.col2 || '#5b2a86') + '">' +
         '<span class="cc-pt">' + pt(id, 112, { skin: equipped('skins', id), hat: equipped('hats', id) }) + '</span>' +
-        '<span class="cc-n">' + esc(id) + '</span>' +
-        '<span class="cc-tr">' + trophyI(24, 'cc-tri') + '<b>' + fmtN(trophies(id)) + '</b></span>' +
+        '<span class="cc-n">' + esc(chN(id)) + '</span>' +
+        (cp ? '<span class="cc-pr">' + svg('lock') + coinI(20, 'bi') + '<b>' + fmtN(cp.coins) + '</b></span>'
+            : '<span class="cc-tr">' + trophyI(24, 'cc-tri') + '<b>' + fmtN(trophies(id)) + '</b></span>') +
+        (c.tag === 'tipleme' && !cp ? '<span class="cc-tip">TİPLEME</span>' : '') +
         (id === sel ? '<span class="cc-tag">' + svg('check') + 'SEÇİLİ</span>' : '') +
       '</button>';
     });
-    // özel güç geliştirmeleri
-    const ups = upgrades(v);
+    // özel güç geliştirmeleri (kilitli tiplemede yok: önce karakter açılır)
+    const vOwn = chOwn(v);
+    const ups = vOwn ? upgrades(v) : null;
     let upH = '', footUp = '';
-    if (ups === null) upH = '<div class="ab-lvl"><span>Güç seviyesi</span>' + pips(abLevel(v), 5) + '<b>SV. ' + abLevel(v) + '</b></div>';
+    if (!vOwn) upH = '<div class="ab-lock">' + svg('lock') + '<span>Karakteri açınca gücünü seviye seviye geliştirebilirsin.</span></div>';
+    else if (ups === null) upH = '<div class="ab-lvl"><span>Güç seviyesi</span>' + pips(abLevel(v), 5) + '<b>SV. ' + abLevel(v) + '</b></div>';
     else {
       const cu = ups.filter(u => u.scope === 'char');
       upH = cu.length ? cu.map(u => upgRow(u, v)).join('') : '<div class="ab-lvl"><span>Güç seviyesi</span>' + pips(abLevel(v), 5) + '<b>SV. ' + abLevel(v) + '</b></div>';
@@ -1098,14 +1115,15 @@
       '<div class="cd-head">' +
         '<div class="cd-stage"><div class="sh-rays sm"></div><canvas class="cd-cv" data-showcase="' + esc(v) + '" data-skin="' + esc(skinEq) + '" data-hat="' + esc(equipped('hats', v)) + '" data-zoom="1.2" data-cheer="' + (st.cheerNext ? 1.4 : 0) + '"></canvas></div>' +
         '<div class="cd-id">' +
-          '<div class="cd-name">' + esc(v) + '</div>' +
+          '<div class="cd-name">' + esc(chN(v)) + '</div>' +
           '<div class="cd-meta">' + roleBadge(ch.role) + '<span class="cd-sp">' + esc(ch.species || '') + '</span></div>' +
           '<div class="cd-tr">' + trophyI(32, 'cd-tri') + '<b>' + fmtN(trophies(v)) + '</b><span>kupa</span></div>' +
         '</div>' +
       '</div>' +
       '<div class="cd-sec cd-ab"><h4>' + svg('bolt') + 'ÖZEL GÜÇ</h4>' +
         '<div class="ab-box"><div class="ab-title">' + esc(ch.ab || '') + '</div><p>' + esc(ch.d || '') + '</p>' + upH + '</div></div>' +
-      '<div class="cd-sec"><h4>' + svg('sparkle') + 'GÖRÜNÜMLER</h4><div class="skins">' + sk + '</div></div>' +
+      (ch.say && ch.say.length ? '<div class="cd-sec"><h4>' + svg('smile') + 'LAFLARI</h4><div class="says">' + ch.say.map(x => '<span class="say">' + esc(x) + '</span>').join('') + '</div></div>' : '') +
+      (vOwn ? '<div class="cd-sec"><h4>' + svg('sparkle') + 'GÖRÜNÜMLER</h4><div class="skins">' + sk + '</div></div>' : '') +
       '<div class="cd-sec"><h4>' + svg('star') + 'İSTATİSTİKLER <span class="eq-tag">HERKES EŞİT</span></h4><div class="stats">' + stats + '</div>' +
         '<p class="eq-note">Tüm karakterlerin hızı, zıplaması ve güç dolumu aynıdır. Fark yaratan; özel güç, görünüm ve senin becerin!</p></div>';
     st.cheerNext = false;
@@ -1114,10 +1132,11 @@
         '<div class="ch-grid">' + cards + '</div>' +
         '<div class="ch-det">' +
           '<div class="cd-scroll scroll" data-sk="chars-det">' + det + '</div>' +
-          '<div class="cd-foot">' + (v === sel
+          '<div class="cd-foot">' + (!chOwn(v) ? charBuyBtns(v)
+            : v === sel
             ? '<div class="btn b-steel btn-sel is-static">' + svg('check') + '<span>SEÇİLİ</span></div>'
             : '<button class="btn b-green btn-sel" data-act="select" data-id="' + esc(v) + '">' + svg('check') + '<span>SEÇ</span></button>') +
-            footUp +
+            (chOwn(v) ? footUp : '') +
           '</div>' +
         '</div>' +
       '</div>', 'pnl-chars');
@@ -1500,7 +1519,7 @@
       let h = '';
       FM.ORDER.forEach((id, i) => {
         const c = FM.CH[id] || {};
-        h += '<div class="hp" style="--d:' + (i * .04).toFixed(2) + 's">' + pt(id, 72, {}, 'hp-pt') + '<span class="hp-m"><span class="hp-t"><b>' + esc(id) + '</b><em>' + esc(c.ab || '') + '</em></span><span class="hp-d">' + esc(c.d || '') + '</span></span></div>';
+        h += '<div class="hp" style="--d:' + (i * .04).toFixed(2) + 's">' + pt(id, 72, {}, 'hp-pt') + '<span class="hp-m"><span class="hp-t"><b>' + esc(chN(id)) + '</b><em>' + esc(c.ab || '') + '</em></span><span class="hp-d">' + esc(c.d || '') + '</span></span></div>';
       });
       body = '<div class="help-grid hg-pow">' + h + '</div>';
     } else {
@@ -1554,7 +1573,7 @@
         '<div class="so-col so-side">' +
           '<div class="so-opt"><span class="so-l">TUR</span><span class="rd-o">' + rd + '</span></div>' +
           '<div class="so-opt"><span class="so-l">RAKİP</span><span class="stp"><button class="rd" data-act="rivals" data-d="-1" aria-label="Azalt">−</button><b class="stp-v">' + o.rivals + '</b><button class="rd" data-act="rivals" data-d="1" aria-label="Artır">+</button></span></div>' +
-          '<span class="so-pt">' + pt(selChar(), 64, { skin: equipped('skins', selChar()) }) + '<em>' + esc(selChar()) + '</em></span>' +
+          '<span class="so-pt">' + pt(selChar(), 64, { skin: equipped('skins', selChar()) }) + '<em>' + esc(chN(selChar())) + '</em></span>' +
           '<button class="btn b-gold btn-go" data-act="solostart"><span class="shine"></span>' + svg('play') + '<span>BAŞLA</span></button>' +
         '</div>' +
       '</div>', 'pnl-solo', 'rb-gold');
@@ -3104,8 +3123,9 @@
     const cur = selChar();
     let h = '';
     FM.ORDER.forEach((id, i) => {
-      h += '<button class="cpk ' + (id === cur ? 'on' : '') + '" data-act="chset" data-id="' + esc(id) + '" style="--cc:' + esc(chBg(id)) + ';--d:' + (i * .03).toFixed(2) + 's">' +
-        '<span class="cpk-pt">' + pt(id, 80, { skin: equipped('skins', id) }) + '</span><b>' + esc(id) + '</b><em>' + esc((FM.CH[id] && FM.CH[id].ab) || '') + '</em></button>';
+      const own = chOwn(id);
+      h += '<button class="cpk ' + (id === cur ? 'on ' : '') + (own ? '' : 'lock') + '" data-act="chset" data-id="' + esc(id) + '" style="--cc:' + esc(chBg(id)) + ';--d:' + (i * .03).toFixed(2) + 's">' +
+        '<span class="cpk-pt">' + pt(id, 80, { skin: equipped('skins', id) }) + (own ? '' : '<i class="cpk-lk">' + svg('lock') + '</i>') + '</span><b>' + esc(chN(id)) + '</b><em>' + esc((FM.CH[id] && FM.CH[id].ab) || '') + '</em></button>';
     });
     openModal('chpick', '<div class="pnl pnl-cpk">' + ribbon('KARAKTERİNİ SEÇ', 'rb-purple') +
       '<button class="rbtn b-red mdl-x" data-act="mclose" aria-label="Kapat">' + svg('close') + '</button>' +
@@ -3113,6 +3133,7 @@
   }
   function setLobbyChar(id) {
     if (!FM.CH[id]) return;
+    if (!chOwn(id)) { sfx('error'); note({ title: chN(id) + ' kilitli', sub: 'KARAKTERLER ekranından altın ya da elmasla açabilirsin.', icon: svg('lock'), cls: 'n-err', ms: 2200 }); return; }
     sv().selChar = id; if (typeof FM.persist === 'function') FM.persist();
     const lo = FM.meta && typeof FM.meta.loadout === 'function' ? FM.meta.loadout(id) : null;
     ncall('setProfile', Object.assign({ char: id, skin: equipped('skins', id), trail: equipped('trails', id), plate: equipped('plates', id) }, lo ? { hat: lo.hat, win: lo.win, death: lo.death } : {}));
@@ -3328,6 +3349,16 @@
     equip(type, id, ch);
     success(type + ':' + id, 'Satın alındı!', it.n + ' kuşanıldı.');
   }
+  /** Tipleme karakter açma: iki dokunuşla onay; açılınca seçilir ve kutlama sesi */
+  function doBuyChar(el) {
+    const id = el.getAttribute('data-id'), cur = el.getAttribute('data-cur') === 'gems' ? 'gems' : 'coins';
+    const p = charPrice(id); if (!p || chOwn(id)) return;
+    if (curAmt(cur) < (p[cur] || 0)) { fail(el, cur); return; }
+    if (!armBuy(el)) return;
+    if (!(FM.meta && FM.meta.buyChar && FM.meta.buyChar(id, cur))) { fail(el, cur); return; }
+    st.cheerNext = true;
+    success('cc:' + id, chN(id) + ' açıldı!', ((FM.CH[id] && FM.CH[id].say && FM.CH[id].say[0]) || 'Yeni karakter') + ' — seçildi.');
+  }
   function doEquip(el) {
     const type = el.getAttribute('data-type'), id = el.getAttribute('data-id'), ch = el.getAttribute('data-ch') || selChar();
     equip(type, id, ch);
@@ -3415,8 +3446,9 @@
     FM.game.startMatch({ char: ch, rounds: o.rounds, mode: o.mode, theme: o.map, n: o.rivals + 1 });
   }
   function cycleChar(d) {
-    const i = FM.ORDER.indexOf(selChar());
-    const n = FM.ORDER[(i + d + FM.ORDER.length) % FM.ORDER.length];
+    const L = FM.ORDER.filter(chOwn);
+    const i = L.indexOf(selChar());
+    const n = L[(i + d + L.length) % L.length] || 'TAFTAF';
     sv().selChar = n;
     if (typeof FM.persist === 'function') FM.persist();
     updateShowcaseOnly();
@@ -3442,13 +3474,14 @@
     cyc: el => cycleChar(+el.getAttribute('data-d') || 1),
     cview: el => { const id = el.getAttribute('data-id'); if (!FM.CH[id] || st.cview === id) return; st.cview = id; st.cheerNext = true; paint(false); const det = $('.cd-scroll', Ls.scr); if (det) { det.scrollTop = 0; det.classList.add('swap'); } },
     select: el => {
-      const id = el.getAttribute('data-id'); if (!FM.CH[id]) return;
+      const id = el.getAttribute('data-id'); if (!FM.CH[id] || !chOwn(id)) return;
       sv().selChar = id; if (typeof FM.persist === 'function') FM.persist();
       st.flashKey = 'cc:' + id; st.cheerNext = true;
       sfx('select');
-      note({ title: id + ' seçildi!', sub: (FM.CH[id] && FM.CH[id].ab) || '', icon: pt(id, 48, {}, 'n-pt'), cls: 'n-ok', ms: 1600 });
+      note({ title: chN(id) + ' seçildi!', sub: (FM.CH[id] && FM.CH[id].ab) || '', icon: pt(id, 48, {}, 'n-pt'), cls: 'n-ok', ms: 1600 });
       paint(false);
     },
+    buychar: el => doBuyChar(el),
     tab: el => {
       const s = el.getAttribute('data-s'), t = el.getAttribute('data-t');
       if (!st.tabs[s] || st.tabs[s] === t) return;

@@ -33,13 +33,18 @@ Durum: ✅ bitti · 🔨 bu turda yapılıyor · 📋 sırada · 💡 öneri
 - ✅ "Akıcılık Fun Run 4 gibi değil" → çizim ara değerlemesi, çevik koşu adımı, kısa vuruş donması, daha hızlı düşüş (1.22×), kilitli kamera
 - ✅ "Atılan şey havada kalıyor, düşmeli, zemine sabitlenmeli" → ağ/tuzak yere düşüp oturur, sıvıda söner; buz dalgası, mürekkep cephesi, Nuss süzülüşü düzeltildi
 - ✅ "Kaymadan geçiyorsun, bazı yerlerde zıplamak çözüm değil" → dev/obstacles.js denetleyicisi: 93 ihlal → 0 (testere makineleri ayakta geçilmiyor, imkânsız çukur/duvar yok)
-- 🔨 "Kapan gözükmüyor" → kapan %25 büyük + üstünde zıplayan kırmızı ⚠ (çimin önünde)
-- 🔨 "İnsanlar ne yapacağını anlamıyor" → ipucu sistemi (ZIPLA/ÇİFT/KAY/TIRMAN işareti + tuş nabzı), motor FM.S.hint
-- 🔨 "Lav da dahil hiçbir yere düşüp ölme olmasın" (Fun Run 4 gibi) → motor ajanı
+- ✅ "Kapan gözükmüyor" → kapan %25 büyük + üstünde zıplayan kırmızı ⚠ (çimin önünde)
+- ✅ "İnsanlar ne yapacağını anlamıyor" → ipucu sistemi (ZIPLA/ÇİFT/KAY/TIRMAN işareti + tuş nabzı) + ekran dışından gelen tehlike okları (TESTERE/FÜZE/TERLİK...)
+- ✅ "Lav da dahil hiçbir yere düşüp ölme olmasın" (Fun Run 4 gibi) → her çukurun tabanı var, sıvı ölümü 0
+- ✅ "Haritalar hep düz" → Fun Run 4 gibi yokuşlu, inişli çıkışlı zemin (8 temada çiziliyor)
+- ✅ "Ölünce çok geriden başlatma" → ortalama 150 px geride doğma
+- ✅ "Testereden zıplayıp kaçabilelim" → atılan testere daha yavaş, büyük, kıvılcımlı
 - 🔨 **BÜYÜK GÜNCELLEME / App Store**: docs/APP-STORE-PLANI.md — Türk tiplemeleri (ilk parti: Almancı Dayı, Terlikli Teyze, Simitçi Martı), futbol renkleri formaları, ekonomi/sezon bileti, öğretici giriş, sunucu planı
-  - 🔨 İlk 3 tipleme: çizim + animasyon ✅, karakter açma (10.000 altın ya da 100 elmas, kilitli kart, AÇ düğmeleri, LAFLARI) ✅, özel güçler (motor) 🔨, kadroya ekleme 📋
+  - ✅ İlk 3 tipleme yayında: çizim + animasyon, karakter açma (10.000 altın ya da 100 elmas), özel güçler (Alman Arabası, Uçan Terlik, Simit Kapma), botlarda da görünüyorlar
   - ✅ Futbol formaları (yalnızca renk): kalın şeritli forma + kısa kol + şort + tozluk, mağazada takım renkli forma kartı
-  - 🔨 İlk deneyim: hoş geldin ekranı + antrenman yarışı (koç zamanı yavaşlatıp ZIPLA/KAY/TIRMAN/ÇİFT/EŞYA/GÜÇ gösterir) ✅; kolay botlar + sabit kolay pist (motor) 📋
+  - ✅ İlk deneyim: hoş geldin ekranı + antrenman yarışı (koç zamanı yavaşlatıp ZIPLA/KAY/TIRMAN/ÇİFT/EŞYA/GÜÇ gösterir; kolay botlar, sabit 36 sn'lik pist)
+  - ✅ App Store şartı: uygulama içinden hesap/veri silme + gizlilik politikası sayfası (gizlilik.html)
+  - 📋 Sıradaki: kalan 5 tipleme (Laz Müteahhit, Kayserili Tüccar, Çaycı Abi, Dolmuşçu, Nazarlı Nine), sezon bileti, sunucu (hesap, bulut kayıt, eşleştirme)
 - Not: Fable'ı az kullan (kullanıcı: çok token yiyor) → küçük işleri ana ajan yapar, Fable yalnızca gerçek çizim işlerinde ve kısa görevle
 - Not: "Karakterler güzel, eline sağlık" → karakter tasarımlarının ana hatları korunur.
 

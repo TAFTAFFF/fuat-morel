@@ -53,16 +53,28 @@
     lav:       { ramp: ['#0d0608', '#2a0d0e', '#4a1612', '#6e2114', '#9a3414', '#c8501a', '#f0a040'], lo: 0.22, th: 0.2, line: '#1a0604', eye: '#ffe14d', pat: 'cracks', glow: 'ember', glowCol: '#ff8a1a' },
     robot:     { ramp: ['#1c1f26', '#343945', '#555c6c', '#7d8597', '#a6afc0', '#ccd4e0', '#eef2f8'], lo: 0.4, th: 0.2, line: '#141820', eye: '#7df9ff', pat: 'panel' },
     galaksi:   { ramp: ['#05031a', '#120b3a', '#1e1660', '#2d2384', '#4a35a8', '#7b5fd0', '#b9a8f0'], lo: 0.2, th: 0.2, line: '#05030f', eye: '#7df9ff', pat: 'stars', glow: 'cosmic', glowCol: '#9a7bff', fx: '#d8ccff' },
-    gokkusagi: { ramp: ['#2a2230', '#5a4a5a', '#9a8a9a', '#cfc2cf', '#ece4ec', '#faf6fa', '#ffffff'], lo: 0.58, th: 0.2, line: '#2a1a34', pat: 'rainbow', fx: '#ffffff' }
+    gokkusagi: { ramp: ['#2a2230', '#5a4a5a', '#9a8a9a', '#cfc2cf', '#ece4ec', '#faf6fa', '#ffffff'], lo: 0.58, th: 0.2, line: '#2a1a34', pat: 'rainbow', fx: '#ffffff' },
+    // FORMA PAKETLERİ (yalnızca renk; kulüp adı/arması yok): keepPal → kürk/yüz klasik kalır, gövdeye forma + kollara kol bandı + bacaklara tozluk
+    forma_sk: { keepPal: true, pat: 'forma', kit: ['#ffd23f', '#e8202e'], stripes: 'v' },     // sarı-kırmızı
+    forma_sl: { keepPal: true, pat: 'forma', kit: ['#ffd23f', '#1f2a6e'], stripes: 'v' },     // sarı-lacivert
+    forma_sb: { keepPal: true, pat: 'forma', kit: ['#1c1c22', '#ffffff'], stripes: 'v' },     // siyah-beyaz
+    forma_bm: { keepPal: true, pat: 'forma', kit: ['#7a1030', '#1e4fa8'], stripes: 'v' },     // bordo-mavi
+    forma_yb: { keepPal: true, pat: 'forma', kit: ['#1e9a4a', '#ffffff'], stripes: 'v' },     // yeşil-beyaz
+    forma_kb: { keepPal: true, pat: 'forma', kit: ['#e8202e', '#ffffff'], stripes: 'trim' }   // kırmızı-beyaz (düz kırmızı, beyaz yaka/kol/tozluk)
   };
   const SKINS = { klasik: 1, altin: 1, gece: 1, neon: 1, buz: 1 };
   for (const k in SKIN_DEF) SKINS[k] = 1;
   // Her karakterin "gövde" renk anahtarları (rampa tabanlı skin'lerde gövde bölgesine eşlenir) ve desenin çizileceği alt küme
   const BODY_KEYS = {
     TAFTAF: ['fur', 'furD', 'belly', 'stripe'], Caner: ['fur', 'furL', 'belly', 'sheen'], LUL: ['fur', 'furL'],
-    ertan: ['fur', 'furL', 'jacket', 'jacketL', 'jacketD'], Kral: ['fur', 'furL', 'mane', 'mane2', 'maneL'], Nuss: ['fur', 'furL', 'shade'], baso: ['fur', 'furL', 'hood', 'hoodL', 'hoodD']
+    ertan: ['fur', 'furL', 'jacket', 'jacketL', 'jacketD'], Kral: ['fur', 'furL', 'mane', 'mane2', 'maneL'], Nuss: ['fur', 'furL', 'shade'], baso: ['fur', 'furL', 'hood', 'hoodL', 'hoodD'],
+    Almanci: ['fur', 'furL', 'furD', 'shirt', 'shirtD'], Teyze: ['fur', 'furL', 'furD', 'dress', 'dressL', 'dressD'], Marti: ['fur', 'furD', 'wing', 'wingL', 'wingD', 'vest', 'vestL', 'vestD']
   };
-  const PAT_KEYS = { TAFTAF: ['fur', 'belly'], Caner: ['fur', 'belly'], LUL: ['fur'], ertan: ['fur', 'jacket'], Kral: ['fur', 'mane', 'mane2'], Nuss: ['fur'], baso: ['fur', 'hood'] };
+  const PAT_KEYS = { TAFTAF: ['fur', 'belly'], Caner: ['fur', 'belly'], LUL: ['fur'], ertan: ['fur', 'jacket'], Kral: ['fur', 'mane', 'mane2'], Nuss: ['fur'], baso: ['fur', 'hood'],
+    Almanci: ['fur', 'shirt'], Teyze: ['fur', 'dress'], Marti: ['fur', 'wing', 'vest'] };
+  // forma (futbol) skin'leri: yalnızca gövde/kol/bacak parçalarında, bu anahtarlı şekillere forma deseni (kürk doğal kalır)
+  const FORMA_KEYS = { TAFTAF: ['fur', 'belly'], Caner: ['fur', 'belly'], LUL: ['fur'], ertan: ['fur', 'jacket', 'belly'], Kral: ['fur'], Nuss: ['fur'], baso: ['fur', 'hood'],
+    Almanci: ['fur', 'shirt'], Teyze: ['fur', 'dress'], Marti: ['fur', 'wing', 'vest'] };
   const KEEP_KEYS = { sclera: 1, blush: 1 };   // her skin'de özgün kalan anahtarlar (göz akı, allık)
 
   /* =====================================================================
@@ -143,6 +155,25 @@
       fur: '#8b5a33', furL: '#b98250', muzzle: '#ddb98e', hood: '#3cb371', hoodL: '#7be0a4', hoodD: '#227a48',
       phone: '#e63946', phoneL: '#ff7a84', band: '#1d1d24', cushion: '#2c2c36', nose: '#2a1810', eye: '#2a1810',
       string: '#ffffff', line: '#26140a'
+    },
+    // ---- Türk tiplemeleri ----
+    Almanci: {
+      fur: '#b8703c', furL: '#dca070', furD: '#8a4a22', muzzle: '#ecc9a0', ear: '#8e4e24',
+      shirt: '#f6f2e8', shirtD: '#c9c2b4', chain: '#ffd23f', chainD: '#b8860b', bag: '#22222c', bagL: '#48485a', bagAcc: '#e8202e',
+      glass: '#16161e', glassHi: '#7ab6ff', sock: '#ffffff', sockD: '#c3c8d4', sandal: '#6a3a18', sandalL: '#a06a38',
+      nose: '#2a1810', eye: '#3a2a1a', tongue: '#ff6f91', line: '#2a1408'
+    },
+    Teyze: {
+      fur: '#fff6ea', furL: '#ffffff', furD: '#dcc8aa', beak: '#ffb020', beakD: '#d0780a', cheek: '#ff8fa8',
+      dress: '#f06292', dressL: '#ff9ec4', dressD: '#b8305e', flower: '#fff3a0', flower2: '#8fd3ff', leaf: '#6fcf6a',
+      scarf: '#ffffff', scarfD: '#c9d0da', scarfDot: '#e8202e', slipper: '#ff3fa0', slipperD: '#b8186a',
+      leg: '#ffb020', legD: '#d0780a', eye: '#2a1810', brow: '#5a3a20', line: '#3a1a28'
+    },
+    Marti: {
+      fur: '#ffffff', furL: '#ffffff', furD: '#c9d3e0', wing: '#9aa8b8', wingL: '#cdd6e0', wingD: '#5f6c7c',
+      beak: '#ffb020', beakD: '#d0780a', spot: '#e8202e', cap: '#6a6a7a', capL: '#8f8fa0', capD: '#44444f',
+      vest: '#6a4a2a', vestL: '#8e6a40', vestD: '#3f2a14', tray: '#b8803a', trayD: '#7a5020', simit: '#d9962e', simitL: '#f0c070', sesame: '#fff0c0',
+      leg: '#ffb020', legD: '#d0780a', eye: '#e8c24a', line: '#1e2838'
     }
   };
 
@@ -233,14 +264,15 @@
       for (const k in f) P[k] = (typeof f[k] === 'string' && f[k].charAt(0) === '#' && k !== 'line') ? mix(f[k], '#24123a', 0.2) : f[k];
     } else {
       const base = PAL[id] || PAL.TAFTAF, sd = SKIN_DEF[skin], bk = BODY_KEYS[id] || BODY_KEYS.TAFTAF;
-      for (const k in base) P[k] = (skin === 'klasik' || k === 'line' || (sd && KEEP_KEYS[k])) ? base[k] : skinColor(base[k], skin, bk.indexOf(k) >= 0);
+      const keep = skin === 'klasik' || !!(sd && sd.keepPal);
+      for (const k in base) P[k] = (keep || k === 'line' || (sd && KEEP_KEYS[k])) ? base[k] : skinColor(base[k], skin, bk.indexOf(k) >= 0);
       const ov = SKIN_OV[id] && SKIN_OV[id][skin];
       if (ov) Object.assign(P, ov);
       if (sd) {
         if (sd.eye) P.eye = sd.eye;
         if (sd.line) P.line = sd.line;
         if (id === 'Nuss' && !sd.eye) P.eye = base.eye;                           // baykuşun iri sarı gözü her skin'de okunur kalsın
-        if (sd.pat) { P.pattern = sd.pat; P.patKeys = PAT_KEYS[id] || PAT_KEYS.TAFTAF; }
+        if (sd.pat) { P.pattern = sd.pat; P.patKeys = sd.keepPal ? (FORMA_KEYS[id] || FORMA_KEYS.TAFTAF) : (PAT_KEYS[id] || PAT_KEYS.TAFTAF); P.kit = sd.kit; P.stripes = sd.stripes; }
       } else if (skin !== 'klasik' && !(ov && ov.line)) P.line = SKIN_LINE[skin] || P.line;
       P.glowEye = skin === 'gece' || skin === 'neon' || id === 'Caner' || !!(sd && (sd.glow || sd.eye === '#7df9ff'));
       P.neonGlow = skin === 'neon' || !!(sd && sd.glow);
@@ -264,6 +296,26 @@
      ===================================================================== */
   const H = (s, i) => FM.hash(s * 131 + i * 7919);
   const PATTERNS = {
+    forma(g, s, c) {  // futbol forması: gövdede takım renkli dikey şeritler + yaka, kolda kol bandı, bacakta tozluk (isim/arma yok)
+      if (!c || !c.kit) return;
+      const A = c.kit[0], Bc = c.kit[1], part = c.part;
+      if (part === 'body') {
+        g.fillStyle = A; g.fillRect(-40, -44, 80, 64);
+        g.fillStyle = Bc;
+        if (c.stripes === 'v') for (let x = -40; x < 40; x += 9) g.fillRect(x, -44, 4.5, 64);
+        else if (c.stripes === 'h') for (let y = -40; y < 20; y += 8) g.fillRect(-40, y, 80, 4);
+        g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(-40, -44, 14, 64);
+        g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(10, -44, 30, 64);
+        g.strokeStyle = Bc; g.lineWidth = 2.4; g.lineCap = 'round'; g.beginPath(); g.moveTo(-8, -17); g.lineTo(0.5, -12.6); g.lineTo(9, -17); g.stroke();   // V yaka
+        g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 0.9; g.stroke();
+      } else if (part === 'armF' || part === 'armB') {
+        g.fillStyle = A; g.fillRect(-12, -8, 28, 10);
+        g.fillStyle = Bc; g.fillRect(-12, 0.6, 28, 1.8);
+      } else if (part === 'legF' || part === 'legB') {
+        g.fillStyle = A; g.fillRect(-12, 2.2, 30, 6.5);
+        g.fillStyle = Bc; g.fillRect(-12, 2.2, 30, 1.6); g.fillRect(-12, 7.2, 30, 1.2);
+      }
+    },
     stripes(g, s) {   // zebra: dalgalı siyah şeritler
       g.strokeStyle = 'rgba(23,23,30,0.94)'; g.lineCap = 'round';
       for (let i = -7; i <= 7; i++) {
@@ -378,9 +430,10 @@
     if (!P || !P.pattern || !PATTERNS[P.pattern]) return null;
     const cols = new Set();
     for (const k of P.patKeys || []) if (P[k]) cols.add(P[k]);
-    if (P.mane) cols.add(sh(P.mane, -0.08));
+    if (P.mane && !P.kit) cols.add(sh(P.mane, -0.08));
     let seed = 7; for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) % 100000;
-    return { fn: PATTERNS[P.pattern], cols, seed };
+    const part = String(key).split('|')[3] || '';   // 'fmc|id|skin|AD|...' → parça adı (forma deseni parçaya göre çizer)
+    return { fn: PATTERNS[P.pattern], cols, seed, part, kit: P.kit, stripes: P.stripes };
   }
 
   /** Noktalardan geçen kapalı yumuşak eğri (Catmull-Rom → kübik Bezier). beginPath ÇAĞIRMAZ. */
@@ -468,7 +521,7 @@
     }
     if (o.fn) o.fn(g);
     // skin deseni: yalnızca gövde renkli şekillerin içine (klip etkin), parça üretiminde bir kez
-    if (PAT && PAT.cols.has(base)) { g.save(); try { PAT.fn(g, PAT.seed); } catch (e) { /* desen çizilemedi */ } g.restore(); }
+    if (PAT && PAT.cols.has(base)) { g.save(); try { PAT.fn(g, PAT.seed, PAT); } catch (e) { /* desen çizilemedi */ } g.restore(); }
     if (o.hl) { const h = o.hl; g.beginPath(); ell(g, h[0], h[1], h[2], h[3], h[4] || 0); g.fillStyle = 'rgba(255,255,255,' + (h[5] != null ? h[5] : 0.55) + ')'; g.fill(); }
     g.restore();
     if (o.lw !== 0) { g.beginPath(); path(g); g.lineWidth = o.lw || 1.2; g.strokeStyle = o.line || LN; g.lineJoin = 'round'; g.stroke(); }
@@ -1440,6 +1493,349 @@
   };
 
   /* =====================================================================
+     TÜRK TİPLEMELERİ (App Store partisi 1) — Almancı Dayı (sosis köpeği), Terlikli Teyze (tavuk), Simitçi Martı (martı)
+     Aynı rig/parça sistemi: head/body/arm/leg (+back); tüm pozlar makePose'tan gelir. Mizah sevgiyle: karikatür, aşağılama yok.
+     ===================================================================== */
+  /** Plastik terlik (Teyze'nin eli + 'terlik' varlığı): burun +x; (x,y) tabanın orta noktası */
+  function slipperDraw(g, x, y, s, col, dk) {
+    g.save(); g.translate(x, y); g.scale(s, s);
+    cel(g, B([-7, -1.6, -3, -2.6, 3, -2.4, 7.6, -1, 9.4, 1.2, 8, 3.2, -5.4, 3.4, -8, 1.4]), col, { dk, ld: [0.6, 0.6], dd: [0.5, 1.1], lw: 1 });
+    cel(g, B([-2.6, -3.6, 1.6, -4.6, 5.6, -3, 6.2, -0.4, 1.8, -1, -2.4, 0]), dk, { light: false, dd: [0.3, 0.6], lw: 0.9 });   // bant
+    g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(-5, -1, 10, 0.9);
+    g.restore();
+  }
+  /** Simit halkası (Martı'nın tablası + 'simit' varlığı): (x,y) merkez, r dış yarıçap */
+  function simitDraw(g, x, y, r, P) {
+    const ring = g2 => { g2.moveTo(x + r, y); g2.arc(x, y, r, 0, TAU); g2.moveTo(x + r * 0.42, y); g2.arc(x, y, r * 0.42, 0, TAU, true); };
+    g.beginPath(); ring(g); g.fillStyle = P.simit; g.fill('evenodd');
+    g.save(); g.beginPath(); ring(g); g.clip('evenodd');
+    g.fillStyle = P.simitL; g.beginPath(); g.arc(x - r * 0.25, y - r * 0.25, r * 0.95, 0, TAU); g.fill();
+    g.fillStyle = P.simit; g.beginPath(); g.arc(x + r * 0.12, y + r * 0.12, r * 0.8, 0, TAU); g.fill();
+    g.fillStyle = sh(P.simit, -0.22); g.beginPath(); g.arc(x + r * 0.35, y + r * 0.35, r * 0.82, 0, TAU); g.fill();
+    g.fillStyle = P.simit; g.beginPath(); g.arc(x, y, r * 0.66, 0, TAU); g.fill();
+    g.fillStyle = P.sesame;
+    for (let i = 0; i < 14; i++) { const a = i / 14 * TAU + (i % 3) * 0.3, rr = r * (0.58 + (i % 4) * 0.1); g.beginPath(); ell(g, x + cos(a) * rr, y + sin(a) * rr, r * 0.1, r * 0.055, a); g.fill(); }
+    g.restore();
+    g.beginPath(); ring(g); g.lineWidth = 1.1; g.strokeStyle = LN; g.stroke();
+  }
+  /** Sandalet (çorap üstüne): Almancı'nın ikonu. (x,y) ayak tabanı merkezi, burun +x */
+  function sandalDraw(g, x, y, P) {
+    g.save(); g.translate(x, y);
+    cel(g, B([-6.4, -3.6, 0, -4.2, 5.6, -3.4, 9.6, -1.2, 9.8, 1.6, 6, 2.4, -5.6, 2.4, -7.6, 0]), P.sock, { lt: '#ffffff', dk: P.sockD, dd: [0.6, 1.2], ld: [0.6, 0.6], lw: 1 });   // çorap ayak
+    lines(g, [[-3.6, -2.4, 3.6, -2.4], [-3, -1, 3, -1]], rgba(P.sockD, 0.9), 0.7);
+    g.fillStyle = P.sandal; g.beginPath(); rrect(g, -8.4, 1.4, 19.2, 2.8, 1.2); g.fill(); g.lineWidth = 1; g.strokeStyle = LN; g.stroke();   // taban
+    g.fillStyle = P.sandalL; g.fillRect(-7.4, 1.9, 17, 0.8);
+    lines(g, [[-1.6, -3.8, 1.6, 2], [3.2, -3.4, 6.2, 2]], P.sandal, 2.4);   // kayışlar
+    lines(g, [[-1.6, -3.8, 1.6, 2], [3.2, -3.4, 6.2, 2]], LN, 0.6);
+    g.restore();
+  }
+
+  /* ----------------------------- Almancı Dayı — sosis köpeği: atlet, altın kolye, bel çantası, çorap + sandalet ----------------------------- */
+  DEF.Almanci = {
+    rig: { hipY: 8, legF: [3.4, 0], legB: [-3.6, 0], shF: [4.2, -19], shB: [-5.4, -19], neck: [1.5, -23.5], head: [1.5, -10.6], top: 21, scale: 1, bw: 11.6, idle: [0.3, -0.18] },
+    eyes: [[9.4, -2.4, 3.4], [-1.2, -2.4, 3]],
+    head(g, P, ex) {
+      // uzak sarkık kulak
+      cel(g, B([-11, -9, -15.6, -4, -16.4, 6, -13, 12.6, -8.6, 11.4, -7.4, 3, -8.2, -5]), P.ear, { lt: P.fur, ltAlpha: 0.5, dd: [0.8, 1.6], ld: [0.8, 0.8] });
+      const hd = B([0, -13.4, 8, -13, 14, -9.6, 18, -4.4, 20.4, 0.6, 19.2, 5.4, 14.6, 8.6, 8, 10.4, 0, 10.6, -7.4, 9.4, -12.4, 5.6, -14.4, -0.6, -12.8, -7.4, -7.6, -12]);
+      cel(g, hd, P.fur, { lt: P.furL, hl: [-6.6, -7.6, 3, 1.6, -0.5, 0.26] });
+      // burun/ağız bölgesi (uzun sosis burnu)
+      cel(g, B([9.6, -0.6, 16.4, -2.4, 23.4, 0.2, 25.6, 4.4, 23.4, 8.4, 16.6, 9.8, 10.4, 8.2, 8.6, 3.6]), P.muzzle, { dk: mix(P.muzzle, '#8a5a30', 0.35), ld: [0.8, 1], dd: [0.7, 1.6], lw: 0.9 });
+      cel(g, B([21.2, 0.2, 25.8, 1, 26.2, 4, 23, 5, 20.4, 3.2]), P.nose, { lw: 0.9, ld: [0.4, 0.5], dd: [0.3, 0.6], hl: [22.6, 1.6, 1.2, 0.6, 0, 0.75] });
+      // kendini beğenmiş sırıtış (tek taraflı) / ifadeler
+      if (ex === 'n' || ex === 'b' || ex === 'f') {
+        g.beginPath(); g.moveTo(10.6, 6.2); g.quadraticCurveTo(15, 10.2, 21.4, 6.4); g.lineWidth = 1.3; g.strokeStyle = LN; g.lineCap = 'round'; g.stroke();
+        g.beginPath(); g.moveTo(20.6, 6.6); g.quadraticCurveTo(22.2, 5.4, 22.4, 4.6); g.stroke();
+        if (ex === 'f') { g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(12, 7); g.quadraticCurveTo(15.6, 8.8, 19.4, 7.2); g.lineTo(18.4, 8.6); g.lineTo(13, 8.4); g.closePath(); g.fill(); }
+      } else mouth(g, 16, 7, 3.2, ex, { dark: '#4a1a1e' });
+      if (ex === 'h') { g.fillStyle = P.tongue; g.beginPath(); ell(g, 16.6, 10.4, 2, 1.3); g.fill(); }
+      // gözler (yarı kapalı: keyifli) + tek kaş kalkık
+      eye(g, 9.4, -2.4, 3.4, 3.8, { ex, iris: P.eye, inner: -1, lidCol: P.fur, lidN: 0.22, look: 0.9 });
+      eye(g, -1.2, -2.4, 3, 3.4, { ex, iris: P.eye, inner: 1, lidCol: P.fur, lidN: 0.3, look: 0.6 });
+      const bl = ex === 'f' ? 1.4 : ex === 's' ? -1 : 0;
+      lines(g, [[5.4, -8.4 + bl, 9.6, -9.8, 13.4, -8 + bl * 0.5], [-4.2, -7 - bl * 0.3, -1.4, -7.8, 1.4, -7.2 + bl]], sh(P.fur, -0.45), 1.3);
+      // alna itilmiş güneş gözlüğü
+      for (const L of [[7.2, -11, 4.4, 2.7], [-2.6, -11.4, 3.9, 2.4]]) {
+        g.beginPath(); ell(g, L[0], L[1], L[2], L[3], -0.12); g.fillStyle = P.glass; g.fill(); g.lineWidth = 1.2; g.strokeStyle = LN; g.stroke();
+        g.save(); g.beginPath(); ell(g, L[0], L[1], L[2], L[3], -0.12); g.clip();
+        g.fillStyle = rgba(P.glassHi, 0.55); g.beginPath(); g.moveTo(L[0] - L[2], L[1] + 1); g.lineTo(L[0] - 1, L[1] - L[3] - 1); g.lineTo(L[0] + 1.6, L[1] - L[3] - 1); g.lineTo(L[0] - L[2] + 2, L[1] + 2.4); g.closePath(); g.fill();
+        g.restore();
+      }
+      lines(g, [[2.8, -11.2, 1.3, -11.2], [11.6, -11.6, 15.6, -8.2]], LN, 1.3);
+      lines(g, [[2.6, -14, 11.6, -13.8]], rgba(P.chain, 0.95), 1.1);   // gözlük sapı (altın)
+      // yakın sarkık kulak (kafanın önünde, arkaya yakın)
+      cel(g, B([-9.4, -10.8, -4.4, -8.6, -3.4, 0, -4.6, 8.6, -8.4, 13.4, -12.6, 10.4, -12.4, 1, -11.4, -6.6]), P.ear, { lt: P.fur, ltAlpha: 0.55, dd: [0.8, 1.6], ld: [0.8, 0.8], hl: [-7.4, -5, 1.2, 2.2, 0.1, 0.25] });
+    },
+    body(g, P) {
+      // uzun gövde (sosis): omuzdan kalçaya ince-uzun
+      const tor = B([-9.6, 3.2, -11.4, -5, -11, -15, -8.6, -22, -2.6, -25.4, 5.6, -25.4, 10.6, -22, 12, -15, 11.6, -5, 9.8, 3.2, 0, 4.8]);
+      cel(g, tor, P.fur, { lt: P.furL, hl: [-6.4, -19, 2.2, 1.3, -0.6, 0.3] });
+      // atlet
+      cel(g, B([-7.8, -21.6, -3.2, -23.6, 4.4, -23.6, 8.8, -21.4, 9.6, -12, 9, -3.4, 0.4, -2.4, -8.2, -3.4, -9.2, -12]), P.shirt, { dk: P.shirtD, ld: [0.8, 1], dd: [0.8, 1.8], lw: 1,
+        fn: g2 => { g2.fillStyle = rgba(P.fur, 0.95); g2.beginPath(); g2.moveTo(-4, -23.8); g2.quadraticCurveTo(0.4, -17.6, 5.4, -23.8); g2.lineTo(5.4, -26); g2.lineTo(-4, -26); g2.closePath(); g2.fill(); lines(g2, [[-4, -23.8, 0.4, -18.2, 5.4, -23.8]], LN, 0.9); } });
+      lines(g, [[-7.6, -21.4, -4.8, -23.6], [8.6, -21.2, 5.8, -23.6]], rgba(P.shirtD, 0.9), 1);   // askılar
+      // altın kolye + madalyon
+      g.beginPath(); g.moveTo(-6.4, -21); g.quadraticCurveTo(0.6, -11.6, 7.8, -21); g.lineWidth = 2.6; g.strokeStyle = LN; g.lineCap = 'round'; g.stroke();
+      g.setLineDash([1.6, 1.2]); g.lineWidth = 1.6; g.strokeStyle = P.chain; g.stroke(); g.setLineDash([]);
+      cel(g, EL(0.8, -15.2, 2.4, 2.4), P.chain, { lt: '#fff6c0', dk: P.chainD, dd: [0.4, 0.8], ld: [0.5, 0.6], lw: 0.9, hl: [0.2, -16, 0.8, 0.5, 0, 0.9] });
+      // bel çantası (önde, çapraz kayış)
+      lines(g, [[-10.6, -9, 10.4, -2.6]], LN, 2.6); lines(g, [[-10.6, -9, 10.4, -2.6]], P.bagL, 1.2);
+      cel(g, B([-8.6, -6.4, 2, -8, 8.8, -5.6, 9.4, 0.4, 2.6, 2.6, -8.4, 1.2, -10, -2.6]), P.bag, { lt: P.bagL, dd: [0.6, 1.2], ld: [0.7, 0.8], lw: 1,
+        fn: g2 => { g2.fillStyle = P.bagAcc; g2.fillRect(-11, -4.6, 22, 1.6); lines(g2, [[-7, -1.6, 7.6, -1.2]], rgba('#ffffff', 0.35), 0.8); g2.fillStyle = P.chain; g2.fillRect(6.2, -2.6, 2.2, 1.4); } });
+    },
+    arm(g, P) {
+      cel(g, B([-3.2, -1.6, 3.2, -1.6, 3.6, 5.4, 4.4, 9.2, 2.8, 12.4, -1.6, 12.8, -3.9, 9.8, -3.5, 4.6]), P.fur, { lt: P.furL, dd: [1, 2], ld: [1.2, 1.2] });
+      mitt(g, 0.4, 10.6, 3.5, P.muzzle);
+    },
+    leg(g, P) {
+      // kısa bacak: üstte kürk, dizden aşağı beyaz çorap (fitilli), sandalet
+      cel(g, B([-3.2, -1.6, 3.2, -1.6, 3.4, 2.6, -3.4, 2.6]), P.fur, { lt: P.furL, dd: [0.6, 1], ld: [0.6, 0.6] });
+      cel(g, B([-3.4, 2, 3.4, 2, 3.8, 7.4, -3.8, 7.4]), P.sock, { lt: '#ffffff', dk: P.sockD, dd: [0.6, 1.2], ld: [0.6, 0.6], lw: 0.9,
+        fn: g2 => lines(g2, [[-2, 2.4, -2, 7.2], [0, 2.4, 0, 7.2], [2, 2.4, 2, 7.2]], rgba(P.sockD, 0.8), 0.6) });
+      sandalDraw(g, 1.8, 9.6, P);
+    },
+    back(ctx, P, p) {
+      // kısa, ince sosis kuyruğu: koşarken sallanır
+      const fl = clamp(p.flow, 0, 1.2), w = p.tw, a = sin(w * 1.6) * 2.4;
+      const x0 = -9.6, y0 = -3, x1 = x0 - 7 - fl * 3, y1 = y0 - 3 + a, x2 = x0 - 12 - fl * 5, y2 = y0 - 9 + fl * 4 + a * 0.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(x1, y1, x2, y2);
+      ctx.strokeStyle = P.line; ctx.lineWidth = 3.6 + 4.2; ctx.stroke();
+      ctx.strokeStyle = P.fur; ctx.lineWidth = 3.6; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0 - 1, y0 - 1); ctx.quadraticCurveTo(x1 - 0.5, y1 - 1, x2 + 0.6, y2 - 0.4); ctx.strokeStyle = rgba(P.furL, 0.7); ctx.lineWidth = 1; ctx.stroke();
+    }
+  };
+
+  /* ----------------------------- Terlikli Teyze — tavuk: tülbent, çiçekli ev elbisesi, elinde terlik ----------------------------- */
+  DEF.Teyze = {
+    rig: { hipY: 10, legF: [3.2, 0], legB: [-3.6, 0], shF: [5, -11.4], shB: [-6.2, -11.4], neck: [1, -16], head: [1.5, -11], top: 22, scale: 1, bw: 13, idle: [0.32, -0.2] },
+    eyes: [[9, -2.4, 3.6], [-1.6, -2.4, 3.2]],
+    head(g, P, ex) {
+      const dots = (g2, pts) => { g2.fillStyle = P.scarfDot; for (let i = 0; i < pts.length; i += 2) { g2.beginPath(); g2.arc(pts[i], pts[i + 1], 0.9, 0, TAU); g2.fill(); } };
+      // tülbent arka (kafayı saran)
+      cel(g, B([-15.6, -11, -2, -18.6, 12, -14, 18, -2, 15.6, 11, 4, 15.6, -10, 13.6, -17.6, 2]), P.scarf, { dk: P.scarfD, ld: [0.8, 1], dd: [0.8, 1.8],
+        fn: g2 => dots(g2, [-12, -6, -14, 6, 12, 8, 14, -8, 2, -16, -6, 12, 8, 13]) });
+      const hd = B([0, -13, 9, -12, 15, -7, 17.4, 0, 16, 7, 10, 11, 1, 12.6, -8, 11, -13.4, 6, -15, 0, -12.6, -7, -7, -12]);
+      cel(g, hd, P.fur, { lt: P.furL, dk: P.furD, hl: [-7, -7.4, 2.8, 1.5, -0.5, 0.3] });
+      // yanaklar
+      g.fillStyle = rgba(P.cheek, 0.55); g.beginPath(); ell(g, 13.2, 5, 2.8, 1.8); ell(g, -6.6, 4.6, 2.5, 1.6); g.fill();
+      // gözler + "kaç kere söyledim" kaşları
+      eye(g, 9, -2.4, 3.6, 4.2, { ex, iris: P.eye, inner: -1, lidCol: P.fur, lidN: 0.1 });
+      eye(g, -1.6, -2.4, 3.2, 3.8, { ex, iris: P.eye, inner: 1, lidCol: P.fur, lidN: 0.1, look: 0.8 });
+      const bi = ex === 'f' || ex === 'x' ? 1.8 : ex === 's' ? -1.2 : 0, bo = ex === 'h' || ex === 'o' ? -1 : 0;
+      lines(g, [[5, -8.2 + bi, 9.6, -10.2, 13.8, -8.4 + bo], [-5, -7.6 + bo, -1.4, -9.6, 2, -7.8 + bi]], P.brow, 1.6);
+      // gaga (küçük, sivri) — ifadeye göre açılır
+      const open = ex === 'h' ? 0.3 : ex === 'o' ? 0.5 : ex === 'x' ? 0.15 : 0;
+      if (open > 0) { g.beginPath(); g.moveTo(13.4, 3.6); g.lineTo(20.6, 4.4); g.lineTo(16.4, 8 + open * 5); g.lineTo(13.4, 6.4); g.closePath(); g.fillStyle = '#7a1a2a'; g.fill(); }
+      g.save(); g.translate(13.4, 4.4); g.rotate(open); g.translate(-13.4, -4.4);
+      cel(g, g2 => { g2.moveTo(13.4, 4.2); g2.quadraticCurveTo(17.6, 4, 21, 4.4); g2.quadraticCurveTo(17.4, 7.2, 13.6, 6.6); g2.closePath(); }, P.beakD, { lt: P.beak, ld: [0.6, 0.8], dd: [0.4, 0.8] });
+      g.restore();
+      cel(g, g2 => { g2.moveTo(12.4, 1.4); g2.bezierCurveTo(15.6, -0.4, 20, 0.6, 22.6, 3.6); g2.quadraticCurveTo(17.6, 5, 13, 4.8); g2.quadraticCurveTo(11.8, 3.2, 12.4, 1.4); g2.closePath(); }, P.beak,
+        { lt: mix(P.beak, '#ffffff', 0.45), dk: P.beakD, ld: [0.6, 1], dd: [0.4, 1.2], hl: [15.6, 1.6, 2, 0.6, 0.15, 0.6] });
+      if (ex === 's') lines(g, [[12.6, 6.4, 16, 7.6, 19.6, 6.6]], LN, 1);
+      // tülbent ön bandı (alın) + çene altı düğüm
+      cel(g, B([-14.6, -6.6, -9, -12.6, 0, -15.2, 9.6, -13, 15.6, -7.2, 16.6, -2.6, 12.6, -2.4, 7, -7.2, -1, -8.6, -8.2, -5.4, -13, -1.6]), P.scarf, { dk: P.scarfD, ld: [0.8, 1], dd: [0.6, 1.4], lw: 1,
+        fn: g2 => dots(g2, [-9, -8, -2, -12, 6, -11, 12, -6, -12, -3.4, 3, -8.8]) });
+      cel(g, B([9.6, 10.6, 14, 9.4, 17.6, 11.6, 15.4, 14.6, 11, 14.2, 8.8, 12.4]), P.scarf, { dk: P.scarfD, ld: [0.5, 0.6], dd: [0.4, 1], lw: 1, fn: g2 => dots(g2, [12.6, 12]) });
+      cel(g, B([4.2, 11.2, 9.6, 10.4, 10.2, 13.4, 6.4, 15, 3.4, 13.6]), P.scarf, { dk: P.scarfD, ld: [0.5, 0.6], dd: [0.4, 1], lw: 1 });
+      lines(g, [[8.2, 10.6, 10.4, 12.4]], LN, 1.1);
+    },
+    body(g, P) {
+      // yuvarlak çiçekli elbise
+      const tor = B([-11.2, 4.2, -13.4, -4, -11.4, -12, -5.6, -16.6, 4, -17, 10.4, -13, 12.8, -4, 11.4, 4.2, 0, 5.8]);
+      cel(g, tor, P.dress, { lt: P.dressL, dk: P.dressD, hl: [-7, -10.6, 2.4, 1.4, -0.6, 0.28],
+        fn: g2 => {
+          const fl = [[-7, -4], [1, -9], [7, -2], [-3, 2], [6, 3.4], [-9, -11]];
+          for (const f of fl) {
+            g2.fillStyle = P.flower; for (let k = 0; k < 5; k++) { const a = k / 5 * TAU; g2.beginPath(); g2.arc(f[0] + cos(a) * 1.5, f[1] + sin(a) * 1.5, 1, 0, TAU); g2.fill(); }
+            g2.fillStyle = P.flower2; g2.beginPath(); g2.arc(f[0], f[1], 0.9, 0, TAU); g2.fill();
+            g2.fillStyle = P.leaf; g2.beginPath(); ell(g2, f[0] + 2.8, f[1] + 1.4, 1.4, 0.7, 0.6); g2.fill();
+          }
+          g2.fillStyle = rgba(P.dressD, 0.5); g2.fillRect(-16, 1.6, 32, 1);   // etek dikişi
+        } });
+      // beyaz yaka + göğüs tüyü
+      cel(g, B([-6.6, -17, -1, -14.6, 0.6, -11.4, -4.4, -12.8]), P.scarf, { dk: P.scarfD, dd: [0.4, 1], ld: [0.4, 0.6], lw: 1 });
+      cel(g, B([2.4, -16.4, 8.4, -16.6, 7.6, -12.4, 3, -13]), P.scarf, { dk: P.scarfD, dd: [0.4, 1], ld: [0.4, 0.6], lw: 1 });
+      cel(g, EL(1.2, -12.8, 2, 1.6), P.fur, { lw: 0.9, dd: [0.3, 0.6], ld: [0.3, 0.4] });
+    },
+    arm(g, P, back) {
+      // kanat-kol: krem tüy, uçta tüy parmaklar
+      cel(g, B([-3.6, -1.6, 3.6, -1.6, 4.4, 4, 4.2, 9, 2.8, 12.6, 0.8, 11.4, -1, 13.2, -2.8, 11.6, -4.4, 8]), P.fur, { lt: P.furL, dk: P.furD, dd: [1, 2], ld: [1, 1],
+        fn: g2 => lines(g2, [[0.4, 5, 0.6, 11.4], [-1.8, 5.4, -2.2, 10.6], [2.6, 5, 2.8, 10.6]], rgba(P.furD, 0.75), 0.8) });
+      if (!back) slipperDraw(g, 2.6, 13.6, 0.9, P.slipper, P.slipperD);   // ön elde terlik (fırlatınca 'terlik' varlığı uçar; eldeki hiç bitmez)
+    },
+    leg(g, P) {
+      cel(g, B([-1.8, -1.6, 1.8, -1.6, 2, 5.6, -2, 5.6]), P.leg, { dk: P.legD, dd: [0.4, 0.7], ld: [0.4, 0.5], lw: 0.9 });
+      // ev terliği (ayakta)
+      cel(g, B([-5.4, 5.2, 0, 4.4, 6, 5, 9.4, 7.6, 8.2, 10.2, -4.6, 10.4, -6.6, 8.2]), P.slipper, { dk: P.slipperD, ld: [0.6, 0.6], dd: [0.5, 1.2], lw: 1,
+        fn: g2 => { g2.fillStyle = P.slipperD; g2.beginPath(); blob(g2, [-2.6, 4.2, 3.6, 3.8, 4.6, 7, -1.6, 7.6]); g2.fill(); g2.fillStyle = 'rgba(255,255,255,0.45)'; g2.fillRect(-4, 8.4, 11, 0.8); } });
+    },
+    back(ctx, P, p) {
+      // kuyruk tüyleri (yelpaze), koşarken savrulur
+      const fl = clamp(p.flow, 0, 1.2), w = p.tw;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        const a = -0.55 - i * 0.42 + sin(w * 1.3 + i) * 0.08 * (0.3 + fl), L = 10 + fl * 3 - i;
+        const x0 = -10.6, y0 = -8 + i * 1.8, x1 = x0 + cos(PI + a) * L, y1 = y0 + sin(PI + a) * L * 0.8;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(x0 - L * 0.5, y0 - 2 + i, x1, y1);
+        ctx.strokeStyle = P.line; ctx.lineWidth = 3.2 + 3.4; ctx.stroke();
+        ctx.strokeStyle = i === 1 ? P.furD : P.fur; ctx.lineWidth = 3.2; ctx.stroke();
+      }
+    }
+  };
+
+  /* ----------------------------- Simitçi Martı — İstanbul martısı: kasket, yelek, başında simit tablası ----------------------------- */
+  DEF.Marti = {
+    rig: { hipY: 11, legF: [3.4, 0], legB: [-3.6, 0], shF: [4.2, -12.4], shB: [-5.6, -12.4], neck: [1.5, -16.6], head: [1.5, -11], top: 34, scale: 1, bw: 12, idle: [0.22, -0.14] },
+    eyes: [[8.6, -2.6, 3.4], [-1.2, -2.6, 3]],
+    head(g, P, ex) {
+      const hd = B([0, -13, 9, -12.2, 14.6, -7.2, 16.4, 0, 14.6, 7, 8, 11, 0, 12.4, -8, 10.6, -13, 5, -14.6, -1, -12.6, -8, -6, -12.2]);
+      cel(g, hd, P.fur, { dk: P.furD, hl: [-6.6, -7.4, 2.8, 1.5, -0.5, 0.3] });
+      // gözler: yarı kapalı sinsi bakış
+      eye(g, 8.6, -2.6, 3.4, 3.9, { ex, iris: P.eye, inner: -1, lidCol: P.fur, lidN: 0.3, look: 1 });
+      eye(g, -1.2, -2.6, 3, 3.5, { ex, iris: P.eye, inner: 1, lidCol: P.fur, lidN: 0.36, look: 0.7 });
+      const bi = ex === 'f' ? 1.6 : ex === 's' ? -1 : 0;
+      lines(g, [[5, -8 + bi, 9.4, -9.2, 13, -8.2], [-4.6, -7.6, -1.6, -8.6, 1.6, -7.6 + bi]], sh(P.furD, -0.35), 1.2);
+      // uzun martı gagası (kırmızı benekli)
+      const open = ex === 'h' ? 0.26 : ex === 'o' ? 0.42 : ex === 'x' ? 0.12 : 0;
+      if (open > 0) { g.beginPath(); g.moveTo(11.6, 2.4); g.lineTo(24, 3); g.lineTo(19.6, 7 + open * 7); g.lineTo(12, 6.6); g.closePath(); g.fillStyle = '#7a1a2a'; g.fill(); }
+      g.save(); g.translate(11.6, 3.6); g.rotate(open); g.translate(-11.6, -3.6);
+      cel(g, g2 => { g2.moveTo(11.6, 3.2); g2.quadraticCurveTo(19, 3.2, 25.4, 3.6); g2.quadraticCurveTo(20.6, 7.4, 12.2, 6.6); g2.closePath(); }, P.beakD, { lt: P.beak, ld: [0.6, 0.8], dd: [0.4, 0.8],
+        fn: g2 => { g2.fillStyle = P.spot; g2.beginPath(); g2.arc(20.6, 5.2, 1.2, 0, TAU); g2.fill(); } });
+      g.restore();
+      cel(g, g2 => { g2.moveTo(10.8, 0.4); g2.bezierCurveTo(15, -2.6, 22, -1.6, 27.2, 2.2); g2.quadraticCurveTo(26, 4.4, 23.4, 4); g2.quadraticCurveTo(17.6, 4.4, 11.4, 3.8); g2.quadraticCurveTo(10, 2, 10.8, 0.4); g2.closePath(); }, P.beak,
+        { lt: mix(P.beak, '#ffffff', 0.45), dk: P.beakD, ld: [0.6, 1], dd: [0.4, 1.2], hl: [16, 0.4, 2.6, 0.7, 0.1, 0.6] });
+      if (ex === 'n' || ex === 'b' || ex === 'f') lines(g, [[20, 4.2, 23, 3.4]], LN, 0.9);   // gaga ucunda sırıtış kıvrımı
+      // kasket (düz şapka) + siperlik
+      cel(g, B([-15, -6.6, -13.6, -13.4, -6, -17.8, 4.6, -18.2, 12.6, -14.6, 15.6, -8.6, 10, -7.2, 0, -6.8, -8, -6.4]), P.cap, { lt: P.capL, dk: P.capD, dd: [0.8, 1.6], ld: [0.8, 1],
+        fn: g2 => { g2.strokeStyle = rgba(P.capD, 0.6); g2.lineWidth = 0.7; for (let x = -14; x < 14; x += 3.2) { g2.beginPath(); g2.moveTo(x, -18); g2.lineTo(x + 1.6, -14); g2.lineTo(x, -8); g2.stroke(); } } });
+      cel(g, B([10.4, -9.2, 21.6, -9, 22.6, -6.4, 16, -5.6, 9.6, -6.6]), P.capD, { lt: P.cap, light: true, dd: [0.3, 0.8], ld: [0.4, 0.5], lw: 1 });
+      lines(g, [[-13.6, -8.6, 10, -8.8]], rgba(P.capD, 0.9), 1);
+      // simit tablası (başın üstünde, hafif eğik) + simit yığını
+      g.save(); g.translate(-1, -19.4); g.rotate(-0.06);
+      cel(g, EL(0, 1.6, 17.6, 3.6), P.trayD, { light: false, dd: [0.3, 0.6], lw: 1 });
+      cel(g, EL(0, 0, 17.6, 3.6), P.tray, { lt: mix(P.tray, '#ffffff', 0.4), dk: P.trayD, dd: [0.6, 1.2], ld: [0.6, 0.8], lw: 1, fn: g2 => lines(g2, [[-15, 0.4, 15, 0.4], [-9, -1.6, 9, -1.6]], rgba(P.trayD, 0.6), 0.6) });
+      for (const s of [[-9.6, -3.4], [-1.2, -4.6], [7.4, -3.4], [3.4, -8.2], [-5, -8.4], [-0.6, -12.4]]) simitDraw(g, s[0], s[1], 4.4, P);
+      g.restore();
+    },
+    body(g, P) {
+      const tor = B([-10, 3, -12, -5, -10.6, -13, -5.6, -17, 4, -17.2, 9.6, -13, 11.6, -5, 10, 3, 0, 4.6]);
+      cel(g, tor, P.fur, { dk: P.furD, hl: [-6, -11, 2.4, 1.3, -0.6, 0.3] });
+      // gri sırt
+      cel(g, B([-10.2, -4, -11.6, -9, -9.4, -14.6, -6, -16.6, -5.6, -9, -6.6, 0, -8.6, 3]), P.wing, { lt: P.wingL, dk: P.wingD, dd: [0.6, 1.2], ld: [0.6, 0.8], lw: 0.9 });
+      // yelek (açık, iki kanat) + cepler + düğmeler
+      cel(g, B([-9.6, -14.4, -3.6, -17, -2.4, -9, -3, 2.8, -9.2, 2.2, -11, -6]), P.vest, { lt: P.vestL, dk: P.vestD, dd: [0.6, 1.4], ld: [0.6, 0.8], lw: 1, fn: g2 => { g2.fillStyle = P.vestD; g2.fillRect(-8.6, -4.6, 4.6, 0.9); } });
+      cel(g, B([3, -17.2, 9.2, -14.2, 11, -6, 9.4, 2.6, 3.4, 2.8, 2.4, -9]), P.vest, { lt: P.vestL, dk: P.vestD, dd: [0.6, 1.4], ld: [0.6, 0.8], lw: 1, fn: g2 => { g2.fillStyle = P.vestD; g2.fillRect(4.4, -4.6, 4.8, 0.9); } });
+      for (const y of [-9, -4.4, 0.2]) { g.beginPath(); g.arc(3.6, y, 0.9, 0, TAU); g.fillStyle = P.tray; g.fill(); g.lineWidth = 0.6; g.strokeStyle = LN; g.stroke(); }
+    },
+    arm(g, P) {
+      // gri kanat-kol, uçta açık renk tüy parmaklar
+      cel(g, B([-4, -1.8, 4, -1.8, 5, 5, 4.6, 10.4, 2.8, 15.2, 0.8, 12.8, -1.2, 15.6, -3, 13, -4.4, 8]), P.wing, { lt: P.wingL, dk: P.wingD, dd: [1, 2], ld: [1, 1],
+        fn: g2 => {
+          g2.fillStyle = P.wingL; g2.beginPath(); g2.moveTo(-6, 9.6); g2.quadraticCurveTo(0, 11.6, 6, 8.8); g2.lineTo(6, 20); g2.lineTo(-6, 20); g2.closePath(); g2.fill();
+          lines(g2, [[0.6, 4.6, 0.8, 13.6], [-1.8, 5, -2.4, 12.6], [2.8, 4.6, 3.2, 12.6]], rgba(P.wingD, 0.7), 0.8);
+        } });
+    },
+    leg(g, P) {
+      cel(g, B([-1.8, -1.6, 1.8, -1.6, 2, 6.4, -2, 6.4]), P.leg, { dk: P.legD, dd: [0.4, 0.7], ld: [0.4, 0.5], lw: 0.9 });
+      // perdeli martı ayağı
+      cel(g, B([-5.8, 6.2, 0, 5.4, 6.6, 6.2, 9.8, 9, 6, 10.6, -2, 10.8, -7.2, 9.2]), P.leg, { lt: mix(P.leg, '#ffffff', 0.4), dk: P.legD, dd: [0.4, 1], ld: [0.4, 0.6], lw: 0.9,
+        fn: g2 => lines(g2, [[-2, 6.4, -1, 10.2], [2.6, 6.2, 3.4, 10.2]], rgba(P.legD, 0.8), 0.7) });
+    },
+    back(ctx, P, p) {
+      // kısa gri kuyruk tüyleri
+      const fl = clamp(p.flow, 0, 1.2), w = p.tw;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 2; i++) {
+        const a = sin(w * 1.4 + i) * 0.1 * (0.3 + fl), L = 8 + fl * 3;
+        const x0 = -9.8, y0 = -5 + i * 2.6, x1 = x0 - L * cos(a + 0.35 + i * 0.3), y1 = y0 - L * 0.5 * sin(a + 0.35 + i * 0.3) + 1;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(x0 - L * 0.5, y0 - 1, x1, y1);
+        ctx.strokeStyle = P.line; ctx.lineWidth = 3 + 3.4; ctx.stroke();
+        ctx.strokeStyle = i ? P.wing : P.wingL; ctx.lineWidth = 3; ctx.stroke();
+      }
+    }
+  };
+
+  /* ---------- varlık sprite'ları (render-fx 'terlik' / 'simit' varlıklarını çizerken kullanır) ---------- */
+  /** Uçan terlik: 30×18, orijin merkez; burun +x (hareket yönüne göre render-fx döndürür) */
+  R.slipperSprite = function () {
+    return FM.gfx.sprite('fmc|terlik', 34, 22, 17, 11, g => {
+      const old = LN; LN = PAL.Teyze.line;
+      g.lineJoin = 'round';
+      g.save(); g.scale(1.45, 1.45); slipperDraw(g, 0, 1.2, 1, PAL.Teyze.slipper, PAL.Teyze.slipperD); g.restore();
+      LN = old;
+    });
+  };
+  /** Yuvarlanan simit: 32×32, orijin merkez (render-fx döndürür) */
+  R.simitSprite = function () {
+    return FM.gfx.sprite('fmc|simit', 34, 34, 17, 17, g => {
+      const old = LN; LN = PAL.Marti.line;
+      g.lineJoin = 'round';
+      simitDraw(g, 0, 0, 14.5, PAL.Marti);
+      LN = old;
+    });
+  };
+  /* ---------- Alman Arabası: küçük, kutu gibi, markasız hatchback (Almancı'nın gücü; r.car > 0 iken) ---------- */
+  const CAR = { body: '#e9e4d8', bodyL: '#ffffff', bodyD: '#b9b2a4', glass: '#8fd0ff', glassD: '#3f86c8', tire: '#1d1d24', rim: '#c9ccd6', light: '#fff2a0', tail: '#ff3a3a', line: '#1c1a22' };
+  function carBodySprite() {
+    return FM.gfx.sprite('fmc|car', 96, 48, 48, 40, g => {
+      const old = LN; LN = CAR.line; g.lineJoin = 'round';
+      // üstü açık kutu araba: ÖN panel (kapı hizasına kadar; figürün bacaklarını örter, gövde/kafa üstte görünür), orijin: orta, zemin
+      const body = B([-42, -2, -44, -12, -41, -19, -30, -20.6, -10, -20, 12, -20, 26, -20.6, 34, -24, 42, -19, 45, -11, 44, -2, 30, 0, -30, 0]);
+      cel(g, body, CAR.body, { lt: CAR.bodyL, dk: CAR.bodyD, dd: [1, 2.4], ld: [1.2, 1.4], lw: 2, hl: [-30, -14, 6, 1.6, 0, 0.5],
+        fn: g2 => {
+          g2.fillStyle = CAR.bodyD; g2.fillRect(-46, -8.6, 92, 1.4);                               // yan şerit
+          g2.fillStyle = CAR.tail; g2.beginPath(); rrect(g2, -43, -16.6, 4.2, 4.8, 1.2); g2.fill();   // stop
+          g2.fillStyle = CAR.light; g2.beginPath(); rrect(g2, 38.6, -15.4, 5.6, 4.8, 1.4); g2.fill();  // far
+          g2.fillStyle = CAR.line; g2.fillRect(-20, -19.6, 1.2, 15); g2.fillRect(12, -19.6, 1.2, 15);    // kapı çizgileri
+          g2.fillStyle = CAR.bodyD; g2.beginPath(); rrect(g2, -14, -13, 6, 1.6, 0.8); g2.fill(); g2.beginPath(); rrect(g2, 16, -13, 6, 1.6, 0.8); g2.fill();   // kapı kolları
+          g2.fillStyle = CAR.line; g2.fillRect(-46, -20.4, 92, 1.2);                                // kapı üst kenarı
+        } });
+      // ön cam (sürücünün önünde, yarı saydam) + direksiyon
+      cel(g, B([24, -36, 33, -24, 29, -23, 20, -35]), CAR.glass, { lt: '#e0f4ff', dk: CAR.glassD, dd: [0.6, 1.2], ld: [0.6, 0.6], lw: 1.4 });
+      g.beginPath(); ell(g, 14, -24.6, 4.6, 2.2, -0.5); g.lineWidth = 2.2; g.strokeStyle = CAR.line; g.stroke(); g.lineWidth = 1; g.strokeStyle = CAR.rim; g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.6)'; g.fillRect(-44, -2.2, 88, 1.2);
+      LN = old;
+    });
+  }
+  /** Arabanın ARKA parçası (figürün arkasına): koltuk sırtı + arka kanat */
+  function carBackSprite() {
+    return FM.gfx.sprite('fmc|carback', 96, 48, 48, 40, g => {
+      const old = LN; LN = CAR.line; g.lineJoin = 'round';
+      cel(g, B([-36, -19, -38, -30, -34, -34, -22, -34, -18, -30, -16, -19]), '#5a4a46', { lt: '#8a7a74', dk: '#3a2e2c', dd: [0.8, 1.6], ld: [0.8, 1], lw: 1.8 });   // koltuk
+      cel(g, B([-44, -19, -46, -24, -30, -25, -28, -19]), CAR.bodyD, { lt: CAR.body, dd: [0.6, 1.2], ld: [0.6, 0.6], lw: 1.6 });   // arka kanat
+      LN = old;
+    });
+  }
+  /** Arabanın figürün ARKASINA çizilen parçası (koltuk). drawCarRide'dan önce, figürden önce çağrılır. */
+  R.drawCarBack = function (ctx, x, y, face, t, sc) {
+    sc = sc || 1; face = face === -1 ? -1 : 1;
+    const bs = carBackSprite(), bounce = sin((t || 0) * 26) * 0.8;
+    ctx.save(); ctx.translate(x, y + 1 + bounce); ctx.scale(face * sc, sc);
+    ctx.drawImage(bs.c, -bs.ox, -bs.oy, bs.w, bs.h);
+    ctx.restore();
+  };
+  function carWheelSprite() {
+    return FM.gfx.sprite('fmc|carwheel', 22, 22, 11, 11, g => {
+      g.beginPath(); g.arc(0, 0, 9.2, 0, TAU); g.fillStyle = CAR.tire; g.fill(); g.lineWidth = 2; g.strokeStyle = CAR.line; g.stroke();
+      g.beginPath(); g.arc(0, 0, 5.2, 0, TAU); g.fillStyle = CAR.rim; g.fill(); g.lineWidth = 1; g.stroke();
+      g.lineWidth = 1.6; g.strokeStyle = CAR.line; g.beginPath(); for (let i = 0; i < 5; i++) { const a = i / 5 * TAU; g.moveTo(0, 0); g.lineTo(cos(a) * 4.6, sin(a) * 4.6); } g.stroke();
+      g.beginPath(); g.arc(0, 0, 1.4, 0, TAU); g.fillStyle = CAR.line; g.fill();
+    });
+  }
+  /** Arabayı çizer (figürün ÜSTÜNE: kasa bacakları örter). (x,y) = sürücünün ayak noktası (dünya), face ±1, t animasyon zamanı,
+      sc ölçek. Figür 'drive' pozunda (oturmuş) bunun ALTINA çizilir. Egzoz dumanı render-fx'e bırakıldı. */
+  R.drawCarRide = function (ctx, x, y, face, t, sc) {
+    sc = sc || 1; face = face === -1 ? -1 : 1;
+    const bs = carBodySprite(), ws = carWheelSprite(), bounce = sin((t || 0) * 26) * 0.8;
+    ctx.save(); ctx.translate(x, y + 1); ctx.scale(face * sc, sc);
+    ctx.save(); ctx.translate(0, bounce); ctx.drawImage(bs.c, -bs.ox, -bs.oy, bs.w, bs.h); ctx.restore();
+    // tekerler (kasanın önünde görünür, döner; alt kenar zemine değer)
+    for (const wx of [-27, 27]) { ctx.save(); ctx.translate(wx, -8); ctx.rotate((t || 0) * 18 * face); ctx.drawImage(ws.c, -ws.ox, -ws.oy, ws.w, ws.h); ctx.restore(); }
+    ctx.restore();
+  };
+
+  /* =====================================================================
      ŞAPKALAR / AKSESUARLAR (FM.COSMETICS.hats)
      Şapka uzayı: orijin = karakterin kafa tepesi çapası (HEAD_ANCHOR, kafa yerel koordinatı), +x yüz yönü, +y aşağı.
      Yüz aksesuarı: orijin = iki gözün ortası, ölçek = göz açıklığı / 22. Boyun aksesuarı: gövde uzayında boyun pivotu.
@@ -1447,7 +1843,8 @@
      ===================================================================== */
   const HEAD_ANCHOR = {
     TAFTAF: { x: -0.5, y: -19.5, rot: -0.05 }, Caner: { x: 1, y: -13.5 }, LUL: { x: 0, y: -14.8 }, ertan: { x: 0.5, y: -13.8 },
-    Kral: { x: -0.5, y: -24, s: 0.95 }, Nuss: { x: 1, y: -13.8 }, baso: { x: -1, y: -16.2 }
+    Kral: { x: -0.5, y: -24, s: 0.95 }, Nuss: { x: 1, y: -13.8 }, baso: { x: -1, y: -16.2 },
+    Almanci: { x: 1, y: -13.6 }, Teyze: { x: 0, y: -17.2 }, Marti: { x: -1, y: -33.5, s: 0.9 }   // Martı: şapka tablanın üstüne oturur
   };
   const FACE_ANCHOR = { LUL: { x: 4.5, y: -11.4, span: 21, rot: -0.1 } };   // LUL'un kendi gözlüğü var: ikinci gözlük alna itilmiş durur
   function faceAnchor(id) {
@@ -1830,6 +2227,14 @@
         p.legF = 0.22 + w2 * 0.08; p.legB = -0.22 - w2 * 0.08; p.sx = 1 + w * 0.03; p.sy = 1 - abs(w) * 0.02; p.expr = 'x'; p.flow = 0.15; p.tw = t * 3;
         break;
       }
+      case 'drive': {   // Alman Arabası: oturmuş, kollar direksiyonda, hafif sarsıntı (araba kasası üstten çizilir, bacaklar görünmez)
+        const w = sin(t * 26);
+        p.bob = 5 + w * 0.5; p.bx = -3; p.lean = -0.08; p.head = 0.06 + w * 0.02; p.hy = w * 0.3;
+        p.legF = 1.45; p.legB = 1.35; p.legFs = 0.7; p.legBs = 0.7;
+        p.armF = 1.2 + w * 0.03; p.armB = 1.32 - w * 0.03; p.armFs = 1.02;
+        p.expr = 'f'; p.flow = 1.2; p.tw = t * 10;
+        break;
+      }
       case 'cheer': {
         const j = abs(sin(t * 5.5)), land = 1 - j;
         p.bob = -j * 10;
@@ -2052,6 +2457,7 @@
     if (r.netted > 0) st = 'stun';
     else if (r.frozen > 0) st = 'frozen';
     else if (r.stun > 0) { if (!r.onGround && a.tum > 0) { st = 'tumble'; o.tum = a.tum; } else st = 'stun'; }
+    else if (r.car > 0) st = 'drive';
     else if (r.dash > 0) st = 'dash';
     else if (r.fly > 0 && id === 'Nuss') { st = 'fly'; o.wph = a.wph; }
     else if (r.slide) st = r.sled > 0 ? 'sled' : 'slide';
@@ -2717,6 +3123,8 @@
       ctx.drawImage(gs.c, fx - 46, cy - 48, 92, 96);
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
+    // Alman Arabası: koltuk figürün arkasına
+    if (r.car > 0 && p.st === 'drive') { try { R.drawCarBack(ctx, fx, fy, face, a.t, SC); } catch (e) { /* araba çizilemedi */ } }
     // karakter
     ctx.save();
     if (blinkHide || r.stale) ctx.globalAlpha = (blinkHide ? 0.32 : 1) * (r.stale ? 0.45 : 1);
@@ -2729,6 +3137,8 @@
     }
     drawFig(ctx, id, skin, m, p, a.t, true, hat);
     ctx.restore();
+    // Alman Arabası (Almancı'nın gücü, r.car > 0): kasa figürün üstüne, bacakları örter
+    if (r.car > 0 && p.st === 'drive') { try { R.drawCarRide(ctx, fx, fy, face, a.t, SC); } catch (e) { /* araba çizilemedi */ } }
     // öndeki efektler
     if (!blinkHide) drawSkinFx(ctx, skin, a, fx, fy, SC);
     if (r.frozen > 0) drawIce(ctx, r, a, fx, fy);
@@ -2874,7 +3284,7 @@
     });
   }
   /** Plakalar çakışınca kısaltılan bot plakasının yerine çizilen küçük renkli işaret (karakterin ana rengi). */
-  const MARK_COL = { TAFTAF: '#b46cff', Caner: '#ff3b4e', LUL: '#4f8dff', ertan: '#36d0e0', Kral: '#ffc93a', Nuss: '#eef3ff', baso: '#3cc878' };
+  const MARK_COL = { TAFTAF: '#b46cff', Caner: '#ff3b4e', LUL: '#4f8dff', ertan: '#36d0e0', Kral: '#ffc93a', Nuss: '#eef3ff', baso: '#3cc878', Almanci: '#ffd23f', Teyze: '#ff6fb0', Marti: '#9ab0c8' };
   function markSprite(col) {
     return FM.gfx.sprite('fmc|mark2|' + col, 12, 12, 6, 6, g => {
       // küçük renkli nokta: koyu dış hat + gradyan dolgu + parlak nokta (balon/iğne ile karışmasın diye sivri ucu yok)
@@ -3129,10 +3539,12 @@
       ctx.drawImage(gs.c, x - 34 * scale, y - 62 * scale, 68 * scale, 64 * scale);
       ctx.globalAlpha = ga; ctx.globalCompositeOperation = 'source-over';
     }
+    if (p.st === 'drive' && opts.car !== false) { try { R.drawCarBack(ctx, x, y, face, t, scale); } catch (e) { /* araba çizilemedi */ } }
     ctx.translate(x, y);
     ctx.scale(face * scale, scale);
     drawFig(ctx, id, skin, m, p, t, opts.outline !== false, hatOk(opts.hat) ? opts.hat : null);
     ctx.restore();
+    if (p.st === 'drive' && opts.car !== false) { try { R.drawCarRide(ctx, x, y, face, t, scale); } catch (e) { /* araba çizilemedi */ } }   // Alman Arabası önizlemesi
     if (SKIN_TWINKLE[skin] && opts.fx !== false) {
       ctx.save(); drawSkinFx(ctx, skin, { t }, x, y, scale); ctx.restore();
     }
@@ -3142,7 +3554,7 @@
      PORTRE (önbellekli tuval)
      ===================================================================== */
   const PORT = new Map(), PORT_URL = new Map();
-  const PORT_ADJ = { TAFTAF: [-1, 0, 1], Caner: [-3, 0, 0.97], LUL: [-1.5, 0, 1], ertan: [-2, 0, 1], Kral: [0.5, 0, 1], Nuss: [-0.5, 0, 1], baso: [0, 0, 1] };
+  const PORT_ADJ = { TAFTAF: [-1, 0, 1], Caner: [-3, 0, 0.97], LUL: [-1.5, 0, 1], ertan: [-2, 0, 1], Kral: [0.5, 0, 1], Nuss: [-0.5, 0, 1], baso: [0, 0, 1], Almanci: [-2, 0, 1], Teyze: [-1.5, 0, 1], Marti: [-2, 0, 0.9] };
   R.portrait = function (id, size, opts) {
     if (!DEF[id]) id = 'TAFTAF';
     opts = opts || {};

@@ -3700,6 +3700,24 @@
   /* =====================================================================
      ANA ÇİZİM GİRİŞLERİ
      ===================================================================== */
+  /* Yeni tiplemelerin mermileri (sprite'lar render-chars'ta): Terlikli Teyze'nin uçan terliği hız yönünde döner,
+     Simitçi Martı'nın simidi yuvarlanır. İkisi de tehlike halesiyle (kaçılabilsin diye görünür). */
+  function drawSlipper(ctx, e) {
+    const x = num(e.x, 0), y = num(e.y, 0); if (!inView(x, y, 60)) return;
+    const s = typeof R.slipperSprite === 'function' ? R.slipperSprite() : null;
+    danger(ctx, x, y, 22, .75);
+    const vx = num(e.vx, 1), vy = num(e.vy, 0), rot = Math.atan2(vy, vx) + Math.sin(num(e.age, 0) * 18) * .25;
+    if (s) spr(ctx, s, x, y, rot, 1.15);
+    resetXf(ctx);
+  }
+  function drawSimit(ctx, e) {
+    const x = num(e.x, 0), y = num(e.y, 0); if (!inView(x, y, 60)) return;
+    const s = typeof R.simitSprite === 'function' ? R.simitSprite() : null;
+    danger(ctx, x, y, 20, .6);
+    const rot = num(e.rot, num(e.age, 0) * (num(e.vx, 1) < 0 ? -9 : 9));
+    if (s) spr(ctx, s, x, y, rot, .9);
+    resetXf(ctx);
+  }
   R.drawEnts = function (ctx) {
     if (!S.L) return;
     ctx.save();
@@ -3744,6 +3762,8 @@
           case 'bolt': drawBoltCloud(ctx, e); break;
           case 'flash': drawFlash(ctx, e); break;
           case 'meteor': drawMeteorRock(ctx, e); break;
+          case 'terlik': drawSlipper(ctx, e); break;
+          case 'simit': drawSimit(ctx, e); break;
         }
       }
       resetXf(ctx);

@@ -5,6 +5,7 @@
 //   sekme  : böyle bir kopmadan sonra yere geri düşme (yokuş başında/sonunda zıplama hissi)
 //   gömülme: canlı yarışçının ayak noktası katının içinde (2 adımdan uzun)
 //   sıvı   : sıvıya düşüp ölme (artık çukur yok → 0 olmalı)
+//   bitmeyen: yarış 220 sn'de kapanmadı (birileri takıldı)
 //   kayma  : yokuşta kayma sayısı ve ayağa kalkamayan (1.2 sn'den uzun, üstünde engel yokken) kayma
 //   hız    : yerde koşu hızı ortalaması (çıkış / düz / iniş; kayarken ayrı)
 const src = require('fs').readFileSync(require('path').join(__dirname, 'sim.js'), 'utf8');
@@ -28,7 +29,7 @@ for (const mode of MODES) for (let th = 0; th < 8; th++) for (let k = 0; k < RUN
   const onJ = d => mark(d.r, 'jt'), onL = d => mark(d.r, 'lt');
   const onD = d => { tot.ölüm++; if (d.cause === S.L.theme.liquid) { tot.sıvı++; const key = S.L.theme.id + ' ' + mode; where[key] = (where[key] || 0) + 1; } };
   const onH = d => { if (d && d.r) mark(d.r, 'lt'); };
-  FM.on('jump', onJ); FM.on('mush', onL); FM.on('vent', onL); FM.on('portal', onL); FM.on('hit', onH); FM.on('death', onD); FM.on('respawn', onL);
+  FM.on('jump', onJ); FM.on('ability', onH); FM.on('mush', onL); FM.on('vent', onL); FM.on('portal', onL); FM.on('hit', onH); FM.on('death', onD); FM.on('respawn', onL);
   FM.game.startMatch({ char: FM.ORDER[k % 7], rounds: 1, auto: true, seed, theme: th, mode, n: NR });
   S.countT = .01; tot.koşu++;
   for (const r of S.racers) st.set(r, { was: false, jt: -9, lt: -9, det: null, emb: 0, cl: 0, slT: 0, wx: r.x, wt: 0 });
@@ -46,20 +47,20 @@ for (const mode of MODES) for (let th = 0; th < 8; th++) for (let k = 0; k < RUN
       // kopma: önceki adım yerde, şimdi havada; zıplama/fırlatma yok
       if (pre[i][0] && !r.onGround && !r.climb && !r.inLift && r.fly <= 0 && r.dash <= 0 && S.raceT - o.jt > .02 && S.raceT - o.lt > .05 && !(r.stun > 0)) {
         const g = groundY(cx, feet - 2);
-        if (g !== null && g - feet < 20) o.det = { t: S.raceT, x: cx, y: feet, sl: pre[i][1] };
+        if (g !== null && g - feet < 20) o.det = { t: S.raceT, x: cx, y: feet, sl: pre[i][1], st: ['vx' + Math.round(r.vx), 'vy' + Math.round(r.vy), r.slide ? 'kay' : '', r.onIce ? 'buz' : '', r.boost > 0 ? 'hız' : '', r.sled > 0 ? 'kızak' : '', r.perfT > 0 ? 'kusursuz' : '', r.bot ? '' : 'oyuncu', r.id].filter(Boolean).join(',') };
       }
       if (o.det) {
         const g = groundY(cx, feet - 2); if (g !== null) maxLift = Math.max(maxLift, g - feet);
         if (r.onGround || r.climb) {
           const dur = S.raceT - o.det.t;
-          if (dur > .05) { tot.kopma++; if (r.onGround) tot.sekme++; const key = 'kopma eğim ' + o.det.sl.toFixed(2) + ' ' + S.L.theme.id + '/' + mode + '/' + seed + ' @' + Math.round(o.det.x); where[key] = (where[key] || 0) + 1; }
+          if (dur > .05) { tot.kopma++; if (r.onGround) tot.sekme++; const key = 'kopma eğim ' + o.det.sl.toFixed(2) + ' [' + o.det.st + '] ' + S.L.theme.id + '/' + mode + '/' + seed + ' @' + Math.round(o.det.x); where[key] = (where[key] || 0) + 1; }
           o.det = null;
         } else if (S.raceT - o.det.t > 1.5) o.det = null;   // gerçek kenar düşüşü (vadi/basamak inişi)
       }
       // gömülme
       if (inSolidPt(L, cx, feet - 6)) { if (++o.emb === 3) { tot.gömülme++; const key = 'gömülme ' + S.L.theme.id + '/' + mode + '/' + seed + ' @' + Math.round(cx) + ',' + Math.round(feet) + ' ' + [r.onGround ? 'yer' : 'hava', r.climb ? 'tırman' : '', r.slide ? 'kay' : '', r.frozen > 0 ? 'don' : '', r.netted > 0 ? 'ağ' : '', r.stun > 0 ? 'sersem' : '', 'vx' + Math.round(r.vx), 'vy' + Math.round(r.vy)].filter(Boolean).join(',') + ' ' + JSON.stringify(L.solids.filter(q => q.x < cx + 60 && q.x + q.w > cx - 60).map(q => [Math.round(q.x), Math.round(q.y), Math.round(q.w), q.y2 == null ? null : Math.round(q.y2), q.float ? 1 : 0])); where[key] = (where[key] || 0) + 1; } } else o.emb = 0;
       // kayma ve zıplama yokuşta
-      if (r.slide) { if (r.slope && r.slideT < 1 / 120 + 1e-9) tot.yokuşKayma++; if (r.slideT > 1.2 && !(r.sled > 0) && !FM.game.solidAt(cx, r.y - 6) && !r.ctl.dh && !L.crush.some(k => cx > k.x - 40 && cx < k.x + k.w + 120) && !L.saws.some(q => cx > q.cx - q.r - 40 && cx < q.cx + q.r + 120)) { if (!o.slT) { tot.kalkamayan++; const key = 'kalkamayan ' + S.L.theme.id + '/' + mode + '/' + seed + ' @' + Math.round(cx) + ',' + Math.round(feet) + ' eğim ' + (r.slope || 0).toFixed(2) + (r.onGround ? '' : ' havada'); where[key] = (where[key] || 0) + 1; } o.slT = 1; } } else o.slT = 0;
+      if (r.slide) { if (r.slope && r.slideT < 1 / 120 + 1e-9) tot.yokuşKayma++; if (r.slideT > 1.2 && !(r.sled > 0) && !(r.frozen > 0) && !(r.netted > 0) && !(r.stun > 0) && (FM.game.boxFree ? FM.game.boxFree(r.x, r.y - (FM.C.RH - FM.C.SH), r.w, FM.C.RH) : !FM.game.solidAt(cx, r.y - 6)) && !r.ctl.dh && !L.crush.some(k => cx > k.x - 40 && cx < k.x + k.w + 120) && !L.saws.some(q => cx > q.cx - q.r - 40 && cx < q.cx + q.r + 120)) { if (!o.slT) { tot.kalkamayan++; const key = 'kalkamayan ' + S.L.theme.id + '/' + mode + '/' + seed + ' @' + Math.round(cx) + ',' + Math.round(feet) + ' eğim ' + (r.slope || 0).toFixed(2) + (r.onGround ? '' : ' havada'); where[key] = (where[key] || 0) + 1; } o.slT = 1; } } else o.slT = 0;
       if (S.raceT === o.jt && pre[i][1]) tot.yokuşZıplama++;
       if (r.climb) { if (!o.cl) tot.tırmanma++; o.cl += FM.C.STEP; if (o.cl > 3 && o.cl < 3 + FM.C.STEP * 1.5) tot.uzunTırmanma++; } else o.cl = 0;
       // hız: yerde, sağa koşarken, etkisiz (hız pedi/destek yok)
@@ -72,8 +73,10 @@ for (const mode of MODES) for (let th = 0; th < 8; th++) for (let k = 0; k < RUN
       if (!free || r.x > o.wx + 40) { o.wx = r.x; o.wt = t; } else if (t - o.wt > 3) { tot.takılma++; o.wx = r.x; o.wt = t; const key = 'takılma ' + S.L.theme.id + ' @' + Math.round(r.x); where[key] = (where[key] || 0) + 1; }
     });
   }
-  if (S.racers.some(r => !r.finished && !r.out) && mode !== 'coins') tot.bitmeyen++;
-  FM.off('jump', onJ); FM.off('mush', onL); FM.off('vent', onL); FM.off('portal', onL); FM.off('hit', onH); FM.off('death', onD); FM.off('respawn', onL);
+  const left = S.racers.filter(r => !r.finished && !r.out);
+  // bitmeyen: süre sınırına (220 sn) kadar yarış bitmedi (bitiş sayacıyla kapanan yarış sayılmaz)
+  if (t >= 220 && left.length && mode !== 'coins') { tot.bitmeyen++; const key = 'bitmeyen ' + S.L.theme.id + '/' + mode + '/' + seed + ' ' + left.map(r => r.name + '@' + Math.round(r.x) + ',' + Math.round(r.y + r.h)).join(' '); where[key] = (where[key] || 0) + 1; }
+  FM.off('jump', onJ); FM.off('ability', onH); FM.off('mush', onL); FM.off('vent', onL); FM.off('portal', onL); FM.off('hit', onH); FM.off('death', onD); FM.off('respawn', onL);
 }
 console.log('Yokuş denetimi:', JSON.stringify(tot));
 console.log('Kopmada en büyük yükselme (px):', maxLift.toFixed(1));

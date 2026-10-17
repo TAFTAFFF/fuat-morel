@@ -84,7 +84,20 @@ window.FM = window.FM || {};
       look: 'Beyaz kar baykuşu, iri sarı gözler, kulak tüyleri, gri benekler, başında mavi tüy' },
     baso:   { role: 'Üye',                tr: 668,  species: 'Ayı',      ab: 'Bas Dalgası',        col: '#8b5a33', col2: '#3cb371', acc: '#e63946',
       d: 'Kulaklıktaki bası sonuna kadar açar: ileri (nişanla geri) giden ses dalgası çarptığı herkesi 3.2 sn yarı hıza düşürür.',
-      look: 'Kahverengi ayı, yeşil kapüşonlu, siyah kafa bantlı kırmızı kulaklık' }
+      look: 'Kahverengi ayı, yeşil kapüşonlu, siyah kafa bantlı kırmızı kulaklık' },
+    // ---- Türk tiplemeleri (tag: 'tipleme'; FM.ORDER'a ana ajan ekler) ----
+    Almanci: { n: 'Almancı Dayı', tag: 'tipleme', role: 'Gurbetçi', tr: 0, species: 'Sosis Köpeği', ab: 'Alman Arabası', col: '#b8703c', col2: '#ffd23f', acc: '#e8202e',
+      d: 'Küçük arabasına atlayıp 2 sn yerde gazlar: yerdeki tehlikelere bağışık, çarptığı rakipleri savurur. Düt düt!',
+      look: 'Kahverengi sosis köpeği, beyaz atlet, altın kolye, alna itilmiş güneş gözlüğü, bel çantası, beyaz çorap + sandalet, kendinden emin sırıtış',
+      say: ['Bizim orda böyle değil!', 'Düt düt, yol verin!', 'Yazın geldik, kışın gideriz.', 'Bu araba Almanya\'dan!'] },
+    Teyze:   { n: 'Terlikli Teyze', tag: 'tipleme', role: 'Mahalle Teyzesi', tr: 0, species: 'Tavuk', ab: 'Uçan Terlik', col: '#f06292', col2: '#ffffff', acc: '#ff3fa0',
+      d: 'Nişan alınabilen, hedefi izleyen terlik fırlatır: vurduğunu 1.5 sn sersemletir, bir kez seker. Kaç kere söyledim!',
+      look: 'Krem tavuk, çene altından bağlı kırmızı benekli beyaz tülbent, çiçekli pembe ev elbisesi, pembe terlikler, elinde terlik, kalkık kaşlar, al yanaklar',
+      say: ['Aç mısın evladım?', 'Kaç kere söyledim!', 'Hırkanı al, üşürsün!', 'Terlik geliyor!'] },
+    Marti:   { n: 'Simitçi Martı', tag: 'tipleme', role: 'Simitçi', tr: 0, species: 'Martı', ab: 'Simit Kapma', col: '#ffffff', col2: '#9aa8b8', acc: '#d9962e',
+      d: 'Öndeki en yakın rakibin eşyasını kapıp kendine alır; eşya yoksa yolda yuvarlanan bir simit atar. Sıcak simiiit!',
+      look: 'Beyaz martı, gri kanat-kollar, kırmızı benekli sarı gaga, gri kasket, kahverengi yelek, başında simit tablası, sinsi yarı kapalı gözler',
+      say: ['Sıcak simiiit!', 'Taze taze, çıtır çıtır!', 'O simit benim!', 'Boğaz\'da yürüyorum bak.'] }
   };
   FM.ORDER = ['TAFTAF', 'Caner', 'LUL', 'ertan', 'Kral', 'Nuss', 'baso'];
 
@@ -150,7 +163,14 @@ window.FM = window.FM || {};
       { id: 'robot',     n: 'Robot',         price: 25, cur: 'gems', rar: 'e', col: '#a6afc0', d: 'Çelik paneller, perçinler, mavi ışık.', pat: 'panel' },
       { id: 'altin',     n: 'Altın',         price: 25, cur: 'gems', rar: 'e', col: '#ffd23f', d: 'Saf altın, pırıl pırıl.', glow: 'twinkle' },
       { id: 'galaksi',   n: 'Galaksi',       price: 50, cur: 'gems', rar: 'l', col: '#7b5fd0', d: 'Yıldız tozu ve bulutsu: evren üstünde.', pat: 'stars', glow: 'cosmic' },
-      { id: 'gokkusagi', n: 'Gökkuşağı',     price: 55, cur: 'gems', rar: 'l', col: '#ff5aa0', d: 'Yedi renk, tek karakter.', pat: 'rainbow', glow: 'twinkle' }
+      { id: 'gokkusagi', n: 'Gökkuşağı',     price: 55, cur: 'gems', rar: 'l', col: '#ff5aa0', d: 'Yedi renk, tek karakter.', pat: 'rainbow', glow: 'twinkle' },
+      // Futbol formaları: yalnızca renkler (kulüp adı/arması yok — marka hakkı)
+      { id: 'forma_sk', n: 'Sarı-Kırmızı Forma',  price: 30, cur: 'gems', rar: 'e', col: '#f5b800', d: 'Sarı-kırmızı şeritli forma ve tozluk.', team: 1 },
+      { id: 'forma_sl', n: 'Sarı-Lacivert Forma', price: 30, cur: 'gems', rar: 'e', col: '#16307a', d: 'Sarı-lacivert şeritli forma ve tozluk.', team: 1 },
+      { id: 'forma_sb', n: 'Siyah-Beyaz Forma',   price: 30, cur: 'gems', rar: 'e', col: '#1a1a1a', d: 'Siyah-beyaz şeritli forma ve tozluk.', team: 1 },
+      { id: 'forma_bm', n: 'Bordo-Mavi Forma',    price: 30, cur: 'gems', rar: 'e', col: '#7a1630', d: 'Bordo-mavi şeritli forma ve tozluk.', team: 1 },
+      { id: 'forma_yb', n: 'Yeşil-Beyaz Forma',   price: 1800, rar: 'e', col: '#1f8a3a', d: 'Yeşil-beyaz şeritli forma ve tozluk.', team: 1 },
+      { id: 'forma_kb', n: 'Kırmızı-Beyaz Forma', price: 1800, rar: 'e', col: '#d01c24', d: 'Ay-yıldız kırmızısı, beyaz şeritli forma.', team: 1 }
     ],
     trails: [
       { id: 'none',     n: 'Yok',            price: 0,    rar: 'c', colors: [], d: 'İz bırakma.' },

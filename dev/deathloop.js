@@ -33,7 +33,7 @@ for (let run = 0; run < N; run++) {
     console.log(`seed ${seed} tema ${L.theme.id} bitiren ${fin} ölüm ${deaths.length} — en sık güvenli nokta ~${sx} (${top[1]})`);
     console.log('  ölümler örnek:', JSON.stringify(deaths.slice(0, 6)));
     const near = o => o.x > sx - 300 && o.x < sx + 700;
-    console.log('  zeminler:', L.solids.filter(s => s.x + s.w > sx - 300 && s.x < sx + 700).map(s => `[${Math.round(s.x)}-${Math.round(s.x + s.w)} y${Math.round(s.y)}${s.float ? ' F' : ''}]`).join(' '));
+    console.log('  zeminler:', L.solids.filter(s => s.x + s.w > sx - 300 && s.x < sx + 700).map(s => `[${Math.round(s.x)}-${Math.round(s.x + s.w)} y${Math.round(s.y)}${s.y2 != null ? '→' + Math.round(s.y2) : ''}${s.float ? ' F' : ''}]`).join(' '));
     console.log('  kutular:', L.boxes.filter(near).map(o => `${Math.round(o.x)},${Math.round(o.y)}`).join(' '), ' mantar:', L.mush.filter(near).map(o => Math.round(o.x)).join(','), ' pad:', L.pads.filter(near).map(o => Math.round(o.x)).join(','), ' diken:', L.spikes.filter(near).map(o => Math.round(o.x)).join(','));
     console.log('  kaya:', L.boulders.filter(o => o.x1 > sx - 300 && o.x0 < sx + 700).map(o => `${Math.round(o.x0)}-${Math.round(o.x1)}`).join(' '), ' baca/gayzer:', L.vents.filter(near).map(o => o.kind + '@' + Math.round(o.x)).join(','), ' trambolin:', L.tramp.filter(near).map(o => Math.round(o.x)).join(','), ' kapı:', L.portals.filter(o => o.ax > sx - 300 && o.ax < sx + 700).map(o => Math.round(o.ax) + '→' + Math.round(o.bx)).join(','), ' düşükG:', L.lowg.filter(near).map(o => Math.round(o.x) + '+' + Math.round(o.w)).join(','));
   }

@@ -47,7 +47,7 @@ function policy(P, prm, ov) {
       const le = val('Le', o, prm.Le);
       if (fx + le >= o.x0 && fx < o.x1 && Math.abs(o.y - feet) < 6 && !off(o)) { jump = true; break; }
     }
-    if (!jump && !gw(L, fx + prm.Le, feet, 240, 20) && !OBS.pit.some(o => fx + 260 > o.x0 && fx < o.x1)) jump = true;   // tanımsız kenar (güvenlik)
+    if (!jump && !gw(L, fx + prm.Le, feet, 240, 30) && !OBS.pit.some(o => fx + 260 > o.x0 && fx < o.x1)) jump = true;   // tanımsız kenar (güvenlik)
     // diken
     for (const o of OBS.spikes) {
       const ls = val('Ls', o, prm.Ls), dx = o.x0 - fx;
@@ -151,14 +151,17 @@ function trial(o, lt, prm, ov) {
   if (!placeAt(P, o.x0 - 300, S.L, o.x0 - 150)) return null;
   S.lt = lt; S.raceT = 20; S.mode = 'race'; S.ents = []; S.parts = []; S.endTimer = null; S.finishedN = 0;
   const goal = o.x1 + 160;
-  let t = 0, air = 0, clT = -9;
+  let t = 0, air = 0, clT = -9, jmp = false;
   trial.kop = 0;
   while (t < 8) {
     policy(P, prm, ov);
-    const jp = I.jp || P.vy < 0;
+    if (I.jp || I.dp) jmp = true;   // kendi zıplaması/kayması inene kadar sayılmaz
+    const jp = jmp || P.vy < 0;
     G.step(STEP); t += STEP;
     // kopma: zıplamadan/fırlatılmadan havada (altında 20 px içinde zemin varken) 50 ms'den uzun
     if (P.climb) clT = t;
+    if (P.onGround) jmp = false;
+    if (FL.iz && Math.abs(o.x0 - +FL.iz) < 2 && !ov) console.log('  iz', t.toFixed(3), 'cx', (P.x + P.w / 2).toFixed(1), 'ayak', (P.y + P.h).toFixed(1), 'zemin', (G.groundY(P.x + P.w / 2, P.y + P.h - 2) || 0).toFixed(1), 'vx', P.vx.toFixed(0), 'vy', P.vy.toFixed(0), P.onGround ? 'YER' : 'hava', P.climb ? 'TIRM' : '', jp ? 'zıpla' : '', P.slide ? 'kay' : '');
     if (!P.onGround && !P.climb && !jp && !P.inLift && P.fly <= 0 && t - clT > .4) { const g = G.groundY(P.x + P.w / 2, P.y + P.h - 2); air = g !== null && g - (P.y + P.h) < 20 ? air + STEP : 0; if (air > .05) trial.kop = 1; }
     else air = 0;
     if (P.dead > 0) return false;

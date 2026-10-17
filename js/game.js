@@ -763,7 +763,7 @@
     }
     if (r.climb) r.blocked = true;
     // Y hareketi — yüzey takibi (eğimli zemin): destek, gövde merkezinin altındaki yüzeydir (yokuşta pürüzsüz çıkış/iniş).
-    // Yerde koşarken (zıplamadan) merkez yüzeyi |vx|·dt + 3 px aşağıdaysa yapışılır: yokuş aşağıda sekme/uçma yok.
+    // Yerde koşarken (zıplamadan) merkez yüzeyi |vx|·dt + 11 px aşağıdaysa yapışılır: yokuş aşağıda sekme/uçma yok.
     // Merkez boşluktaysa (kenar) kutunun değdiği kenar destek olur (eski affedici kenar davranışı).
     // Tavan yalnızca alttan girilince (düz katılar); eğimli zemin bloklarının altına girilemez.
     const vyBefore = r.vy, feet0 = r.y + r.h, was = r.onGround;
@@ -771,7 +771,8 @@
     {
       const rcx = r.x + r.w / 2, feet = r.y + r.h;
       if (r.vy >= 0) {
-        const snap = was && vyBefore >= 0 && !r.climb ? Math.abs(r.vx) * dt + 3 : 0;
+        // yapışma payı: adım başına yatay yol + 11 px (kenar desteğinden yokuşa geçişte merkez yüzeyi ~10 px aşağıda kalabilir)
+        const snap = was && vyBefore >= 0 && !r.climb ? Math.abs(r.vx) * dt + 11 : 0;
         let sup = null, supY = 0, edge = null, edgeY = 0;
         for (const s of L.solids) {
           if (!(r.x < s.x + s.w && r.x + r.w > s.x)) continue;
@@ -1687,7 +1688,16 @@
           if (e.age > .6) for (const q of S.racers) {
             if (q === e.o) continue;   // kendi ağın seni tutmaz (ileri fırlatılan ağın içinden geçebilirsin)
             if (q.dead <= 0 && q.netted <= 0 && ov(q, e) && !(q.sled > 0)) {
-              if (harm(q, 'net', 1.5, e.o, 'net')) { e.n++; q.x = e.x + e.w / 2 - q.w / 2; FM.fx.sparks(e.x + 22, e.y + 38, 10, '#7be3ff', 300); if (e.n >= 2) e.dead = true; }
+              if (harm(q, 'net', 1.5, e.o, 'net')) {
+                e.n++;
+                // yarışçı ağın ortasına çekilir; oraya sığmıyorsa (duvara tırmanırken yakalandı, yokuş) ağın tabanına oturtulur,
+                // o da olmazsa yerinde tutulur (katıya gömülmesin)
+                const nx = e.x + e.w / 2 - q.w / 2;
+                if (boxFree(nx, q.y, q.w, q.h)) q.x = nx;
+                else if (boxFree(nx, e.y + e.h - q.h - .5, q.w, q.h)) { q.x = nx; q.y = e.y + e.h - q.h - .5; }
+                if (q.onGround) { const gy = groundY(cxOf(q), q.y + q.h - 40); if (gy !== null && Math.abs(gy - (q.y + q.h)) < 40) q.y = gy - q.h; }
+                FM.fx.sparks(e.x + 22, e.y + 38, 10, '#7be3ff', 300); if (e.n >= 2) e.dead = true;
+              }
             }
           }
           break;

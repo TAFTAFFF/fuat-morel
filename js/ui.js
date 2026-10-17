@@ -1508,6 +1508,9 @@
             '<div class="set-card"><h4>' + svg('keyboard') + 'KLAVYE</h4>' + keysList() + '</div>' +
             '<div class="set-card"><h4>' + svg('hand') + 'DOKUNMATİK</h4>' + touchList() + score + '</div>' +
           '</div>';
+      // antrenman yarışı: koç zıplamayı, kaymayı, eşyayı ve özel gücü yarış içinde gösterir
+      if (FM.tut && typeof FM.tut.start === 'function') body = '<div class="tut-row"><span class="tr-ic">' + svg('play') + '</span><span class="tr-m"><b>ANTRENMAN YARIŞI</b><span>1 dakikalık koşu: koç zıplamayı, kaymayı, eşya atmayı ve özel gücü yarışırken gösterir.</span></span>' +
+        '<button class="btn sm b-green" data-act="tutgo">' + svg('play') + '<span>OYNA</span></button></div>' + body;
     } else if (tab === 'items') {
       let h = '';
       Object.keys(FM.ITEMS || {}).forEach((k, i) => {
@@ -3482,6 +3485,7 @@
       paint(false);
     },
     buychar: el => doBuyChar(el),
+    tutgo: () => { if (FM.tut && typeof FM.tut.start === 'function') FM.tut.start(selChar()); },
     tab: el => {
       const s = el.getAttribute('data-s'), t = el.getAttribute('data-t');
       if (!st.tabs[s] || st.tabs[s] === t) return;
@@ -3786,6 +3790,8 @@
     if (!st.modal && !mpInRoom() && mpBusy() && !ncall('codeFromUrl')) openRejoin(ncall('code'));
     // ?oda=KOD linkiyle açıldıysa doğrudan katıl (takma ad yoksa önce sor)
     tryAutoJoin();
+    // yeni oyuncu: önce hoş geldin + antrenman yarışı (takma ad, günlük ödül vb. antrenmandan sonra menüye dönünce)
+    if (!st.tutOffered && FM.tut && typeof FM.tut.want === 'function' && FM.tut.want()) { st.tutOffered = true; setTimeout(() => FM.tut.welcome(), 350); return; }
     if (!st.dailyShown && !FM.DEV && dailyReady()) {
       st.dailyShown = true;
       // başka pencere (takma ad sorusu vb.) açıksa kapanmasını bekle
@@ -4130,6 +4136,14 @@
      26) DIŞA AÇIK API
      ===================================================================== */
   UI.show = showScreen;
+  /** Tek oyunculu maçı arayüzden başlatır gibi başlat (telefonda tam ekran, odak bırakılır) — antrenman yarışı kullanır */
+  UI.startMatch = function (opts) {
+    if (!FM.game || typeof FM.game.startMatch !== 'function') return;
+    if (touchMode) toggleFull(true);
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* yok say */ }
+    closeModalHard();
+    FM.game.startMatch(opts);
+  };
   UI.hide = () => FM.emit('ui:hide');
   UI.note = note;
   UI.refresh = refreshSoon;

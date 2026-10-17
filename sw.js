@@ -13,7 +13,7 @@ const FONT_CACHE = 'fuatmorel-fonts-v1';
 const PRECACHE = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/core.js', 'js/gfx.js', 'js/net.js', 'js/level.js', 'js/game.js', 'js/meta.js', 'js/netgame.js', 'js/audio.js',
-  'js/render-world.js', 'js/render-chars.js', 'js/render-fx.js', 'js/render-hud.js', 'js/ui.js', 'js/main.js',
+  'js/render-world.js', 'js/render-chars.js', 'js/render-fx.js', 'js/render-hud.js', 'js/ui.js', 'js/tutorial.js', 'js/main.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-64.png'
 ];
 const NET_TIMEOUT = 7000;     // ağ bu kadar sürede yanıt vermezse (ve önbellekte varsa) önbellekten aç

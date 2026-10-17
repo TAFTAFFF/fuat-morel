@@ -3179,3 +3179,40 @@ a.btn { text-decoration: none; }
 /* İpucu: yaklaşan engel için basılacak tuş nabız atar */
 .tbtn.hint .tb-in { animation: tbHint .32s ease-in-out infinite alternate; border-color: #fff !important; }
 @keyframes tbHint { from { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, .0); } to { transform: scale(1.1); box-shadow: 0 0 0 .8vh rgba(255, 255, 255, .55), 0 0 2.4vh 1vh rgba(120, 200, 255, .8); } }
+
+/* ---------------------------------------------------------------------
+   İLK DENEYİM: hoş geldin + antrenman koçu (js/tutorial.js)
+   --------------------------------------------------------------------- */
+.tut-coach { position: fixed; left: 50%; top: 17%; z-index: 60; transform: translate(-50%, -8px) scale(.9); opacity: 0; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .7rem 1.6rem .8rem; border-radius: 1.4rem; max-width: min(92vw, 34rem);
+  background: rgba(20, 8, 44, .72); border: .16rem solid rgba(255, 255, 255, .22); box-shadow: 0 .5rem 1.6rem rgba(0, 0, 0, .35);
+  transition: opacity .16s, transform .22s cubic-bezier(.2, 1.5, .4, 1); text-align: center; }
+.tut-coach.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.tut-t { font: 400 clamp(26px, 3.6rem, 54px)/1 var(--fh); color: #fff; letter-spacing: .03em; -webkit-text-stroke: .1rem #1b1024; paint-order: stroke fill;
+  text-shadow: 0 .22rem 0 #1b1024; animation: tutPulse .7s ease-in-out infinite alternate; }
+.tut-s { font: 600 max(13px, 1.35rem)/1.25 var(--fb); color: #ffe27a; }
+.tut-coach.tut-ok { background: rgba(18, 90, 40, .72); }
+.tut-coach.tut-ok .tut-t { color: #c4ff98; animation: none; }
+.tut-coach.tut-info .tut-t { animation: none; }
+.tut-coach.tut-end .tut-t { color: #ffd23f; }
+@keyframes tutPulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+.tut-hand { position: fixed; z-index: 61; left: 0; top: 0; font-size: 42px; line-height: 1; transform: translate(-50%, -100%); opacity: 0; pointer-events: none;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .45)); transition: opacity .15s; }
+.tut-hand.on { opacity: 1; animation: tutHand .55s ease-in-out infinite alternate; }
+@keyframes tutHand { from { transform: translate(-50%, -100%); } to { transform: translate(-50%, -78%); } }
+.tut-wel { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: radial-gradient(circle at 50% 40%, rgba(90, 40, 170, .82), rgba(12, 4, 30, .94));
+  animation: fadeIn .3s both; }
+.tut-wel.out { opacity: 0; transition: opacity .25s; }
+.tw-box { display: flex; flex-direction: column; align-items: center; gap: .7rem; max-width: 30rem; text-align: center; animation: popIn .45s .05s cubic-bezier(.2, 1.4, .4, 1) both; }
+.tw-logo { font: 400 clamp(40px, 6.2rem, 84px)/.9 var(--fh); color: #ffd23f; -webkit-text-stroke: .14rem #1b1024; paint-order: stroke fill; text-shadow: 0 .35rem 0 #1b1024, 0 0 2rem rgba(255, 210, 63, .45);
+  transform: rotate(-4deg); animation: twLogo 2.4s ease-in-out infinite; }
+@keyframes twLogo { 0%, 100% { transform: rotate(-4deg) scale(1); } 50% { transform: rotate(-2deg) scale(1.04); } }
+.tw-t { font: 400 clamp(22px, 2.6rem, 36px)/1 var(--fh); color: #fff; margin-top: .4rem; }
+.tw-s { font: 500 max(13px, 1.3rem)/1.35 var(--fb); color: var(--txt2, #d9cdf5); }
+.tw-go { font-size: 2rem; min-width: 15rem; margin-top: .4rem; }
+.tw-skip { background: none; border: 0; color: rgba(255, 255, 255, .55); font: 500 max(12px, 1.1rem) var(--fb); text-decoration: underline; cursor: pointer; padding: .4rem; }
+.tut-row { display: flex; align-items: center; gap: .8rem; margin-bottom: .8rem; padding: .7rem .9rem; border-radius: 1.1rem; background: linear-gradient(180deg, rgba(60, 200, 120, .22), rgba(20, 90, 50, .25)); border: .14rem solid rgba(120, 255, 170, .3); }
+.tut-row .tr-ic { flex: none; width: 2.6rem; height: 2.6rem; display: grid; place-items: center; border-radius: 50%; background: #2fbf4a; color: #fff; }
+.tut-row .tr-m { flex: 1; display: flex; flex-direction: column; gap: .15rem; }
+.tut-row .tr-m b { font: 400 1.35rem/1 var(--fh); color: #c4ff98; }
+.tut-row .tr-m span { font: 500 max(11.5px, 1.05rem)/1.25 var(--fb); color: var(--txt2, #d9cdf5); }

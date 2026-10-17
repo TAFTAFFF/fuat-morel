@@ -338,7 +338,8 @@
       if (pendingDpr && S.mode !== 'race') applyPendingDpr();   // çözünürlük düşürme yarış dışında (takılma görünmesin)
       watchPerf(dt);
       if ((!S.paused || mpLive()) && S.L) {
-        const sdt = simDt(dt);                                   // hit-stop: kısa yavaşlama (+ çok oyunculuda geri ödeme)
+        // hit-stop: kısa yavaşlama (+ çok oyunculuda geri ödeme); antrenman koçu: tek oyunculuda zaman yavaşlar (FM.slowMo)
+        const sdt = simDt(dt) * (!mpLive() && FM.slowMo > .02 && FM.slowMo < 1 ? FM.slowMo : 1);
         acc += sdt;
         let n = 0;
         while (acc >= C.STEP && n < 12) { snapPrev(); FM.game.step(C.STEP); acc -= C.STEP; n++; }

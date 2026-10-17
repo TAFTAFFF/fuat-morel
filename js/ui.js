@@ -1465,7 +1465,9 @@
       '</div>';
     // telefonda en önemli ayarlar (kontroller, kalite, tam ekran) üstte; klavye kısayolları yalnızca klavyeli cihazda
     const left = (touchMode ? ctl : '') + prof + notif + save + pwaCard() + (touchMode ? view + sound : sound + view) +
-      '<div class="set-card danger"><h4>' + svg('reset') + 'İLERLEME</h4><div class="srow"><span class="s-l s-wide">Tüm ilerlemeni sil ve baştan başla.</span><button class="btn sm b-red" data-act="reset">SIFIRLA</button></div></div>';
+      '<div class="set-card danger"><h4>' + svg('reset') + 'İLERLEME VE GİZLİLİK</h4><div class="srow"><span class="s-l s-wide">Tüm ilerlemeni sil ve baştan başla.</span><button class="btn sm b-red" data-act="reset">SIFIRLA</button></div>' +
+        '<div class="srow"><span class="s-l s-wide">Hesabımı ve verilerimi sil: herkese görünen profil kartın da kaldırılır.</span><button class="btn sm b-red" data-act="delacc">SİL</button></div>' +
+        '<div class="srow"><a class="set-link" href="gizlilik.html" target="_blank" rel="noopener">' + svg('info') + '<span>Gizlilik Politikası</span></a></div></div>';
     const right = touchMode
       ? '<div class="set-card ctl-card"><h4>' + svg('hand') + 'DOKUNMATİK</h4>' + touchList() + '</div>'
       : '<div class="set-card ctl-card"><h4>' + svg('keyboard') + 'KLAVYE</h4>' + keysList() + '<h4 class="h-touch">' + svg('hand') + 'DOKUNMATİK</h4>' + touchList() + '</div>' + ctl;
@@ -3580,6 +3582,21 @@
     lbtab: el => { const t = el.getAttribute('data-t') === 'fr' ? 'fr' : 'set'; if (st.lbTab === t) return; st.lbTab = t; updateLobby(true); },
     q: el => { const v = el.getAttribute('data-v') === 'low' ? 'low' : 'high'; setSetting('quality', v); for (const b of $$('.seg button')) b.classList.toggle('on', b.getAttribute('data-v') === v); },
     full: () => toggleFull(),
+    delacc: () => confirmBox({
+      title: 'HESABI SİL', rcls: 'rb-red',
+      art: '<div class="cf-art cf-warn">' + svg('close') + '</div>',
+      text: 'Takma adın, profil kartın (çevrimiçi listesinde görünen), altın, elmas, karakterler, kupalar ve tüm ayarların <b>kalıcı olarak silinecek</b>. Geri alınamaz!',
+      ok: '<span>KALICI OLARAK SİL</span>', okCls: 'b-red',
+      onOk: () => {
+        try { ncall('leaveRoom'); } catch (e) { /* yok say */ }
+        try { ncall('forgetMe'); } catch (e) { /* yok say */ }
+        if (typeof FM.resetSave === 'function') FM.resetSave();
+        try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && /^(fm|fuat)/i.test(k)) localStorage.removeItem(k); } } catch (e) { /* yok say */ }
+        note({ title: 'Hesabın silindi', sub: 'Oyun baştan açılıyor…', icon: svg('check'), cls: 'n-ok', ms: 1500 });
+        setTimeout(() => { try { location.reload(); } catch (e) { /* yok say */ } }, 900);
+        return true;
+      }
+    }),
     reset: () => confirmBox({
       title: 'SIFIRLA', rcls: 'rb-red',
       art: '<div class="cf-art cf-warn">' + svg('reset') + '</div>',

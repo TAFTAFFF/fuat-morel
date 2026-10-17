@@ -1858,6 +1858,14 @@
     profiles: guard(profilesList, 'profiles', []),
     // presence() → durum; presence(true/false) → aç/kapat. Durum: {on, conn: 'off'|'connecting'|'open'|'offline', shared, broker, brokerName, n}
     presence: guard(function (on) { if (on !== undefined) pEnable(!!on); return pStatus(); }, 'presence', null),
+    /* Verilerimi sil (App Store şartı: uygulama içinden hesap silme): herkese açık profil kartını (retain) sunucudan
+       kaldırır (boş retain mesajı) ve varlığı kapatır. Kayıt silme işini çağıran yapar (FM.resetSave). true = silme gönderildi. */
+    forgetMe: guard(function () {
+      const pid = myPid(); let ok = false;
+      try { const mq = pMq(); if (mq) ok = !!mq.publish(ROOT + '_pr/' + pid, '', true, false); } catch (e) { ok = false; }
+      try { pEnable(false); } catch (e) { /* yok say */ }
+      return ok;
+    }, 'forgetMe', false),
     setProfile: guard(function (p) {
       if (!isObj(p)) return false;
       R.prof = Object.assign(R.prof || {}, p);

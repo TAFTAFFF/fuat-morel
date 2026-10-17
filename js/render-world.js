@@ -1321,25 +1321,28 @@
   function buildGeo(L) {
     geoL = L; runs = []; floats = []; gaps = [];
     const sol = L.solids.filter(s => !s.float).sort((a, b) => a.x - b.x);
+    /* Yokuş (motor sözleşmesi): y2 verilmiş blok (x,y)→(x+w,y2)→(x+w,y+h)→(x,y+h) dörtgenidir. Çizimde bloğun yerel
+       koordinatına dikey kesme (k = (y2-y)/w) uygulanır: kapak/çimen şeridi eğimi izler, dikey çizgiler dik kalır.
+       r.yl / r.yr: sol / sağ kenar yüzey yüksekliği. Eğimli bloklar birleştirilmez. */
     for (const s of sol) {
-      const last = runs[runs.length - 1];
-      if (last && Math.abs(last.x + last.w - s.x) < 1.5 && Math.abs(last.y - s.y) < .5) last.w = s.x + s.w - last.x;
-      else runs.push({ x: s.x, y: s.y, w: s.w, bottom: s.y + s.h, cap: null, feat: null });
+      const last = runs[runs.length - 1], k = s.y2 != null && s.w > 0 ? (s.y2 - s.y) / s.w : 0;
+      if (last && !k && !last.k && Math.abs(last.x + last.w - s.x) < 1.5 && Math.abs(last.y - s.y) < .5) { last.w = s.x + s.w - last.x; last.yr = last.y; }
+      else runs.push({ x: s.x, y: s.y, w: s.w, k, yl: s.y, yr: s.y + k * s.w, bottom: s.y + s.h, cap: null, feat: null });
     }
     for (let i = 0; i < runs.length; i++) {
       const r = runs[i], a = runs[i - 1], b = runs[i + 1];
       r.lN = a && Math.abs(a.x + a.w - r.x) < 1.5 ? a : null;
       r.rN = b && Math.abs(r.x + r.w - b.x) < 1.5 ? b : null;
-      r.lE = !r.lN || r.lN.y > r.y;               // sol üst köşe açıkta mı
-      r.rE = !r.rN || r.rN.y > r.y;
-      r.lTo = r.lN ? (r.lN.y > r.y ? r.lN.y : null) : r.bottom;   // sol duvar konturu nereye kadar
-      r.rTo = r.rN ? (r.rN.y > r.y ? r.rN.y : null) : r.bottom;
+      r.lE = !r.lN || r.lN.yr > r.yl + .5;        // sol üst köşe açıkta mı
+      r.rE = !r.rN || r.rN.yl > r.yr + .5;
+      r.lTo = r.lN ? (r.lN.yr > r.yl + .5 ? r.lN.yr : null) : r.bottom;   // sol duvar konturu nereye kadar (dünya y)
+      r.rTo = r.rN ? (r.rN.yl > r.yr + .5 ? r.rN.yl : null) : r.bottom;
       r.seed = (hash((r.x | 0) * 7 + (r.y | 0) * 13 + (L.seed | 0)) * 1e9) | 0;
     }
     // çukurlar: bitişik olmayan iki blok arası (derinlik sisi, sıvı köpüğü, duvar gölgesi için)
     for (let i = 1; i < runs.length; i++) {
       const a = runs[i - 1], b = runs[i], x0 = a.x + a.w;
-      if (b.x - x0 > 1.5) gaps.push({ x0, x1: b.x, yb: Math.max(a.y, b.y) });
+      if (b.x - x0 > 1.5) gaps.push({ x0, x1: b.x, yb: Math.max(a.yr, b.yl) });
     }
     decSkip = new WeakSet();
     const boxZ = L.boxes || [];
@@ -1702,15 +1705,16 @@
     const ao = cg(ctx, id + ':ao', g => LG(g, 0, 0, 34, 0, [[0, rgba(gp.deep, .5)], [1, rgba(gp.deep, 0)]]));
     const yMax = vy1 + 4;
     const vis = [];
-    for (const r of runs) if (r.x < vx1 + 10 && r.x + r.w > vx0 - 10 && r.y < yMax) vis.push(r);
-    // 1) gövdeler
+    for (const r of runs) if (r.x < vx1 + 10 && r.x + r.w > vx0 - 10 && Math.min(r.yl, r.yr) < yMax) vis.push(r);
+    // 1) gövdeler (yokuşta kesme dönüşümüyle; gövde kesmenin açtığı payı kapatacak kadar aşağı uzar)
     for (const r of vis) {
       const x0 = Math.max(r.x, vx0 - 12), x1 = Math.min(r.x + r.w, vx1 + 12);
-      const yB = Math.min(r.bottom, yMax);
+      const yB = Math.min(r.bottom, yMax) + (r.k ? Math.abs(r.k) * r.w : 0);
       if (yB <= r.y + 4) continue;
       const lx0 = x0 - r.x, lw = x1 - x0, lh = yB - r.y;
       ctx.save();
       ctx.translate(r.x, r.y);
+      if (r.k) ctx.transform(1, r.k, 0, 1, 0, 0);
       if (pt) { if (id === 'candy') setPat(pt, 0, 2); else setPat(pt, -(r.x % pt.w), -(r.y % pt.h)); ctx.fillStyle = pt.pat; }
       else ctx.fillStyle = gp.body;
       ctx.fillRect(lx0, 4, lw, lh - 4);
@@ -1726,7 +1730,7 @@
       else if (r.lN && r.x >= x0 - 1) { ctx.fillStyle = ao; ctx.fillRect(0, 0, 34, lh); }
       if (r.x + r.w <= x1 + 1) {
         ctx.save(); ctx.translate(r.w, 0); ctx.scale(-1, 1);
-        if (r.rTo != null) { ctx.fillStyle = side; ctx.globalAlpha = .7; ctx.fillRect(0, 0, 22, Math.min(lh, r.rTo - r.y)); }
+        if (r.rTo != null) { ctx.fillStyle = side; ctx.globalAlpha = .7; ctx.fillRect(0, 0, 22, Math.min(lh, r.rTo - r.yr)); }
         else if (r.rN) { ctx.fillStyle = ao; ctx.fillRect(0, 0, 34, lh); }
         ctx.restore();
       }
@@ -1737,6 +1741,7 @@
     for (const r of vis) {
       if (!r.cap) r.cap = CAPS[id](r.w, r.lE, r.rE, r.seed);
       ctx.save(); ctx.translate(r.x, r.y);
+      if (r.k) ctx.transform(1, r.k, 0, 1, 0, 0);
       drawCap(ctx, r.cap);
       ctx.restore();
     }
@@ -1752,14 +1757,18 @@
       }
       if (r.rTo != null && r.x + r.w < vx1 + 8) {
         const y1 = Math.min(r.rTo, yMax);
-        if (y1 > r.y + T) {
-          ctx.strokeStyle = gp.rim; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r.x + r.w - 3.2, r.y + T + 4); ctx.lineTo(r.x + r.w - 3.2, y1 - 2); ctx.stroke();
-          ctx.strokeStyle = gp.ol; ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(r.x + r.w, r.y + T - 2); ctx.lineTo(r.x + r.w, y1 + (r.rN ? 2 : 0)); ctx.stroke();
+        if (y1 > r.yr + T) {
+          ctx.strokeStyle = gp.rim; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r.x + r.w - 3.2, r.yr + T + 4); ctx.lineTo(r.x + r.w - 3.2, y1 - 2); ctx.stroke();
+          ctx.strokeStyle = gp.ol; ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(r.x + r.w, r.yr + T - 2); ctx.lineTo(r.x + r.w, y1 + (r.rN ? 2 : 0)); ctx.stroke();
         }
       }
     }
     // 4) kapak üstü ayrıntılar
-    for (const r of vis) capTop(ctx, id, r.x, r.y, r.w, Math.max(r.x, vx0 - 20), Math.min(r.x + r.w, vx1 + 20), r.seed);
+    for (const r of vis) {
+      if (r.k) { ctx.save(); ctx.translate(r.x, r.y); ctx.transform(1, r.k, 0, 1, 0, 0); ctx.translate(-r.x, -r.y); }
+      capTop(ctx, id, r.x, r.y, r.w, Math.max(r.x, vx0 - 20), Math.min(r.x + r.w, vx1 + 20), r.seed);
+      if (r.k) ctx.restore();
+    }
   }
 
   /* ---- kapak üstü ayrıntılar: çimen yaprakları, çiçekler, şeker serpintisi, kar parıltısı, yosun ---- */
@@ -3691,7 +3700,7 @@
         let bad = false;
         for (const z of hazZones) if (x > z[0] - 10 && x < z[1] + 10) { bad = true; break; }
         if (bad) continue;
-        drawS(ctx, fgTuftSpr(id, (h * 6) | 0), x, r.y + 5, .9 + h * .5, h > .25);
+        drawS(ctx, fgTuftSpr(id, (h * 6) | 0), x, r.y + r.k * (x - r.x) + 5, .9 + h * .5, h > .25);
       }
     }
   }

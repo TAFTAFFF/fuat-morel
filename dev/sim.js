@@ -1,4 +1,4 @@
-// Kullanım: node dev/sim.js [koşu sayısı] [mod] [tema] [yarışçı sayısı] [ilk seed]
+// Kullanım: node dev/sim.js [koşu sayısı] [mod] [tema] [yarışçı sayısı] [ilk seed] [--ek (yeni karakterler de)]
 //   mod: classic | elim | coins | pure | chaos (varsayılan classic)
 //   tema: 0..7 ya da id (forest, candy, snow, castle, desert, space, city, tropic), 'all' = sırayla hepsi; verilmezse rastgele (eski 4 tema)
 //   yarışçı sayısı: 2..10 (varsayılan 4)
@@ -20,11 +20,15 @@ const sb = { console, Math, Date, JSON, setTimeout: () => 0, clearTimeout() { },
 sb.window = sb; vm.createContext(sb);
 for (const f of ['core', 'gfx', 'net', 'level', 'game', 'meta', 'netgame']) { const p = path.join(root, 'js', f + '.js'); if (fs.existsSync(p)) vm.runInContext(fs.readFileSync(p, 'utf8'), sb, { filename: f + '.js' }); }
 const FM = sb.FM; FM.view.VW = 1000;
-const N = +(process.argv[2] || 10);
-const MODE = process.argv[3] && FM.modeById(process.argv[3]) ? process.argv[3] : 'classic';
-const TH = process.argv[4];
-const NR = Math.max(2, Math.min(FM.MAXR, +(process.argv[5] || 4)));
-const SEED0 = process.argv[6] != null && isFinite(+process.argv[6]) ? +process.argv[6] : null;
+const N = +(process.argv.filter(a => a !== '--ek')[2] || 10);
+// --ek: yeni karakterler (FM.CH tag 'tipleme') de yarışır (FM.ROSTER_EXTRA) ve oyuncu karakteri onlar arasında da döner
+const EK = process.argv.includes('--ek'), ARGV = process.argv.filter(a => a !== '--ek');
+if (EK) FM.ROSTER_EXTRA = true;
+const ROSTER = EK ? FM.game.rosterPool() : FM.ORDER;
+const MODE = ARGV[3] && FM.modeById(ARGV[3]) ? ARGV[3] : 'classic';
+const TH = ARGV[4];
+const NR = Math.max(2, Math.min(FM.MAXR, +(ARGV[5] || 4)));
+const SEED0 = ARGV[6] != null && isFinite(+ARGV[6]) ? +ARGV[6] : null;
 const themeFor = run => TH == null || TH === 'random' ? 'random' : TH === 'all' ? run % FM.THEMES.length : (isFinite(+TH) ? +TH : TH);
 let allFin = 0, errors = 0, warns = 0; const deaths = {}; const times = []; let nDeath = 0, nUse = 0, sumT = 0;
 const ev = { portal: 0, vent: 0, tramp: 0, gate: 0, eliminated: 0, meteor: 0, drop: 0, pick: 0, bonus: 0 };
@@ -55,10 +59,16 @@ FM.on('death', d => {
   else if (!d.ent && (d.cause === 'saw' || !(d.cause && FM.ITEMS[d.cause]))) { const k = d.cause === 'saw' ? 'testere-makinesi' : d.cause; envDeath[k] = (envDeath[k] || 0) + 1; }
 });
 FM.on('fizzle', d => { io(d.type).kayip++; });
+// özel güç sonuçları: kullanım → etkilenen (sersem/savrulma/yavaşlama/donma isabeti), öldürme; Martı kapma ayrı
+const abOut = {}, ao = k => abOut[k] || (abOut[k] = { kul: 0, isabet: 0, oldur: 0 });
+const AB_CAUSE = { Teyze: 'Teyze', Almanci: 'Almanci', Marti: 'Marti', Kral: 'Kral', LUL: 'LUL', Caner: 'Caner', baso: 'baso' };
+FM.on('ability', d => { ao(d.id).kul++; });
+FM.on('hit', d => { if (d.cause && AB_CAUSE[d.cause]) ao(d.cause).isabet++; });
+FM.on('steal', d => { const o = ao('Marti'); o.kapma = (o.kapma || 0) + (d.item ? 1 : 0); });
 let floating = 0, floatSeen = new WeakSet(), stuckEv = 0;
 for (let run = 0; run < N; run++) {
   try {
-    FM.game.startMatch({ char: FM.ORDER[run % 7], rounds: 1, auto: true, mode: MODE, theme: themeFor(run), n: NR, seed: SEED0 != null ? SEED0 + run : undefined });
+    FM.game.startMatch({ char: ROSTER[run % ROSTER.length], rounds: 1, auto: true, mode: MODE, theme: themeFor(run), n: NR, seed: SEED0 != null ? SEED0 + run : undefined });
     FM.S.countT = .01;
     const S = FM.S, R = S.racers;
     const prog = R.map(r => ({ x: r.x, t: 0 }));
@@ -119,4 +129,5 @@ const per = v => (v / Math.max(1, N) / NR).toFixed(2);
 console.log('Zaman kaybı (yarışçı başına sn):', JSON.stringify(Object.fromEntries(Object.entries(lost).map(([k, v]) => [k, +per(v)]))), ' takılma olayı', stuckEv);
 console.log('Eşya sonuçları (kul → isabet/öldür/kayıp):', Object.entries(itemOut).sort().map(([k, o]) => `${k} ${o.kul}→${o.isabet}/${o.oldur}/${o.kayip}`).join('  '));
 console.log('Engel/çevre ölümleri (yarış başına):', Object.entries(envDeath).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / Math.max(1, N)).toFixed(2)}`).join('  '));
+console.log('Güç sonuçları (kul → isabet):', Object.entries(abOut).sort().map(([k, o]) => `${k} ${o.kul}→${o.isabet}${o.kapma != null ? ' kapma ' + o.kapma : ''}`).join('  '));
 console.log('Havada kalan nesne:', floating, floating ? '  !! tuzak/ağ havada kaldı' : '(0 olmalı)');

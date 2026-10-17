@@ -3044,8 +3044,40 @@
       ctx.restore();
     }
   }
+  /* Gelen tehlike okları (motor: FM.S.threats): ekran dışından yaklaşan atış/etki için ekran kenarında kırmızı ok + ne olduğu.
+     Arkadan gelen testere/füze/terlik görülmeden vurmasın; yukarıdan (meteor, yıldırım) gelende üst kenarda. Ekrandakiler için ok yok
+     (kendi tehlike halesi var). Yaklaştıkça büyür ve hızlanır. */
+  const THR_N = { saw: 'TESTERE', dyn: 'DİNAMİT', mis: 'FÜZE', crow: 'KARGA', wave: 'DALGA', bolt: 'YILDIRIM', ice: 'BUZ', ink: 'MÜREKKEP', meteor: 'METEOR', terlik: 'TERLİK', simit: 'SİMİT' };
+  function drawThreats(ctx, S) {
+    const T = S.threats; if (!T || !T.length || S.mode !== 'race') return;
+    const cam = S.cam, V = FM.view, VW = V.VW, VH = V.VH, t = performance.now() / 1000;
+    let nL = 0, nR = 0, nT = 0;
+    for (const h of T) {
+      if (!h || !(h.eta <= 2.2)) continue;
+      const sx = h.x - cam.x, sy = h.y - cam.y, m = 58;   // kenardaki rakip oklarının iç tarafında
+      let x, y, ang;
+      if (sx < -10) { if (nL++ > 1) continue; x = m; y = Math.max(70, Math.min(VH - 90, sy)); ang = Math.PI; }
+      else if (sx > VW + 10) { if (nR++ > 1) continue; x = VW - m; y = Math.max(70, Math.min(VH - 90, sy)); ang = 0; }
+      else if (sy < -10) { if (nT++ > 1) continue; x = Math.max(60, Math.min(VW - 60, sx)); y = 92; ang = -Math.PI / 2; }
+      else continue;   // ekranda: ok yok
+      const urg = Math.max(0, Math.min(1, 1 - h.eta / 2.2)), sc = .8 + urg * .45 + Math.sin(t * (8 + urg * 10)) * .06;
+      ctx.save(); ctx.translate(x, y); ctx.globalAlpha = .55 + urg * .45;
+      ctx.save(); ctx.rotate(ang); ctx.scale(sc, sc);
+      // dışa bakan ok (tehlikenin geldiği yön)
+      ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-4, -15); ctx.lineTo(-4, 15); ctx.closePath();
+      ctx.lineJoin = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = '#2a0610'; ctx.stroke();
+      ctx.fillStyle = urg > .6 ? '#ff2a3d' : '#ff5a4a'; ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = '#fff'; ctx.font = '900 ' + Math.round(15 * sc) + 'px ' + (FM.FONT_H || 'sans-serif'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('!', ang === 0 ? -3 : ang === Math.PI ? 3 : 0, ang === -Math.PI / 2 ? 3 : 0);
+      const nm = THR_N[h.kind];
+      if (nm && FM.gfx && FM.gfx.text) FM.gfx.text(ctx, nm, ang === 0 ? -14 : ang === Math.PI ? 14 : 0, ang === -Math.PI / 2 ? 30 : 26, 11, '#ffffff', { stroke: '#2a0610', lw: 3.4, align: ang === 0 ? 'right' : ang === Math.PI ? 'left' : 'center' });
+      ctx.restore();
+    }
+  }
   function drawHint(ctx, S, P) {
     try { if (S.mode === 'race' || S.mode === 'demo') drawTrapWarn(ctx, S); } catch (e) { /* yok say */ }
+    try { drawThreats(ctx, S); } catch (e) { /* yok say */ }
     const st = FM.save && FM.save.settings;
     const H = S.hint;
     if (!H || !P || P.dead > 0 || P.frozen > 0 || S.mode !== 'race' || (st && st.hints === false)) return;

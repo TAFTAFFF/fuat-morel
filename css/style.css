@@ -3216,3 +3216,5 @@ a.btn { text-decoration: none; }
 .tut-row .tr-m { flex: 1; display: flex; flex-direction: column; gap: .15rem; }
 .tut-row .tr-m b { font: 400 1.35rem/1 var(--fh); color: #c4ff98; }
 .tut-row .tr-m span { font: 500 max(11.5px, 1.05rem)/1.25 var(--fb); color: var(--txt2, #d9cdf5); }
+.set-link { display: inline-flex; align-items: center; gap: .4rem; color: #9fd0ff; font: 600 max(12px, 1.15rem) var(--fb); text-decoration: underline; pointer-events: auto; }
+.set-link .ico { width: 1.3rem; height: 1.3rem; }

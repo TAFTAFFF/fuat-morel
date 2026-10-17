@@ -23,6 +23,8 @@ const root = path.resolve(__dirname, '..');
 const FILES = ['core', 'gfx', 'net', 'level', 'game', 'meta', 'netgame'];
 const SRC = FILES.map(f => [f, fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8')]);
 const CHARS = ['TAFTAF', 'Caner', 'LUL', 'ertan', 'Kral', 'Nuss', 'baso'];
+// --ek: hayaletler yeni karakterleri de seçer (Almancı Dayı, Terlikli Teyze, Simitçi Martı); güçleri ağda denenir
+if (process.argv.includes('--ek')) CHARS.length = 0, CHARS.push('Almanci', 'Teyze', 'Marti', 'Almanci', 'Teyze', 'Marti', 'Kral');
 let BURL = process.env.NET_BROKER || null;      // yerel/özel aracı: tüm hayaletler ?brokerUrl= ile buna bağlanır
 function setBroker(u) { BURL = u || null; }
 
@@ -37,7 +39,8 @@ function ghost(nick, opts) {
   opts = opts || {};
   const store = opts.store || {};
   const ch = opts.char || CHARS[(Math.random() * CHARS.length) | 0];
-  if (!store.fuatmorel_save_v2) store.fuatmorel_save_v2 = JSON.stringify({ selChar: ch, nick, nickSet: true });
+  // yeni karakterler ücretli (FM.CH price/gems): --ek denemesinde hayaletin kaydında satın alınmış sayılır
+  if (!store.fuatmorel_save_v2) store.fuatmorel_save_v2 = JSON.stringify(Object.assign({ selChar: ch, nick, nickSet: true }, process.argv.includes('--ek') ? { owned: { chars: ['Almanci', 'Teyze', 'Marti'] } } : {}));
   const g = { nick, errors: [], ev: [], timers: [], stopped: false };
   const cons = {
     log: (...a) => { if (!opts.quiet) console.log('[' + nick + ']', ...a); },
@@ -105,6 +108,7 @@ module.exports = { ghost, sleep, waitFor, endSig, CHARS, setBroker };
 if (require.main === module) {
   // bayraklar: --hostdrop=SN (ev sahibi SN. saniyede donar/kopar → göç), --drop=SN (Oyuncu1 kopar → "bağlantı koptu", sonuçta en sonda),
   //           --late=SN (SN. saniyede bir oyuncu daha katılır → izleyici, sonraki turda yarışır)
+  //           --ek (hayaletler yeni karakterlerle oynar: Almanci/Teyze/Marti)
   const FL = {}; const A = process.argv.slice(2).filter(a => { const m = /^--([a-z]+)(?:=(.*))?$/.exec(a); if (m) { FL[m[1]] = m[2] == null ? '1' : m[2]; return false; } return true; });
   const cmd = A[0] || 'host';
   (async () => {
@@ -162,6 +166,11 @@ if (require.main === module) {
       const pass = m => { ok.push(m); console.log('  ✓ ' + m); }, fail = m => { bad.push(m); console.log('  ✗ ' + m); };
       const live = () => all.filter(g => !g.dropped);
       pass('start herkese ulaştı; harita: ' + all.map(g => g.FM.S.L.theme.id + '/' + Math.round(g.FM.S.L.end)).filter((v, i, a) => a.indexOf(v) === i).join(', '));
+      if (FL.ek) {
+        // yeni karakterlerin güçleri ağda: her hayalette güç olaylarını say (yerel + ağdan gelen)
+        console.log('    karakterler: ' + all[0].FM.S.racers.map(r => r.id + (r.ctrl === 'local' ? '*' : '')).join(' '));
+        for (const g of all) { g.abN = {}; g.FM.on('ability', d => { const k = d.r.id + (d.net ? '(ağ)' : ''); g.abN[k] = (g.abN[k] || 0) + 1; }); g.FM.on('steal', d => { g.abN.kapma = (g.abN.kapma || 0) + 1; }); g.FM.on('car:hit', () => { g.abN.arabaÇarpma = (g.abN.arabaÇarpma || 0) + 1; }); }
+      }
       const tStart = Date.now();
       // senaryolar: geç katılan oyuncu, ev sahibinin donup kopması (göç)
       if (FL.late) setTimeout(() => {
@@ -245,6 +254,7 @@ if (require.main === module) {
       console.log('    gönderilen olaylar: ' + JSON.stringify(sent));
       console.log('    alınan olaylar:     ' + JSON.stringify(recv));
       if ((recv.it || 0) > 0 && (recv.fn || 0) > 0) pass('eşya/ölüm/bitiş olayları karşıya geçti'); else fail('olaylar eksik');
+      if (FL.ek) for (const g of all) if (g.abN) console.log('    güçler ' + g.nick + ': ' + JSON.stringify(g.abN));
       // lobiye dönüş (otomatik, ev sahibi)
       await waitFor(() => live().every(g => g.count('mp:lobby') >= 2), 45000, 'lobiye dönüş').then(() => pass('ev sahibi otomatik lobiye döndü, herkes lobide')).catch(e => fail(e.message));
       const errs = all.reduce((a, g) => a + g.errors.length, 0);

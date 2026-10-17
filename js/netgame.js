@@ -34,7 +34,7 @@
   const F = { g: 1, sl: 2, cl: 4, sm: 8, bl: 16, fi: 32, el: 64, lf: 128, sp: 256, ice: 512, sand: 1024, lift: 2048 };
   // süreler (0.01 hassasiyet, yalnızca > 0 gider) ve tam sayılar (yalnızca ≠ 0 gider)
   const TIM = [['fly', 'fl'], ['dash', 'da'], ['sled', 'se'], ['shield', 'sh'], ['boost', 'bo'], ['padT', 'pd'], ['frozen', 'fr'], ['stun', 'st'],
-    ['netted', 'nt'], ['dead', 'dd'], ['inv', 'iv'], ['inked', 'ik'], ['slowT', 'sw'], ['pull', 'pu'], ['bounceT', 'bt']];
+    ['netted', 'nt'], ['dead', 'dd'], ['inv', 'iv'], ['inked', 'ik'], ['slowT', 'sw'], ['pull', 'pu'], ['bounceT', 'bt'], ['car', 'ca']];
   const INT = [['jumps', 'ju'], ['charge', 'ch'], ['coins', 'co'], ['kills', 'k'], ['deaths', 'de'], ['tp', 'j']];
   // gelen olaylardan bu türler, gönderenin ara değerleme gecikmesi kadar bekletilip uygulanır (ekranda gördüğün an ile hizalı)
   const DELAYED = { it: 1, ab: 1, ht: 1, bl: 1, dt: 1, fn: 1, cd: 1 };
@@ -523,7 +523,8 @@
     d.bots.forEach((b, j) => {
       const r = game.mkRacer(b.char, d.roster.length + j, host);
       botN[b.char] = (botN[b.char] || 0) + 1;
-      r.pid = b.id; r.nbot = true; r.name = r.nick = botN[b.char] > 1 ? b.char + ' ' + botN[b.char] : b.char;
+      const bn = game.dispName ? game.dispName(b.char) : b.char;   // tiplemelerde görünen ad (Almancı Dayı)
+      r.pid = b.id; r.nbot = true; r.name = r.nick = botN[b.char] > 1 ? bn + ' ' + botN[b.char] : bn;
       r.ctrl = host ? 'bot' : 'remote'; r.bot = host;
       r.skin = b.skin; r.trail = b.trail; r.plate = b.plate; r.hat = b.hat; r.win = b.win; r.death = b.death;
       racers.push(r);
@@ -853,9 +854,10 @@
     let best = null;
     for (const s of S.L.solids) {
       if (s.float && s.w < 200) continue;
-      if (x >= s.x + 30 && x <= s.x + s.w - 30) { if (!best || Math.abs(s.y - (r.y + r.h)) < Math.abs(best.y - (r.y + r.h))) best = { x, y: s.y }; }
+      const ty = FM.level && FM.level.topAt ? FM.level.topAt(s, x) : s.y;   // yokuşta x'teki yüzey
+      if (x >= s.x + 30 && x <= s.x + s.w - 30) { if (!best || Math.abs(ty - (r.y + r.h)) < Math.abs(best.y - (r.y + r.h))) best = { x, y: ty }; }
     }
-    if (!best) for (const s of S.L.solids) if (!s.float && s.x + s.w < x && s.w >= 120 && (!best || s.x + s.w > best.e)) best = { x: s.x + s.w - 60, y: s.y, e: s.x + s.w };
+    if (!best) for (const s of S.L.solids) if (!s.float && s.x + s.w < x && s.w >= 120 && (!best || s.x + s.w > best.e)) best = { x: s.x + s.w - 60, y: FM.level && FM.level.topAt ? FM.level.topAt(s, s.x + s.w - 60) : s.y, e: s.x + s.w };
     if (best) r.safe = { x: best.x, y: best.y };
     if (r.slide && r.h !== C.SH) r.h = C.SH;
   }

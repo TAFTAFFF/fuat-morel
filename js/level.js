@@ -12,7 +12,7 @@
      crush     : [{x,y,w,h}]              tavandan sarkan ezici. ÖLDÜREN bölge {x,y,w,h}; alt kenarı (y+h) zeminin 26 px üstü
      saws      : [{cx,cy,off,r,amp,sp,ph,px,py}] testere makinesi (KAYMA engeli): bıçak merkezi py = cy + off + sin·amp
                                            (zeminden ~58 px yukarıda dar bantta titrer); ray cx'te yukarı uzanır (o da keser). px,py anlık merkez
-     boxes     : [{x,y,w,h,cd:[10]}]       eşya kutuları (her yarışçı için ayrı bekleme süresi cd[idx])
+     boxes     : [{x,y,w,h,cd:[10],it?}]   eşya kutuları (her yarışçı için ayrı bekleme süresi cd[idx]); it: antrenmanda oyuncuya verilen sabit eşya
      pads      : [{x,y,w}]                 hız pedi (y = zemin üstü)
      mush      : [{x,y,w,sq}]              zıplatan mantar (y = zemin üstü, sq>0 iken ezilme animasyonu)
      belts     : [{x,y,w}]                 ileri iten yürüyen bant
@@ -133,7 +133,31 @@
     const pool = poolFor(tid, mode);
     // eleme kapıları: parkurun %24/44/64/84'ünde düz bir bölüm
     const gateAt = mode === 'elim' ? [.24, .44, .64, .84].map(f => f * len) : [];
-    while (x < len) {
+    /* ANTRENMAN PİSTİ (opts.tutorial; FM.S.tutorial): sabit, kısa (~36 sn koşu + koçun yavaşlatmaları), yalnızca yumuşak yokuşlar. Sırayla: ısınma →
+       tek ve ikili alçak diken (ZIPLA) → ezici (KAY) → 90 px basamak (ZIPLA) → 240 px geniş hendek (ÇİFT ZIPLA) → oyuncuya
+       testere veren eşya kutusu (it: 'saw') → yüksek duvar (TIRMAN) → bitiş. Seed'den bağımsız (her açılışta aynı pist). */
+    if (opts.tutorial) {
+      ground(520);                                                        // ısınma (~3.7 sn tehlikesiz)
+      slope(260, -40); ground(280); slope(260, 40);                       // yumuşak tepe
+      { const s0 = ground(600); L.spikes.push({ x: s0 + 330, y: gy - 26, w: 36, h: 26 }); coinArc(s0 + 300, s0 + 400, gy - 70, 60, 4); }
+      ground(240);
+      { const s0 = ground(620); L.spikes.push({ x: s0 + 260, y: gy - 26, w: 72, h: 26 }); coinArc(s0 + 220, s0 + 380, gy - 70, 70, 5); }
+      slope(320, 50); ground(200);                                        // yumuşak iniş
+      { const s0 = ground(640); L.crush.push({ x: s0 + 320, y: gy - 300, w: 70, h: 300 - 26 }); coinRow(s0 + 300, gy - 14, 4, 30); }
+      ground(320);
+      gy -= 90; { const s0 = ground(520); coinRow(s0 + 60, gy - 36, 5, 30); }     // basamak (zıplanır)
+      slope(330, 60); ground(160);
+      { const gw = 240, gx = x; floor(gx, gw, gy + 120); x += gw; coinArc(gx - 40, gx + gw + 40, gy - 90, 110, 7); }   // geniş hendek
+      ground(460);
+      { const s0 = ground(700); box(s0 + 260, gy - 50); L.boxes[L.boxes.length - 1].it = 'saw'; coinRow(s0 + 420, gy - 36, 5, 30); }
+      slope(220, -30); slope(220, 30); slope(220, -25); slope(220, 25); ground(300);   // inişli çıkışlı (eşyayı atma zamanı)
+      slope(260, -35); ground(240); slope(260, 35); ground(200);
+      { const s0 = ground(600); L.spikes.push({ x: s0 + 300, y: gy - 26, w: 36, h: 26 }); }
+      ground(260);
+      gy -= 180; { const s0 = ground(640); coinRow(s0 + 80, gy - 36, 6, 30); }  // yüksek duvar (tırmanılır)
+      slope(320, 50); ground(500);
+    }
+    while (!opts.tutorial && x < len) {
       if (gateAt.length && x >= gateAt[0]) {
         gateAt.shift();
         const w = R(380, 460), s = ground(w);

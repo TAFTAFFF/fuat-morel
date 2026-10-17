@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fuat Morel — Gizlilik Politikası</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f7f4fc; --fg: #1d1530; --mut: #5a4f70; --acc: #6a35c9; --card: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #140b26; --fg: #efe9fb; --mut: #b9add3; --acc: #c9a7ff; --card: #1e1236; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.7rem; margin: .2em 0 .1em; } h2 { font-size: 1.15rem; margin: 1.6em 0 .4em; color: var(--acc); }
+  p, li { color: var(--fg); } .mut { color: var(--mut); font-size: .92rem; }
+  section { background: var(--card); border-radius: 14px; padding: 4px 18px 14px; margin-top: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  a { color: var(--acc); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Fuat Morel — Gizlilik Politikası</h1>
+  <p class="mut">Son güncelleme: 17 Ekim 2026 · <a href="#en">English below</a></p>
+
+  <section>
+    <h2>Kısaca</h2>
+    <ul>
+      <li>Hesap açmanı, e-posta ya da telefon numaranı <b>istemiyoruz</b>.</li>
+      <li>Reklam yok, reklam takibi yok, verin satılmıyor ya da paylaşılmıyor.</li>
+      <li>İlerlemen (altın, elmas, karakterler, kupalar, ayarlar) <b>yalnızca kendi cihazında</b> saklanır.</li>
+      <li>Çevrimiçi oynarken diğer oyuncuların görebileceği bir <b>profil kartı</b> paylaşılır (aşağıda).</li>
+      <li>Her şeyi oyunun içinden silebilirsin: <b>Ayarlar › İlerleme ve Gizlilik › Hesabımı ve verilerimi sil</b>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Hangi veriler, nerede?</h2>
+    <p><b>Cihazında (yerel kayıt):</b> takma adın, rastgele üretilmiş oyuncu kimliği, oyun ilerlemen, istatistiklerin ve ayarların. Bu bilgiler tarayıcının/uygulamanın yerel deposunda durur; bize gönderilmez.</p>
+    <p><b>Çevrimiçi profil kartı:</b> arkadaşlarının seni çevrimiçi listesinde görebilmesi için takma adın, seçtiğin karakter ve görünüm, seviyen, kupa sayın, oyun süren, yarış/galibiyet sayıların ve en son görülme zamanın; oyunun kullandığı herkese açık mesaj sunucuları (MQTT) üzerinden diğer oyunculara iletilir. Bu kart gerçek adını, konumunu ya da iletişim bilgini içermez.</p>
+    <p><b>Oyun sırasında:</b> çok oyunculu yarışta konumun, hareketlerin ve sohbet ifadelerin odadaki oyunculara iletilir. Mümkünse oyuncular arasında doğrudan (WebRTC) bağlantı kurulur; bu bağlantı için kullanılan genel STUN sunucuları teknik olarak IP adresini görebilir.</p>
+    <p><b>Bildirimler:</b> izin verirsen arkadaşın çevrimiçi olunca cihazında yerel bildirim gösterilir; bildirim için bir sunucuya kayıt yapılmaz.</p>
+  </section>
+
+  <section>
+    <h2>Satın almalar</h2>
+    <p>Oyun içi para (altın, elmas) oyun oynayarak kazanılır. İleride gerçek parayla satın alma eklenirse ödeme Apple App Store ya da Google Play üzerinden yapılır; kart bilgilerin bize ulaşmaz.</p>
+  </section>
+
+  <section>
+    <h2>Çocuklar</h2>
+    <p>Oyun her yaştan oyuncu için tasarlanmıştır ve bilerek kişisel veri toplamaz. Takma ad olarak gerçek adını ya da kişisel bilgini kullanmamanı öneririz.</p>
+  </section>
+
+  <section>
+    <h2>Verilerini silme ve haklar</h2>
+    <p>Oyunda <b>Ayarlar › İlerleme ve Gizlilik › Hesabımı ve verilerimi sil</b> düğmesi; cihazındaki tüm kaydı siler ve çevrimiçi profil kartının sunuculardan kaldırılması için silme mesajı gönderir. 6698 sayılı KVKK ve GDPR kapsamındaki bilgi alma, düzeltme ve silme talepleri için aşağıdaki iletişim adresine yazabilirsin.</p>
+    <p><b>İletişim:</b> <a href="https://github.com/TAFTAFFF/fuat-morel/issues">github.com/TAFTAFFF/fuat-morel</a></p>
+  </section>
+
+  <h1 id="en" style="margin-top:48px">Privacy Policy (English)</h1>
+  <section>
+    <ul>
+      <li>No account, e-mail or phone number is required. No ads, no ad tracking; your data is never sold or shared.</li>
+      <li>Your progress (coins, gems, characters, trophies, settings) is stored <b>only on your device</b>.</li>
+      <li>When online, a public <b>profile card</b> (nickname, character and outfit, level, trophies, play time, race/win counts, last seen time) is relayed to other players through public MQTT message servers so friends can see who is online. It contains no real name, location or contact details.</li>
+      <li>During multiplayer races your position, moves and emotes are sent to players in the same room, directly (WebRTC) when possible; public STUN servers used to set up that connection can technically see your IP address.</li>
+      <li>Optional notifications are local to your device.</li>
+      <li>Future real-money purchases, if any, are processed by Apple App Store or Google Play; we never receive card details.</li>
+      <li>Delete everything in the game: <b>Settings › Progress &amp; Privacy › Delete my account and data</b>. This erases the local save and sends a removal message for your public profile card.</li>
+      <li>Contact: <a href="https://github.com/TAFTAFFF/fuat-morel/issues">github.com/TAFTAFFF/fuat-morel</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

@@ -99,7 +99,7 @@ window.FM = window.FM || {};
       look: 'Beyaz martı, gri kanat-kollar, kırmızı benekli sarı gaga, gri kasket, kahverengi yelek, başında simit tablası, sinsi yarı kapalı gözler',
       say: ['Sıcak simiiit!', 'Taze taze, çıtır çıtır!', 'O simit benim!', 'Boğaz\'da yürüyorum bak.'] }
   };
-  FM.ORDER = ['TAFTAF', 'Caner', 'LUL', 'ertan', 'Kral', 'Nuss', 'baso'];
+  FM.ORDER = ['TAFTAF', 'Caner', 'LUL', 'ertan', 'Kral', 'Nuss', 'baso', 'Almanci', 'Teyze', 'Marti'];   // klan (ücretsiz) + Türk tiplemeleri (açılır)
   /** Ekranda görünen karakter adı (tiplemelerde 'Almancı Dayı'; klan karakterlerinde kimliğin kendisi) */
   FM.chName = id => (FM.CH[id] && FM.CH[id].n) || String(id || '');
   /** Satın alınması gereken karakter mi (klan karakterleri ücretsiz) */

@@ -40,7 +40,9 @@
      Simitçi Martı — Simit Kapma: öndeki (≤ STEAL_R px) eşyası olan en yakın rakibin eşyasını kapar ('steal'); kimsede eşya yoksa
        yerde yuvarlanan simit atar (çarptığını SIMIT_SLOW sn yavaşlatır; zıplanarak aşılır). */
   const CAR_T = 2, CAR_MUL = 1.35, CAR_KNOCK = 1, CAR_HOP = .8;
-  const TERLIK_V = 680, TERLIK_TURN = 3, TERLIK_STUN = 1.5, TERLIK_LIFE = 2.6, TERLIK_R = 13;
+  const TERLIK_V = 680, TERLIK_STUN = 1.5, TERLIK_LIFE = 2.6, TERLIK_R = 13;
+  // terlik izleme: dönüş hızı (rad/sn) ve kilit mesafesi (hedefe bu kadar yaklaşınca düz uçar; 0 = kapalı)
+  const TERLIK_P = { turn: 3, lock: 0 };
   const SIMIT_V = 520, SIMIT_SLOW = 2.2, SIMIT_R = 16, STEAL_R = 900;
   const SAW_V = 560, DYN_V = 720, DYN_LOB = 240, TRAP_V = 560, TRAP_LOB = 220, NET_V = 600, NET_LOB = 260;
   // Kar Fırtınası: kısa hazırlık → atandan yayılan buz dalgası (ulaştığı herkes donar). Mürekkep: ileri fışkıran mürekkep cephesi
@@ -68,12 +70,18 @@
   /* Ağ (netgame.js): ctrl === 'remote' yarışçı başka bir telefonda simüle edilir → burada fizik/hasar/ölüm UYGULANMAZ.
      curEnt: updateEnts o an hangi varlığı işliyor (hit/death/blocked olaylarına `ent` olarak eklenir → ağda varlık eşitleme). */
   const isRemote = r => !!r && r.ctrl === 'remote';
+  /* ANTRENMAN (FM.S.tutorial = true; js/tutorial.js kurar; yalnızca tek oyunculu): sabit kolay pist (level.js), botlar saldırmaz
+     (saldırı eşyası/zarar veren güç yok), botlar ×TUT_BOT hızda ve oyuncunun biraz gerisinde kalır (lastik bant), yarış oyuncu
+     bitirmeden bitmez, oyuncunun gücü yarının ortasında bir kez dolar, ilk 3 sn çevre tehlikesi öldürmez. */
+  const tutOn = () => !!S.tutorial && !S.netRole;
+  // TUT_CHARGE: oyuncunun güç dolumu çarpanı; antrenmanda kutu dolum bonusu yok → güç eşya dersinden (kutu ~21. sn) SONRA,
+  // yüksek duvardan önce (~25. sn) bir kez dolar: koçun iki dersi çakışmaz, süzülen/kayan karakter kutuyu kaçırmaz
+  const TUT_BOT = .85, TUT_CHARGE = 1;
   let curEnt = null;
 
   /* =================== YARIŞÇI =================== */
   // görünen ad: FM.CH[id].n varsa o (ör. 'Almancı Dayı'), yoksa kimlik; kimlik (id) mantık/ağ için aynen kalır
   const dispName = id => (FM.CH[id] && typeof FM.CH[id].n === 'string' && FM.CH[id].n) || id;
-  game_dispName = dispName;
   function mkRacer(id, idx, bot) {
     const nm = dispName(id);
     return {
@@ -84,7 +92,7 @@
       slide: false, slideT: 0, climb: false, blocked: false, slam: false,
       item: null, charge: 0, boost: 0, shield: 0, balloon: false, padT: 0,
       dead: 0, inv: 0, stun: 0, frozen: 0, netted: 0, slowT: 0, pull: 0, inked: 0, ccImm: 0,
-      dash: 0, sled: 0, fly: 0, dashX: 1, dashY: 0, flyMul: 1.3, car: 0, carBlk: 0,
+      dash: 0, sled: 0, fly: 0, dashX: 1, dashY: 0, flyMul: 1.3, car: 0, carBlk: 0, tutFull: false,
       jbuf: 0, landT: 9, perfT: 0, perfCd: 0, slamPerf: false, draft: 0, draftT: 0, nmCd: 0, nmPend: null,
       onMud: false, onBelt: false, safe: { x: 60, y: 460 },
       finished: false, place: 0, ftime: 0, rp: 0, total: 0, deaths: 0, kills: 0, coins: 0, ph: 0,
@@ -117,6 +125,8 @@
 
   /* =================== MAÇ / TUR AKIŞI =================== */
   const game = FM.game = {};
+  game.dispName = dispName;
+  game.TERLIK_P = TERLIK_P;   // geliştirici ayarı (terlik kaçış penceresi ölçümü)
   /* Rastgele seçimlerde kullanılabilen temalar: eski 4 tema her zaman; yeni temalar (base alanı olanlar) ancak
      render-world onları çizebildiğini FM.R.themeReady(id) ile bildirince (o zamana kadar yalnızca açıkça seçilince açılır). */
   function readyThemes() {
@@ -150,9 +160,11 @@
     S.themeSeq = themeSeqFor(tv, S.ROUNDS);
     const n = clamp(Math.round(+opts.n || (+sv.rivals + 1) || 4), 2, FM.MAXR);
     // rakipler: önce seçilenden farklı karakterler; 7'den fazla yarışçıda karakterler tekrar eder (adı numaralanır)
-    const others = FM.ORDER.filter(k => k !== sel).sort(() => Math.random() - .5);
+    // FM.ROSTER_EXTRA = true: FM.ORDER'da olmayan yeni karakterler (FM.CH tag 'tipleme') de botların rastgele havuzuna girer
+    const pool = rosterPool();
+    const others = pool.filter(k => k !== sel).sort(() => Math.random() - .5);
     const ids = [sel];
-    for (let i = 1; i < n; i++) ids.push(i - 1 < others.length ? others[i - 1] : FM.ORDER[(Math.random() * FM.ORDER.length) | 0]);
+    for (let i = 1; i < n; i++) ids.push(i - 1 < others.length ? others[i - 1] : pool[(Math.random() * pool.length) | 0]);
     S.racers = ids.map((k, i) => mkRacer(k, i, i === 0 ? !!opts.auto : true));
     S.player = S.racers[0];
     const pm = modsFor(sel);
@@ -168,6 +180,12 @@
     game.startRound({ seed: opts.seed });
     FM.emit('match:start', { racers: S.racers, player: S.player, rounds: S.ROUNDS, mode: S.gameMode });
   };
+  function rosterPool() {
+    const p = FM.ORDER.slice();
+    if (FM.ROSTER_EXTRA) for (const k in FM.CH) if (FM.CH[k] && FM.CH[k].tag === 'tipleme' && p.indexOf(k) < 0) p.push(k);
+    return p;
+  }
+  game.rosterPool = rosterPool;
   // aynı karakterden birden çok yarışçı: "Kral 2" gibi adlandır, farklı kostüm ver (ayırt edilebilsin)
   function nameDupes(rs) {
     const cnt = {};
@@ -185,7 +203,7 @@
   game.startRound = function (opts) {
     opts = opts || {};
     const ti = opts.themeIdx != null ? opts.themeIdx : (S.themeSeq && S.themeSeq[S.round - 1] != null ? S.themeSeq[S.round - 1] : undefined);
-    S.L = FM.genLevel(S.round, { theme: ti, seed: opts.seed, mode: S.gameMode || 'classic' });
+    S.L = FM.genLevel(S.round, { theme: ti, seed: opts.seed, mode: S.gameMode || 'classic', tutorial: tutOn() });
     resetRace();
     S.limitT = S.gameMode === 'coins' ? FM.COINS_TIME : null;   // Altın Avı süresi (kalan: game.timeLeft())
     S.paused = false;          // savunma: önceki turdan kalan duraklatma yeni geri sayımı kilitlemesin
@@ -220,7 +238,7 @@
     S.cam.x = 0; S.cam.y = 0;
   }
   game.startDemo = function () {
-    const ids = FM.ORDER.slice().sort(() => Math.random() - .5).slice(0, 4);
+    const ids = rosterPool().sort(() => Math.random() - .5).slice(0, 4);
     S.ROUNDS = 1; S.round = 1; S.gameMode = 'classic'; S.netRole = null;
     const rt = readyThemes(); S.themeSeq = [rt[(Math.random() * rt.length) | 0]];
     S.racers = ids.map((k, i) => mkRacer(k, i, true));
@@ -422,7 +440,7 @@
     // yakın doğma: ölünen yerin biraz gerisi (r.safe yalnızca yedek / kurtarma)
     const rp = respPoint(cxOf(r), r.y + r.h);
     r.respX = rp ? rp.x : null; r.respY = rp ? rp.y : null;
-    r.dead = 1.1; r.deaths++; r.vx = r.vy = 0; r.climb = false; r.fly = 0; r.dash = 0; r.sled = 0; r.boost = 0; r.stun = 0; r.frozen = 0; r.netted = 0; r.pull = 0; r.ccImm = 0;
+    r.dead = 1.1; r.deaths++; r.vx = r.vy = 0; r.climb = false; r.fly = 0; r.dash = 0; r.sled = 0; r.car = 0; r.boost = 0; r.stun = 0; r.frozen = 0; r.netted = 0; r.pull = 0; r.ccImm = 0;
     const killer = src && src !== r ? src : null;
     if (killer) killer.kills++;
     r.lastHitBy = null; r.lastHitT = -9;
@@ -520,6 +538,7 @@
     if (cc && q.ccImm > 0) return false;
     if (q.balloon && kind !== 'ink') { q.balloon = false; q.inv = .4; if (near(q)) FM.fx.burst(cxOf(q), q.y - 14, ['#ff5a7a', '#ffffff'], 12); FM.emit('blocked', { r: q, by: 'balloon', src, cause, ent: curEnt }); return false; }
     q.boost = 0; q.lastHitBy = src || null; q.lastHitT = S.raceT;
+    if (cc && q.car > 0) endCar(q);   // sersemleyen/savrulan/donan/ağa takılan arabadan iner
     if (kind === 'kill') die(q, src, cause);
     else if (kind === 'stun') { q.stun = dur; q.ccImm = dur + 1; q.climb = false; q.fly = 0; if (near(q)) FM.fx.burst(cxOf(q), q.y, ['#ffd23f', '#ffffff'], 8); }
     else if (kind === 'freeze') { q.frozen = dur; q.inv = dur + .35; q.ccImm = dur + 1; q.climb = false; q.fly = 0; if (near(q)) FM.fx.burst(cxOf(q), cyOf(q), ['#bfefff', '#ffffff'], 10, 160, 300, 'ice'); }
@@ -532,9 +551,26 @@
     return true;
   }
   game.harm = harm;
+  // Alman Arabası bitti (süre, duvar, sersemletme; çağıran arabanın sürdüğünü bilir): kısa dokunulmazlıkla temiz iniş
+  function endCar(r) {
+    r.car = 0; r.carBlk = 0;
+    if (r.dead <= 0 && !isRemote(r)) r.inv = Math.max(r.inv, .5);
+    FM.emit('car:end', { r });
+  }
+  /* Araba (c.car > 0) değdiği rakibi savurur. Her istemci kendi yetkisindeki rakipleri dener (harm uzak yarışçıya işlemez):
+     uzak arabanın r.car'ı güç olayıyla kurulur, step içinde sayılır. Kutu: arabanın gövdesi (ayaktan 36 px, ±40 px). */
+  function carHits(c) {
+    const x = cxOf(c), feet = c.y + c.h, box = { x: x - 40, y: feet - 36, w: 80, h: 36 };
+    for (const q of S.racers) {
+      if (q === c || q.dead > 0 || q.finished || q.out || q.car > 0 || isRemote(q) || !ov(box, q)) continue;
+      if (harm(q, 'knock', CAR_KNOCK * abK(c), c, 'Almanci')) { FM.emit('car:hit', { r: c, victim: q }); if (near(q)) FM.fx.burst(cxOf(q), cyOf(q), ['#ffd23f', '#ffffff', '#e8202e'], 10, 240, 300, 'star', 4); }
+    }
+  }
   function envHit(q, groundHaz, cause) {
     if (q.dead > 0 || q.finished || q.dash > 0 || q.shield > 0 || q.inv > 0 || q.frozen > 0) return;
     if (groundHaz && q.sled > 0) return;
+    if (q.car > 0) return;   // Alman Arabası: yerdeki tehlikeler (diken, ezici, testere makinesi, kaya) işlemez
+    if (tutOn() && S.raceT < 3) return;   // antrenman: başlangıçtan sonraki 3 sn çevre ölümü yok
     die(q, assistOf(q), cause);
   }
   /* Affedici tehlike kutuları (görselden küçük). underHazard (kayarken ayağa kalkma denetimi) tam kutuyu kullanmaya devam eder. */
@@ -547,9 +583,10 @@
   const crushBox = k => ({ x: k.x + 4, y: k.y, w: k.w - 8, h: k.h - 3 });
   // özel güç dolumu: %100'e ulaştığı an 'charge:full' (yerel oyuncunun sesi/titreşimi için; demoda yok)
   function addCharge(r, v) {
+    if (r.tutFull && tutOn() && r === S.player) return;   // antrenman: güç bir kez dolar (charge:full bir kez)
     const was = r.charge;
     r.charge = Math.min(100, r.charge + v);
-    if (was < 100 && r.charge >= 100 && S.mode !== 'demo') FM.emit('charge:full', { r });
+    if (was < 100 && r.charge >= 100 && S.mode !== 'demo') { if (tutOn() && r === S.player) r.tutFull = true; FM.emit('charge:full', { r }); }
   }
   // kusursuz iniş/zıplama: kısa hız ödülü (yarışçı başına en sık ~1 sn'de bir)
   function perfect(r, kind) {
@@ -576,7 +613,7 @@
      Kayarak altından geçilmesi tasarlanmış ezici/testere makinesi sayılmaz. */
   function nearMissNote(r, cause) {
     if (r !== S.player || r.ctrl !== 'local' || S.mode !== 'race' || r.nmCd > 0 || r.nmPend) return;
-    if (r.dead > 0 || r.inv > 0 || r.shield > 0 || r.dash > 0 || r.frozen > 0 || r.sled > 0 || r.finished) return;
+    if (r.dead > 0 || r.inv > 0 || r.shield > 0 || r.dash > 0 || r.frozen > 0 || r.sled > 0 || r.car > 0 || r.finished) return;
     r.nmPend = { c: cause, t: .25 };
   }
   function nearMiss(r, dt, hb) {
@@ -586,7 +623,7 @@
       else if ((r.nmPend.t -= dt) <= 0) { FM.emit('nearmiss', { r, cause: r.nmPend.c }); r.nmPend = null; r.nmCd = NM_CD; }
       return;
     }
-    if (r.nmCd > 0 || r.dead > 0 || r.inv > 0 || r.shield > 0 || r.dash > 0 || r.frozen > 0 || r.sled > 0) return;
+    if (r.nmCd > 0 || r.dead > 0 || r.inv > 0 || r.shield > 0 || r.dash > 0 || r.frozen > 0 || r.sled > 0 || r.car > 0) return;
     const L = S.L, M = 7, ex = { x: hb.x - M, y: hb.y - M, w: hb.w + 2 * M, h: hb.h + 2 * M };
     const circ = (x, y, rad) => { const nx = clamp(x, hb.x, hb.x + hb.w), ny = clamp(y, hb.y, hb.y + hb.h); return (nx - x) ** 2 + (ny - y) ** 2 < rad * rad; };
     let c = null;
@@ -623,6 +660,7 @@
     r.slowT = Math.max(0, r.slowT - dt); r.pull = Math.max(0, r.pull - dt); r.inked = Math.max(0, r.inked - dt); r.padT = Math.max(0, r.padT - dt);
     r.ccImm = Math.max(0, (r.ccImm || 0) - dt);
     r.portCd = Math.max(0, (r.portCd || 0) - dt); r.ventCd = Math.max(0, (r.ventCd || 0) - dt); r.bounceT = Math.max(0, (r.bounceT || 0) - dt);
+    if (r.car > 0) { r.car = Math.max(0, r.car - dt); if (r.car <= 0) endCar(r); }
     const wasPow = r.dash > 0 || r.sled > 0 || r.fly > 0;
     r.boost = Math.max(0, r.boost - dt); r.shield = Math.max(0, r.shield - dt); r.dash = Math.max(0, r.dash - dt); r.sled = Math.max(0, r.sled - dt); r.fly = Math.max(0, r.fly - dt);
     // güç (atılım/kızak/süzülüş) bittiği an tehlikenin üstünde kalınca anında ölmesin: kısa lütuf süresi
@@ -635,7 +673,7 @@
     r.perfT = Math.max(0, (r.perfT || 0) - dt); r.perfCd = Math.max(0, (r.perfCd || 0) - dt); r.landT = (r.landT || 0) + dt;
     if (r.dead > 0) { r.dead -= dt; if (r.dead <= 0) respawn(r); c.jp = c.dp = c.use = c.ab = false; r.jbuf = 0; return; }
     const running = S.mode === 'race' || S.mode === 'demo';
-    if (running && !r.finished) addCharge(r, dt * 4 * r.chargeMul * (S.gameMode === 'chaos' ? 2 : 1));
+    if (running && !r.finished) addCharge(r, dt * 4 * r.chargeMul * (S.gameMode === 'chaos' ? 2 : 1) * (r === S.player && tutOn() ? TUT_CHARGE : 1));
     if (r.netted > 0) { r.vx = 0; r.vy = 0; c.jp = c.dp = c.use = c.ab = false; r.jbuf = 0; return; }
     const locked = r.stun > 0 || r.frozen > 0 || !running || r.finished;
     // hedef hız
@@ -645,8 +683,9 @@
     if (r.sled > 0) mult *= 1.5;
     if (r.fly > 0) mult *= r.flyMul || 1.3;              // Nuss: ileri nişanlı süzülüş biraz daha hızlı
     if (r.slowT > 0) mult *= .5;
-    if (r.onMud && r.sled <= 0) mult *= .6;
-    if (r.onSand && r.sled <= 0) mult *= .45;          // bataklık kum: çamurdan yavaş
+    if (r.car > 0) mult *= CAR_MUL;                     // Alman Arabası (çamur/kum etkilemez)
+    if (r.onMud && r.sled <= 0 && !(r.car > 0)) mult *= .6;
+    if (r.onSand && r.sled <= 0 && !(r.car > 0)) mult *= .45;          // bataklık kum: çamurdan yavaş
     if (r.onIce) mult *= r.slide ? 1.3 : 1.1;           // buz: kaygan ve hızlı (göbek üstü kayış daha da hızlı)
     if (r.perfT > 0) mult *= PERF_MUL;                  // kusursuz iniş/zıplama ödülü
     if (r.draft > 0) mult *= 1 + DRAFT_K * r.draft;     // rüzgâr arkası
@@ -654,6 +693,11 @@
     if (r.airJ && !r.onGround && r.fly <= 0 && r.dash <= 0) mult *= AIR_MUL;           // zıplayan havada daha yavaş
     // yokuş: çıkış biraz yavaş, iniş biraz hızlı; yokuş aşağı KAYMAK hızlı (eğlenceli). r.slope = dy/dx (+ iniş)
     if (r.onGround && r.slope) mult *= 1 + clamp(r.slope, -.75, .75) * (r.slide ? .5 : .2);
+    // antrenman: botlar yavaş ve oyuncunun biraz gerisinde (önüne geçen bot yavaşlayıp bekler; çok geride kalan biraz yetişir)
+    if (r.bot && tutOn() && S.player && S.player !== r) {
+      const lead = r.x - S.player.x;
+      mult *= TUT_BOT * (lead > -80 ? clamp(1 - (lead + 80) / 320, .2, 1) : lead < -700 ? 1.1 : 1);
+    }
     if (r.dash > 0) mult = DASH_V * (r.dashX == null ? 1 : r.dashX);   // yönlü atılımda yatay pay
     if (r.bot) mult *= 1 + .035 * Math.sin(S.T * .55 + r.idx * 2.1);   // ortalaması 0: yalnızca görsel ayrışma
     if (r.spawnT > 0) { r.spawnT = (c.jp || c.dp) ? 0 : r.spawnT - dt; }   // hazırlık: zıplarsa/kayarsa hemen koşar
@@ -685,19 +729,19 @@
             // kusursuz zıplama: inişten hemen sonra (ya da hemen önce basılmış tamponla) zıplayan hız kaybetmez + kısa hız ödülü
             const age = JBUF - r.jbuf;
             const perf = S.mode === 'race' && r.onGround && r.landT <= PERF_WIN && age - r.landT <= PERF_WIN && r.landHard && r.perfCd <= 0;
-            r.vy = -JUMP * (r.onSand ? .82 : 1); if (!perf) r.vx *= JUMP_KEEP; r.airJ = !perf; r.coy = 0; r.jumps = 1; r.onGround = false; r.jumpT = 1; r.jbuf = 0;
+            r.vy = -JUMP * (r.car > 0 ? CAR_HOP : r.onSand ? .82 : 1); if (!perf) r.vx *= JUMP_KEEP; r.airJ = !perf; r.coy = 0; r.jumps = r.car > 0 ? 2 : 1; r.onGround = false; r.jumpT = 1; r.jbuf = 0;   // arabada tek kısa zıplama
             if (near(r)) FM.fx.puff(cxOf(r), r.y + r.h, 4, 'rgba(255,255,255,.8)', 7, 70);
             FM.emit('jump', { r, dbl: false });
             if (perf) perfect(r, 'jump');
           }
-        } else if (c.jp && r.jumps < 2) {
+        } else if (c.jp && r.jumps < 2 && !(r.car > 0)) {
           if (r.slide) setSlide(r, false);
           r.vy = -DJ; r.vx *= DJ_KEEP; r.airJ = true; r.jumps = 2; r.slam = false; r.slamPerf = false; r.jumpT = 1; r.jbuf = 0;
           if (near(r)) FM.fx.burst(cxOf(r), r.y + r.h, ['#ffffff', '#bfe9ff'], 7, 110, 300, 'star', 4);
           FM.emit('jump', { r, dbl: true });
         }
       }
-      if (c.dp) {
+      if (c.dp && !(r.car > 0)) {   // arabada kayma/çakılma yok
         if (r.onGround && !r.slide) { setSlide(r, true); FM.emit('slide', { r }); }
         else if (!r.onGround && !r.climb && r.fly <= 0 && r.dash <= 0 && !r.slam) {
           // kusursuz çakılma: düşerken zemine çok yakınken (son an) başlatılan çakılma inişte hız ödülü verir
@@ -725,7 +769,7 @@
         if (!solidAt(r.x + r.w + 3, r.y + r.h - 2) && !locked) { r.vy = -260; r.vx = 200; FM.emit('vault', { r }); }
         r.climb = false;
       }
-    } else if (r.blocked && c.jh && !locked && !r.slide && r.fly <= 0) { r.climb = true; r.slam = false; FM.emit('climb', { r }); }
+    } else if (r.blocked && c.jh && !locked && !r.slide && r.fly <= 0 && !(r.car > 0)) { r.climb = true; r.slam = false; FM.emit('climb', { r }); }
     // yerçekimi
     if (r.climb) { r.vy = -CLIMB; r.vx = 0; r.jumps = 1; }
     else if (r.dash > 0) { r.vy = (r.dashY || 0) * RUN * DASH_V; }   // yönlü atılım: dikey pay (yerçekimi yok)
@@ -777,6 +821,8 @@
       }
     }
     if (r.climb) r.blocked = true;
+    // araba duvara dayandı: kısa süre sonra iner (tırmanabilsin)
+    if (r.car > 0) { r.carBlk = r.blocked ? (r.carBlk || 0) + dt : 0; if (r.carBlk > .12) endCar(r); }
     // Y hareketi — yüzey takibi (eğimli zemin): destek, gövde merkezinin altındaki yüzeydir (yokuşta pürüzsüz çıkış/iniş).
     // Yerde koşarken (zıplamadan) merkez yüzeyi |vx|·dt + 11 px aşağıdaysa yapışılır: yokuş aşağıda sekme/uçma yok.
     // Merkez boşluktaysa (kenar) kutunun değdiği kenar destek olur (eski affedici kenar davranışı).
@@ -820,7 +866,14 @@
       } else {
         r.slope = 0;
         for (const s of L.solids) {
-          if (s.y2 != null || !ov(r, s) || feet0 - r.h < s.y + s.h - 14) continue;
+          if (s.y2 != null) {
+            // yükselirken yokuş yüzeyi daha hızlı yükseliyor (hızlı koşu/atılımla yokuş yukarı): yüzeye otur, içine girme
+            if (s.float || rcx < s.x || rcx >= s.x + s.w) continue;
+            const t = topAt(s, rcx);
+            if (feet > t && feet0 <= t + 46) { r.y = t - r.h; r.vy = 0; r.onGround = true; r.jumps = 0; r.slope = slopeOf(s); }
+            continue;
+          }
+          if (!ov(r, s) || feet0 - r.h < s.y + s.h - 14) continue;
           r.y = s.y + s.h; r.vy = 0; if (r.climb) r.climb = false;
         }
       }
@@ -864,6 +917,7 @@
         break;
       }
     }
+    if (r.car > 0) carHits(r);
     // çevre tehlikeleri (çarpışma kutuları görselden birkaç px küçük: "kıl payı" geçişler affedilir)
     const hb = { x: r.x + 5, y: r.y + 5, w: r.w - 10, h: r.h - 7 };
     for (const s of L.spikes) if (ov(hb, spikeBox(s))) envHit(r, true, 'spikes');
@@ -926,9 +980,9 @@
     for (const b of L.boxes) {
       if (b.cd[r.idx] > 0) b.cd[r.idx] -= dt;
       else if (ov(r, b)) {
-        b.cd[r.idx] = S.gameMode === 'chaos' ? 1.5 : 3.5; addCharge(r, 18);
+        b.cd[r.idx] = S.gameMode === 'chaos' ? 1.5 : 3.5; if (!(tutOn() && r === S.player)) addCharge(r, 18);
         const got = !r.item;
-        if (got) { r.item = rollItem(r); if (r.bot) r.ai.itemT = .5 + Math.random() * 2; }
+        if (got) { r.item = b.it && r === S.player && FM.ITEMS[b.it] ? b.it : rollItem(r); if (r.bot) r.ai.itemT = .5 + Math.random() * 2; }
         if (near(r)) FM.fx.burst(b.x + 16, b.y + 16, ['#ff4d4d', '#ffffff', '#ffd23f'], 12, 200, 400, 'star', 4);
         FM.emit('box', { r, item: got ? r.item : null });
       }
@@ -967,7 +1021,8 @@
     } else if (S.mode !== 'demo' && (r === S.player || r.place === 1)) FM.fx.toast(`${r.name} bitirdi!  #${r.place}`, r === S.player ? '#ffe14d' : '#ffffff');
     if (near(r)) FM.fx.confetti(L.end + 40, L.finY - 200, r === S.player ? 70 : 25);
     // ilk bitirenden sonra diğerlerine 12 sn; kalabalık yarışta kişi başı +1.5 sn (10 kişide 21), kaosta +4 (Altın Avı'nda süre sayacı belirler)
-    if (S.finishedN === 1 && !S.limitT) S.endTimer = 12 + Math.max(0, S.racers.length - 4) * 1.5 + (S.gameMode === 'chaos' ? 4 : 0);
+    if (tutOn()) { if (r === S.player) S.endTimer = 4; }   // antrenman: yarış oyuncu bitirince (kısa kutlamayla) biter
+    else if (S.finishedN === 1 && !S.limitT) S.endTimer = 12 + Math.max(0, S.racers.length - 4) * 1.5 + (S.gameMode === 'chaos' ? 4 : 0);
     FM.emit('finish', net ? { r, place: r.place, time: r.ftime, net: true } : { r, place: r.place, time: r.ftime });
     return true;
   }
@@ -977,6 +1032,7 @@
   /* Eşya şansı sıraya göre (f: 0 lider → 1 sonuncu). Lastik bant: liderden çok geride kalan (far 0..1) daha çok hız/füze/
      yıldırım/mıknatıs, daha az tuzak/ağ/kalkan alır — geriden gelenin yarışa dönme şansı artar. */
   function rollItem(r) {
+    if (r.bot && tutOn()) return ['speed', 'shield', 'balloon'][(Math.random() * 3) | 0];   // antrenman: botlara saldırı eşyası yok
     const rk = ranking().indexOf(r), f = S.racers.length > 1 ? rk / (S.racers.length - 1) : 0;
     let lead = -1e9; for (const q of S.racers) if (!q.out && !q.finished && q.x > lead) lead = q.x;
     const far = rk > 0 && lead > -1e9 ? clamp((lead - r.x - 500) / 1500, 0, 1) : 0;
@@ -1155,6 +1211,8 @@
     const p = { x: cxOf(r), y: cyOf(r), fy: r.y + r.h };
     if (d) { p.ax = d.x; p.ay = d.y; }
     if (r.id === 'Caner') p.tgt = canerTarget(r, d);
+    else if (r.id === 'Teyze') { const t = teyzeTarget(r, d); if (t) p.tgt = t; }
+    else if (r.id === 'Marti') { const v = stealTarget(r); if (v) p.tgt = v; else p.sv = r1(SIMIT_V + Math.max(0, r.vx) * .3); }   // sv: simit hızı (ağda q ile gider)
     const ents = castAbility(r, p);
     FM.emit('ability', { r, id: r.id, p, ents });
   }
@@ -1163,6 +1221,15 @@
     if (!d) return aheadOf(r, 1300);
     return pickTarget(r, d, 1300, 1) || (d.x >= 0 ? aheadOf(r, 1300) : null);
   }
+  // Teyze'nin hedefi: varsayılan öndeki en yakın; nişanlıysa nişan yönündeki (±50°) en yakın rakip
+  function teyzeTarget(r, d) { return d ? pickTarget(r, d, 1000, .9) : aheadOf(r, 1000); }
+  // Martı: öndeki (≤ STEAL_R) eşyası olan en yakın rakip
+  function stealTarget(r) {
+    let best = null;
+    for (const q of S.racers) { if (q === r || q.dead > 0 || q.finished || q.out || !q.item) continue; const dx = q.x - r.x; if (dx > 0 && dx < STEAL_R && (!best || dx < best.x - r.x)) best = q; }
+    return best;
+  }
+  const TERLIK_DIR = { x: .92, y: -.38 };   // nişansız terlik: ileri, hafif yukarı (izleme hedefe çevirir)
   // TAFTAF atılım yönü: her zaman biraz ileri (geri nişan aynalanır), en dik ~67° yukarı, en çok ~19° aşağı
   function dashVec(d) {
     if (!d) return { x: 1, y: 0 };
@@ -1252,6 +1319,35 @@
         const e = { type: 'wave', x: cx + v.x * r.w / 2, y: cy, o: r, life: 1.15 * k, hit: [], age: 0, dur: 3.2 * k, vx: v.x * WAVE_V, vy: v.y * WAVE_V };
         if (d) { e.aim = aimTag(d); e.dir = v.x < 0 ? -1 : 1; }
         S.ents.push(e); out.push(e);
+        break;
+      }
+      case 'Almanci': {
+        // araba her istemcide kurulur (çizim + uzak arabanın çarpması); hareketini yalnızca sahibi uygular
+        r.car = CAR_T * k; r.carBlk = 0;
+        if (own) { if (r.slide) setSlide(r, false); r.climb = false; r.slam = false; }
+        FM.fx.puff(cx, fy - 6, 8, 'rgba(255,255,255,.85)', 12, 110);
+        break;
+      }
+      case 'Teyze': {
+        const v = d || TERLIK_DIR;
+        const e = { type: 'terlik', x: cx + 14 * v.x, y: cy - 10, vx: v.x * TERLIK_V, vy: v.y * TERLIK_V, r: TERLIK_R, o: r, tgt: p.tgt || null, age: 0, life: TERLIK_LIFE, dur: TERLIK_STUN * k, bn: 0, hit: [] };
+        if (d) e.aim = aimTag(d);
+        S.ents.push(e); out.push(e);
+        break;
+      }
+      case 'Marti': {
+        const v = p.tgt;
+        if (v) {
+          // eşya kapma: kapan alır (uzak kapanın eşyası ağ durumuyla düzelir), kaptıran kendi telefonunda kaybeder
+          const it = v.item || null;
+          if (it) { if (!isRemote(v)) v.item = null; r.item = it; }
+          FM.emit('steal', { r, victim: v, item: it });
+          if (near(v)) FM.fx.burst(cxOf(v), cyOf(v) - 10, ['#ffffff', '#9aa8b8', '#d9962e'], 12, 220, 200, 'leaf');
+          FM.fx.burst(cx, cy - 10, ['#ffd23f', '#ffffff'], 10, 180, 0, 'star');
+        } else {
+          const e = { type: 'simit', x: cx + 20, y: fy - SIMIT_R - 1, vx: p.sv != null ? p.sv : SIMIT_V, vy: 0, r: SIMIT_R, o: r, age: 0, life: 2.6, b: 0, rot: 0, dur: SIMIT_SLOW * k };
+          S.ents.push(e); out.push(e);
+        }
         break;
       }
     }
@@ -1394,6 +1490,14 @@
     const k = abK(r);
     switch (r.id) {
       case 'Caner': A.tgt = canerTarget(r, d); A.shape = A.tgt ? 'target' : 'none'; break;
+      case 'Teyze': {
+        // hedef varsa hedef işareti (terlik onu izler), yoksa atış yönünde düz çizgi
+        A.tgt = teyzeTarget(r, d);
+        const v = d || TERLIK_DIR;
+        A.shape = A.tgt ? 'target' : 'line';
+        if (!A.tgt) { A.pts = []; for (let i = 0; i <= 8; i++) A.pts.push([r1(cx + v.x * 340 * i / 8), r1(cy - 10 + v.y * 340 * i / 8)]); }
+        break;
+      }
       case 'Kral': A.shape = 'cone'; A.cone = d ? { x: r1(cx), y: r1(cy), ang: r2(Math.atan2(d.y, d.x)), spread: KRAL_SPREAD, len: 420 * k } : { x: r1(cx), y: r1(cy), ang: 0, spread: .45, len: 420 * k }; break;
       case 'baso': {
         const v = waveVec(d), len = WAVE_V * 1.15 * k, x0 = cx + v.x * r.w / 2;
@@ -1536,7 +1640,7 @@
   };
   /* =================== TEHDİTLER (yaklaşan atış uyarısı; yalnızca okuma) ===================
      FM.S.threats = [{x, y, kind, dir, eta, e}] — YEREL oyuncuya yaklaşan atış/etki (eta küçükten büyüğe, en fazla 8).
-       kind: 'saw' | 'dyn' | 'mis' | 'crow' | 'wave' | 'bolt' | 'ice' | 'ink' | 'meteor'
+       kind: 'saw' | 'dyn' | 'mis' | 'crow' | 'wave' | 'bolt' | 'ice' | 'ink' | 'meteor' | 'terlik' (Teyze) | 'simit' (Martı)
        x, y: tehlikenin dünya konumu (bolt'ta oyuncunun tepesi);  dir: -1 arkadan, 1 önden, 0 yukarıdan / yerinde
        eta : isabete kalan tahmini süre (sn, ≤ THR_T; 2 ondalık);  e: varlığın kendisi (çizim için; DEĞİŞTİRME)
      Bir varlık ilk kez listeye girince bir kez FM.emit('threat', {kind, x, y, dir, eta, e}) (ses/titreşim). Oyunu etkilemez
@@ -1563,6 +1667,13 @@
       if (e.dead) continue;
       switch (e.type) {
         case 'saw': if (e.o !== P && Math.abs(e.y - py) < 150) horiz(e, 'saw', e.vx, 30); break;
+        case 'simit': if (e.o !== P && Math.abs(e.y - py) < 150) horiz(e, 'simit', e.vx, 30); break;
+        case 'terlik': {
+          if (e.o === P || e.hit.includes(P) || (e.tgt !== P && Math.hypot(e.x - px, e.y - py) > 400)) break;
+          const dx = px - e.x, dy = py - e.y, d = Math.hypot(dx, dy) || 1, cl = (e.vx * dx + e.vy * dy) / d - (pvx * dx) / d;
+          if (cl > 30) put(e, 'terlik', e.x, e.y, Math.max(0, d - 24) / cl, Math.abs(e.x - px) < 30 ? 0 : e.x < px ? -1 : 1);
+          break;
+        }
         case 'wave': if (e.o !== P && !e.hit.includes(P) && Math.abs(e.y - py) < 110) horiz(e, 'wave', e.vx != null ? e.vx : WAVE_V, 24); break;
         case 'dyn': {
           if (e.o === P) break;
@@ -1596,7 +1707,8 @@
      (dev/obstacles.js'deki "doğru cevap" ile aynı):
        act : 'jump' zıpla | 'slide' kay | 'climb' zıpla + basılı tut (duvara tırman) | 'dbl' çift zıpla (geniş hendek)
        kind: 'spikes' diken | 'wall' duvar/yüksek basamak | 'ditch' hendek | 'crush' ezici | 'saw' testere makinesi | 'boulder' kaya
-             | 'sand' küçük bataklık | 'trap' tuzak | 'net' ağ | 'rollsaw' sana yuvarlanan testere
+             | 'sand' küçük bataklık | 'trap' tuzak | 'net' ağ | 'rollsaw' sana yuvarlanan testere | 'simit' yuvarlanan simit
+             | 'terlik' seni izleyen terlik (doğru anda zıpla)
        x, y: engelin başladığı dünya noktası (ikon/işaret için; y = engel tepesi ya da kenar zemini)
        dist: oyuncunun önünden engele px (≥ 0; içindeyken 0);  eta: varış süresi (sn, 2 ondalık)
      Oyunu etkilemez (ağda determinizm bozulmaz); main.js her çizilen karede çağırır. Kısa pencere taranır (~1.6 sn koşu). */
@@ -1610,10 +1722,14 @@
     const fx = P.x + P.w, feet = P.y + P.h, cx = cxOf(P), v = Math.max(160, P.vx || 0), x1 = fx + v * HINT_T + 20;
     let bt = HINT_T + 1e-6, ba = '', bk = '', bx = 0, by = 0, bd = 0;
     const cand = (act, kind, x, y, d, eta) => { d = Math.max(0, d); if (eta == null) eta = d / v; if (eta < bt) { bt = eta; ba = act; bk = kind; bx = x; by = y; bd = d; } };
-    for (const s of L.spikes) if (s.x <= x1 && s.x + s.w >= fx - 6 && Math.abs(s.y + s.h - feet) < 60) cand('jump', 'spikes', s.x, s.y, s.x - fx);
-    for (const k of L.crush) if (k.x <= x1 && k.x + k.w >= P.x && Math.abs(k.y + k.h + 26 - feet) < 40) cand('slide', 'crush', k.x, k.y + k.h, k.x - fx);
-    for (const q of L.saws) if (q.cx - q.r <= x1 && q.cx + q.r >= P.x && Math.abs(q.cy + 80 - feet) < 40) cand('slide', 'saw', q.cx - q.r, q.py, q.cx - q.r - fx);
-    for (const q of L.quicksand) if (q.w < 260 && q.x <= x1 && q.x >= fx - 6 && Math.abs(q.y - feet) < 30) cand('jump', 'sand', q.x, q.y, q.x - fx);
+    // Alman Arabası sürerken yerdeki tehlike/tuzak/ağ/kum işlemez: yalnızca duvar/hendek ipucu
+    const car = P.car > 0;
+    if (!car) {
+      for (const s of L.spikes) if (s.x <= x1 && s.x + s.w >= fx - 6 && Math.abs(s.y + s.h - feet) < 60) cand('jump', 'spikes', s.x, s.y, s.x - fx);
+      for (const k of L.crush) if (k.x <= x1 && k.x + k.w >= P.x && Math.abs(k.y + k.h + 26 - feet) < 40) cand('slide', 'crush', k.x, k.y + k.h, k.x - fx);
+      for (const q of L.saws) if (q.cx - q.r <= x1 && q.cx + q.r >= P.x && Math.abs(q.cy + 80 - feet) < 40) cand('slide', 'saw', q.cx - q.r, q.py, q.cx - q.r - fx);
+      for (const q of L.quicksand) if (q.w < 260 && q.x <= x1 && q.x >= fx - 6 && Math.abs(q.y - feet) < 30) cand('jump', 'sand', q.x, q.y, q.x - fx);
+    }
     // duvar / yüksek basamak / hendek: zemin bloklarının birleşim yerleri (≤ 46 px basamağa kendiliğinden çıkılır)
     for (const s of L.solids) {
       if (s.float || s.x > x1 || s.x < fx - 4) continue;
@@ -1626,16 +1742,21 @@
         if (rt !== null && Math.abs(rt - lt) < 50) cand(s.w > 190 ? 'dbl' : 'jump', 'ditch', s.x, lt, s.x - fx);
       }
     }
-    for (const b of L.boulders) {
+    if (!car) for (const b of L.boulders) {
       if (fx < b.x0 - 60 - v * .9 || P.x > b.x1 + 2 * b.r || Math.abs(b.y - feet) > 40) continue;
       const tc = boulderContact(b, P);
       if (tc >= 0) cand('jump', 'boulder', b.bx != null ? b.bx : b.x1, b.y, Math.max(0, (b.bx != null ? b.bx : b.x1) - b.r - fx), tc);
     }
     for (const e of S.ents) {
-      if ((e.type === 'trap' || e.type === 'net') && !e.fly && !e.dead && e.o !== P && e.x <= x1 && e.x + e.w >= fx - 6 && Math.abs(e.y + e.h - feet) < 30) cand('jump', e.type, e.x, e.y, e.x - fx);
-      else if (e.type === 'saw' && e.o !== P && !e.dead && Math.abs(e.y + e.r - feet) < 40) {
+      if ((e.type === 'trap' || e.type === 'net') && !car && !e.fly && !e.dead && e.o !== P && e.x <= x1 && e.x + e.w >= fx - 6 && Math.abs(e.y + e.h - feet) < 30) cand('jump', e.type, e.x, e.y, e.x - fx);
+      else if ((e.type === 'saw' || e.type === 'simit') && e.o !== P && !e.dead && Math.abs(e.y + e.r - feet) < 40) {
         const dx = e.x - cx, cl = dx < 0 ? e.vx - P.vx : P.vx - e.vx;
-        if (cl > 30) { const d = Math.max(0, Math.abs(dx) - e.r - P.w / 2); cand('jump', 'rollsaw', e.x, e.y, d, d / cl); }
+        if (cl > 30) { const d = Math.max(0, Math.abs(dx) - e.r - P.w / 2); cand('jump', e.type === 'saw' ? 'rollsaw' : 'simit', e.x, e.y, d, d / cl); }
+      }
+      else if (e.type === 'terlik' && e.tgt === P && !e.pass && !e.dead && !e.hit.includes(P)) {
+        // terlik izliyor: yaklaşınca (~0.25 sn kala) zıplayan kaçar
+        const dx = cx - e.x, dy = cyOf(P) - e.y, d = Math.hypot(dx, dy) || 1, cl = (e.vx * dx + e.vy * dy) / d - (P.vx * dx) / d;
+        if (cl > 30) cand('jump', 'terlik', e.x, e.y, Math.max(0, d - 24), Math.max(0, d - 24) / cl);
       }
     }
     if (!ba) return (S.hint = null);
@@ -1689,7 +1810,7 @@
           if (e.og > 0) e.og -= dt;
           if (e.age > .5) for (const q of S.racers) {
             if (q === e.o && e.og > 0) continue;
-            if (q.dead <= 0 && ov(q, e) && !(q.sled > 0) && q.fly <= 0) {
+            if (q.dead <= 0 && ov(q, e) && !(q.sled > 0) && !(q.car > 0) && q.fly <= 0) {
               const hit = harm(q, 'kill', 0, e.o, 'trap');
               if (hit || q.dead > 0) { e.dead = true; e.snap = true; FM.fx.burst(e.x + 17, e.y, ['#888888', '#cccccc'], 10); FM.emit('trap:snap', { e, r: q }); break; }
             }
@@ -1702,7 +1823,7 @@
           if (e.fly) { e.age = 0; moveDrop(e, dt, solidOf); if (sunk(e)) fizzle(e); break; }
           if (e.age > .6) for (const q of S.racers) {
             if (q === e.o) continue;   // kendi ağın seni tutmaz (ileri fırlatılan ağın içinden geçebilirsin)
-            if (q.dead <= 0 && q.netted <= 0 && ov(q, e) && !(q.sled > 0)) {
+            if (q.dead <= 0 && q.netted <= 0 && ov(q, e) && !(q.sled > 0) && !(q.car > 0)) {
               if (harm(q, 'net', 1.5, e.o, 'net')) {
                 e.n++;
                 // yarışçı ağın ortasına çekilir; oraya sığmıyorsa (duvara tırmanırken yakalandı, yokuş) ağın tabanına oturtulur,
@@ -1803,6 +1924,67 @@
           if (d < 22) { if (e.first) harm(t, 'stun', e.dur || 2.0, e.o, 'Caner'); FM.fx.burst(e.x, e.y, ['#1d1d26', '#c0182e'], 8, 200, 300, 'leaf'); e.dead = true; }
           break;
         }
+        case 'terlik': {
+          // uçan terlik: hedefe yumuşak döner (TERLIK_TURN rad/sn); hedefi geçince (kaçtı) izlemeyi bırakır. Değdiği ilk rakibi
+          // sersemletir, bir kez en yakın ikinci rakibe seker. Duvara çarpınca düşer.
+          e.life -= dt;
+          const t = e.tgt;
+          if (t && !e.pass && t.dead <= 0 && !t.finished && !t.out) {
+            // hedefin YERDEKİ gövde yüksekliğini izler (yokuş/basamak takip eder, zıplamayı değil): doğru anda zıplayan
+            // terliği altından geçirir (testere gibi kaçış penceresi); erken zıplayan iner ve vurulur
+            if (t.onGround || e.gy == null) e.gy = cyOf(t);
+            const dx = cxOf(t) - e.x, dy = e.gy - e.y;
+            if (dx * e.vx + dy * e.vy <= 0 || Math.hypot(dx, dy) < TERLIK_P.lock) e.pass = 1;
+            else {
+              const a = Math.atan2(e.vy, e.vx), w = Math.atan2(dy, dx), m = TERLIK_P.turn * dt;
+              const da = clamp(Math.atan2(Math.sin(w - a), Math.cos(w - a)), -m, m), sp = Math.hypot(e.vx, e.vy) || TERLIK_V;
+              e.vx = Math.cos(a + da) * sp; e.vy = Math.sin(a + da) * sp;
+            }
+          }
+          e.x += e.vx * dt; e.y += e.vy * dt;
+          if (solidAt(e.x, e.y) || e.y > S.L.liq) {
+            e.dead = true;
+            if (near({ x: e.x - 14, w: 28 })) FM.fx.puff(e.x, e.y, 6, 'rgba(255,255,255,.8)', 10, 80);
+            FM.emit('terlik:end', { e });
+            break;
+          }
+          for (const q of S.racers) {
+            if (q === e.o || e.hit.includes(q) || q.dead > 0 || q.finished || q.out || !circleHit(e, q, e.r)) continue;
+            e.hit.push(q);
+            harm(q, 'stun', e.dur, e.o, 'Teyze');
+            FM.emit('terlik:hit', { e, r: q });
+            if (near(q)) FM.fx.burst(e.x, e.y, ['#ff3fa0', '#ffffff', '#ffd23f'], 10, 220, 200, 'star', 4);
+            if (e.bn >= 1) { e.dead = true; break; }
+            e.bn = 1; e.pass = 0; e.life = Math.max(e.life, 1.4);
+            let nb = null, nd = 700;
+            for (const q2 of S.racers) {
+              if (q2 === e.o || e.hit.includes(q2) || q2.dead > 0 || q2.finished || q2.out) continue;
+              const d2 = Math.hypot(cxOf(q2) - e.x, cyOf(q2) - e.y); if (d2 < nd) { nd = d2; nb = q2; }
+            }
+            e.tgt = nb;
+            const sx = nb ? (cxOf(nb) >= e.x ? 1 : -1) : -(Math.sign(e.vx) || 1);
+            e.vx = sx * TERLIK_V * .75; e.vy = -TERLIK_V * .45;
+            if (!nb) e.life = Math.min(e.life, .5);
+            break;
+          }
+          break;
+        }
+        case 'simit': {
+          // yuvarlanan simit (testere gibi yerde yuvarlanır, yokuşa yapışır): değdiği ilk rakibi yavaşlatır ve tökezletir
+          if (moveSaw(e, dt, solidAt) && e.b > 1) e.life = 0;
+          e.rot = (e.rot || 0) + e.vx * dt / e.r;
+          e.life -= dt;
+          if (sunk(e)) { fizzle(e); break; }
+          for (const q of S.racers) {
+            if (q === e.o || q.dead > 0 || q.finished || q.out || !circleHit(e, q, e.r - 2)) continue;
+            if (harm(q, 'slow', e.dur, e.o, 'Marti') && q.onGround) { q.vy = -220; q.onGround = false; }
+            e.dead = true;
+            FM.emit('simit:hit', { e, r: q });
+            if (near(q)) FM.fx.burst(e.x, e.y, ['#d9962e', '#f0c070', '#fff0c0'], 12, 220, 400, 'leaf');
+            break;
+          }
+          break;
+        }
         case 'wave': {
           e.x += (e.vx != null ? e.vx : WAVE_V) * dt; if (e.vy) e.y += e.vy * dt;
           e.life -= dt; if (e.life <= 0) e.dead = true;
@@ -1836,17 +2018,24 @@
       // önde kayma engeli (ezici/testere makinesi) varken isteğe bağlı zıplama (altın, meteor, atılan nesne, kutu) yapılmaz:
       // havadan ezicinin altına inen ayakta ölür
       const slideAhead = L.crush.some(k => k.x + k.w > fx - 30 && k.x < fx + 230 && Math.abs(k.y + k.h + 26 - feet) < 30) || L.saws.some(s => s.cx + s.r > fx - 30 && s.cx - s.r < fx + 230 && Math.abs(s.cy + 80 - feet) < 30);
-      if (!groundWithin(fx + 8, feet, 240, 20)) j = need = true;   // 20: yokuş yukarı yüzey (≤ .75 eğim) zıplatmaz
+      let edgeJ = false;
+      if (!groundWithin(fx + 8, feet, 240, 20)) edgeJ = true;   // 20: yokuş yukarı yüzey (≤ .75 eğim) zıplatmaz
       else {
         // hendek/dar vadi: önde zemin birden derine iniyor ama karşı kenar aynı seviyede → atla (düşüp tırmanmak zaman kaybı)
         const g1 = groundY(fx + 12, feet - 4);
-        if (g1 !== null && g1 - feet > 60) for (const D of [150, 190, 230]) { const g2 = groundY(fx + D, feet - 60); if (g2 !== null && Math.abs(g2 - feet) < 40) { j = need = true; break; } }
+        if (g1 !== null && g1 - feet > 60) for (const D of [150, 190, 230]) { const g2 = groundY(fx + D, feet - 60); if (g2 !== null && Math.abs(g2 - feet) < 40) { edgeJ = true; break; } }
       }
+      if (edgeJ) j = need = true;
       // diken: geniş grupta daha erken zıpla (zıplama penceresi 36 px'te 0..140, 108 px'te 0..68 px — ortasını hedefle)
       for (const s of L.spikes) { const dx = s.x - fx, lead = 64 - Math.max(0, s.w - 36) * .4; if (dx > -6 && dx < lead && Math.abs(s.y + s.h - feet) < 40) { j = need = true; break; } }
       for (const e of S.ents) {
         if (e.type === 'trap' || e.type === 'net') { const dx = e.x - fx; if (dx > -e.w && dx < 90 && e.y < feet + 4 && e.y + e.h > r.y - 40) j = true; }
-        else if (e.type === 'saw' && e.o !== r && Math.abs(e.y - feet) < 50) {
+        else if (e.type === 'terlik' && e.tgt === r && !e.pass && e.o !== r) {
+          // izleyen terlik: ~0.2-0.3 sn kala zıpla (dönüş hızı sınırlı, üstünden geçer)
+          const dx = cx - e.x, dy = cyOf(r) - e.y, d = Math.hypot(dx, dy) || 1, cl = (e.vx * dx + e.vy * dy) / d - (r.vx * dx) / d;
+          if (cl > 30 && (d - 24) / cl < .26) j = need = true;
+        }
+        else if ((e.type === 'saw' || e.type === 'simit') && e.o !== r && Math.abs(e.y - feet) < 50) {
           const dx = e.x - fx;
           if ((dx > -20 && dx < 120 && e.vx < 0) || (dx > -20 && dx < 40)) j = true;
           // arkadan yetişen testere: varışına ~0.3 sn kala zıpla (havada kalış ~0.6 sn, üstünden geçer)
@@ -1888,6 +2077,7 @@
           if (dx > -25 && dx < 25 && b.y + b.h > r.y - 90 && b.y < feet) { j = true; break; }
         }
       }
+      if (r.car > 0) { sl = false; j = need = edgeJ; }   // arabada tehlike/eşya umursanmaz (bağışık); yalnızca duvar/hendek için zıpla
       if (j && !need && slideAhead) j = false;
       if (sl && r.sled <= 0) { if (r.slide || decide()) { c.dh = true; if (!r.slide) c.dp = true; a.slideT = .15; } j = false; }
       else if (j && decide()) c.jp = true;
@@ -1898,7 +2088,8 @@
     // eşya — yönlü kullanım: aynı seviyedekine yuvarlanan testere (ileri/geri), farklı yükseklikteki ya da arkadaki hedefe
     // gerçek yolu simüle edilerek seçilen kavisli atış (testere/dinamit), öndekinin önüne tuzak/ağ, yakın kovalayana geri füze
     a.aimT = Math.max(0, (a.aimT || 0) - dt);
-    if (r.item && a.itemT <= 0) {
+    const tut = tutOn();
+    if (r.item && a.itemT <= 0 && !(tut && ATTACK[r.item])) {   // antrenman: bot saldırı eşyası kullanmaz
       const ah = aheadOf(r, 700), bh = behindOf(r, 460), it = r.item;
       const level = q => Math.abs(q.y + q.h - feet) < 30;
       let go = false, ax = 0, ay = 0;
@@ -1935,7 +2126,9 @@
       if (go || a.wait > 7) { c.use = true; c.ax = go ? ax : 0; c.ay = go ? ay : 0; a.wait = 0; a.itemT = .5; }
     }
     // özel güç (yönlü: arkadakine karga/kükreme/dalga, duvar önünde yukarı atılım, çukurda hızlı süzülüş)
-    if (r.charge >= 100) {
+    // antrenman: bot zarar veren gücü hiç kullanmaz; kendine yönelik güçleri (atılım/kızak/süzülüş) yalnızca oyuncunun çok gerisindeyken
+    const tutAb = !tut || ((r.id === 'TAFTAF' || r.id === 'ertan' || r.id === 'Nuss') && S.player && r.x < S.player.x - 250);
+    if (r.charge >= 100 && tutAb) {
       a.abT += dt; let go = false, bx = 0, by = 0;
       let safe = true;
       switch (r.id) {
@@ -1959,6 +2152,20 @@
           else if (r.onGround && wallAhead(r)) { go = a.abT > 1; bx = .4; by = -.92; }              // duvar: yukarı süzülüş
           break;
         case 'baso': { const b = behindOf(r, 520); if (aheadOf(r, 800)) go = true; else if (b) { go = true; bx = -1; } break; }
+        case 'Almanci': {
+          // araba: önde yakın tehlike (diken/ezici/testere makinesi/kaya) ya da yakın rakip varken; duvar önünde değil
+          const haz = L.spikes.some(o => o.x > fx - 10 && o.x < fx + 380) || L.crush.some(o => o.x > fx - 10 && o.x < fx + 380)
+            || L.saws.some(o => o.cx > fx && o.cx < fx + 400) || L.boulders.some(b => fx > b.x0 - 400 && r.x < b.x1);
+          safe = r.onGround && !wallAhead(r);
+          go = safe && (haz || !!aheadOf(r, 220));
+          break;
+        }
+        case 'Teyze': { const ah = aheadOf(r, 950), b = behindOf(r, 500); if (ah) go = true; else if (b) { go = true; bx = -.95; by = -.3; } break; }
+        case 'Marti': {
+          if (stealTarget(r) && !r.item) go = true;                                                 // eşya kap
+          else { const ah = aheadOf(r, 480); go = !stealTarget(r) && !!ah && r.onGround && Math.abs(ah.y + ah.h - feet) < 30; }   // simit yuvarla
+          break;
+        }
       }
       if (go || (a.abT > 6 && safe)) { c.ab = true; c.bx = go ? bx : 0; c.by = go ? by : 0; a.abT = 0; }
     }
@@ -2183,7 +2390,13 @@
       for (const r of S.racers) {
         if (r.out) { if (r === S.player) clearInput(); continue; }   // elenmiş: izleyici
         // uzak (ağ) yarışçı: fizik yok; ağ katmanı game.onRemote(r, dt) ile konumu doldurur, kapı geçişi buradan izlenir
-        if (r.ctrl === 'remote') { if (typeof game.onRemote === 'function') { try { game.onRemote(r, dt); } catch (e) { console.error(e); } } if (S.mode === 'race') { markGates(r); updateDraft(r, dt); } continue; }
+        if (r.ctrl === 'remote') {
+          if (typeof game.onRemote === 'function') { try { game.onRemote(r, dt); } catch (e) { console.error(e); } }
+          if (S.mode === 'race') { markGates(r); updateDraft(r, dt); }
+          // uzak Alman Arabası: süre burada sayılır (güç olayıyla kurulur), yerel yarışçılara çarpması burada denenir
+          if (r.car > 0) { r.car = Math.max(0, r.car - dt); if (r.dead > 0) r.car = 0; else carHits(r); }
+          continue;
+        }
         if (!r.bot) {
           const c = r.ctl, I = FM.input;
           c.jh = I.jh; c.dh = I.dh;
@@ -2201,7 +2414,7 @@
         if (S.gameMode === 'elim') checkGates();
         else if (S.gameMode === 'chaos') meteorStep();
         updateSpec();
-        if (S.endTimer === null && S.raceT > 150) S.endTimer = 10;
+        if (S.endTimer === null && S.raceT > 150 && !tutOn()) S.endTimer = 10;
         if (S.endTimer !== null) S.endTimer -= dt;
         let active = 0; for (const r of S.racers) if (!r.finished && !r.out) active++;
         const timeUp = S.limitT && S.raceT >= S.limitT;

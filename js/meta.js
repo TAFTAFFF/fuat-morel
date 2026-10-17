@@ -323,7 +323,8 @@
   /** Kozmetiğin para birimi: FM.COSMETICS öğesinde cur: 'gems' ise elmas, yoksa altın */
   function cosCur(it) { return it && it.cur === 'gems' ? 'gems' : 'coins'; }
   function rarOf(it) { return it && RARITY[it.rar] ? it.rar : 'c'; }
-  function totalSkins() { return FM.ORDER.length * cosList('skins').filter(x => num0(x.price) > 0).length; }
+  // koleksiyon: yalnızca sahip olunan karakterlerin görünümleri sayılır (kilitli tipleme yüzdeyi düşürmesin)
+  function totalSkins() { const s = S(); return FM.ORDER.filter(k => !FM.chOwned || FM.chOwned(k, s)).length * cosList('skins').filter(x => num0(x.price) > 0).length; }
   function totalStyle() { let n = 0; for (const t of STYLE_TYPES) n += cosList(t).filter(x => num0(x.price) > 0).length; return n; }
   function ownedSkinCount(s) {
     let n = 0; const o = s.owned && s.owned.skins;
@@ -594,7 +595,9 @@
     return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
   }
   function mkEntry(tp, slot, rng, r) {
-    return { t: tp.id, slot, goal: tp.goal, prog: 0, c: 0, n: 0, ch: tp.ev === 'fchar' ? FM.ORDER[Math.floor(rng() * FM.ORDER.length) % FM.ORDER.length] : '', r: r || 0 };
+    // "X ile yarış" görevi yalnızca ücretsiz (klan) karakterlerden: kilitli tipleme görevi imkânsız kılmasın
+    const free = FM.ORDER.filter(k => !(FM.chPaid && FM.chPaid(k)));
+    return { t: tp.id, slot, goal: tp.goal, prog: 0, c: 0, n: 0, ch: tp.ev === 'fchar' ? free[Math.floor(rng() * free.length) % free.length] : '', r: r || 0 };
   }
   /** O güne ait 3 görevi deterministik olarak üretir (aynı gün herkes aynı görevleri alır — klan kardeşliği). */
   function genDaily(day) {

@@ -296,24 +296,27 @@
      ===================================================================== */
   const H = (s, i) => FM.hash(s * 131 + i * 7919);
   const PATTERNS = {
-    forma(g, s, c) {  // futbol forması: gövdede takım renkli dikey şeritler + yaka, kolda kol bandı, bacakta tozluk (isim/arma yok)
+    forma(g, s, c) {  // futbol forması: gövdede kalın, ortalı takım şeritleri + V yaka, kolda kısa kol + manşet, bacakta şort + tozluk (isim/arma yok)
       if (!c || !c.kit) return;
-      const A = c.kit[0], Bc = c.kit[1], part = c.part;
+      const A = c.kit[0], Bc = c.kit[1], part = c.part, dk = sh(A, -0.32);
       if (part === 'body') {
         g.fillStyle = A; g.fillRect(-40, -44, 80, 64);
         g.fillStyle = Bc;
-        if (c.stripes === 'v') for (let x = -40; x < 40; x += 9) g.fillRect(x, -44, 4.5, 64);
+        if (c.stripes === 'v') for (let x = -12; x < 40; x += 9.6) { g.fillRect(x, -44, 4.8, 64); g.fillRect(-x - 4.8, -44, 4.8, 64); }
         else if (c.stripes === 'h') for (let y = -40; y < 20; y += 8) g.fillRect(-40, y, 80, 4);
-        g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(-40, -44, 14, 64);
-        g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(10, -44, 30, 64);
-        g.strokeStyle = Bc; g.lineWidth = 2.4; g.lineCap = 'round'; g.beginPath(); g.moveTo(-8, -17); g.lineTo(0.5, -12.6); g.lineTo(9, -17); g.stroke();   // V yaka
-        g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 0.9; g.stroke();
-      } else if (part === 'armF' || part === 'armB') {
-        g.fillStyle = A; g.fillRect(-12, -8, 28, 10);
-        g.fillStyle = Bc; g.fillRect(-12, 0.6, 28, 1.8);
+        else { g.fillRect(-40, -1.4, 80, 2.2); }   // düz forma: belde ince şerit
+        g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(-40, -44, 31, 64);
+        g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(6, -44, 34, 64);
+        g.strokeStyle = Bc === '#ffffff' || c.stripes !== 'v' ? Bc : A; g.lineWidth = 2.6; g.lineCap = 'round'; g.beginPath(); g.moveTo(-6.5, -16.5); g.lineTo(0.5, -11.8); g.lineTo(7.5, -16.5); g.stroke();   // V yaka
+        g.strokeStyle = 'rgba(0,0,0,0.4)'; g.lineWidth = 0.9; g.stroke();
+      } else if (part === 'armF' || part === 'armB' || part === 'wingF' || part === 'wingB') {
+        g.fillStyle = A; g.fillRect(-12, -8, 28, 12.4);                 // kısa kol
+        g.fillStyle = Bc; g.fillRect(-12, 3, 28, 2.2);                  // manşet
       } else if (part === 'legF' || part === 'legB') {
-        g.fillStyle = A; g.fillRect(-12, 2.2, 30, 6.5);
-        g.fillStyle = Bc; g.fillRect(-12, 2.2, 30, 1.6); g.fillRect(-12, 7.2, 30, 1.2);
+        g.fillStyle = c.stripes === 'v' ? Bc : (Bc === '#ffffff' ? '#ffffff' : dk); g.fillRect(-12, -6, 30, 9);   // şort
+        g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(-12, 2.2, 30, 0.9);
+        g.fillStyle = A; g.fillRect(-12, 5, 30, 4.6);                   // tozluk
+        g.fillStyle = Bc; g.fillRect(-12, 6.6, 30, 1.4);
       }
     },
     stripes(g, s) {   // zebra: dalgalı siyah şeritler
@@ -3679,6 +3682,34 @@
   function cosItemOf(type, id) { const L = FM.COSMETICS && FM.COSMETICS[type]; if (L) for (const it of L) if (it.id === id) return it; return null; }
   /** cosmeticIcon(type, id, size, opts) → size×size tuval (önbellekli). opts {nick (plaka adı), char (skin önizlemesi için karakter)}.
       Şeffaf zemin: kart arka planını arayüz verir. */
+  /** Takım renkli forma (tişört) ikonu: kısa kol, şeritler, V yaka, manşet; isim/arma yok */
+  function jerseyIcon(g, size, sd) {
+    const u = size / 100, A = sd.kit[0], Bc = sd.kit[1];
+    const shirt = () => {
+      g.beginPath();
+      g.moveTo(36 * u, 14 * u); g.quadraticCurveTo(50 * u, 22 * u, 64 * u, 14 * u);   // yaka oyuğu
+      g.lineTo(88 * u, 24 * u); g.lineTo(96 * u, 44 * u); g.lineTo(80 * u, 50 * u); g.lineTo(76 * u, 42 * u);
+      g.lineTo(76 * u, 88 * u); g.quadraticCurveTo(50 * u, 93 * u, 24 * u, 88 * u);
+      g.lineTo(24 * u, 42 * u); g.lineTo(20 * u, 50 * u); g.lineTo(4 * u, 44 * u); g.lineTo(12 * u, 24 * u);
+      g.closePath();
+    };
+    g.save();
+    g.lineJoin = 'round';
+    shirt(); g.fillStyle = A; g.fill();
+    g.save(); shirt(); g.clip();
+    g.fillStyle = Bc;
+    if (sd.stripes === 'v') for (let x = 29; x < 76; x += 15) g.fillRect(x * u, 0, 7.5 * u, size);
+    else { g.fillRect(0, 80 * u, size, 4 * u); }
+    g.fillStyle = Bc; g.fillRect(0, 38 * u, 24 * u, 14 * u); g.fillRect(76 * u, 38 * u, 24 * u, 14 * u);   // manşetler
+    g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0, 0, 40 * u, size);
+    g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(62 * u, 0, 40 * u, size);
+    g.restore();
+    g.beginPath(); g.moveTo(37 * u, 15 * u); g.quadraticCurveTo(50 * u, 21 * u, 63 * u, 15 * u); g.lineTo(50 * u, 29 * u); g.closePath();   // V yaka (boyun oyuğu)
+    g.fillStyle = '#2a1640'; g.fill();
+    g.strokeStyle = sd.stripes === 'v' ? A : Bc; g.lineWidth = 4 * u; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
+    shirt(); g.strokeStyle = '#1b1024'; g.lineWidth = 3.4 * u; g.stroke();
+    g.restore();
+  }
   R.cosmeticIcon = function (type, id, size, opts) {
     opts = opts || {};
     size = clamp(Math.round(size || 96), 16, 512);
@@ -3699,6 +3730,11 @@
         const s = plateSprite(nick, PLATE_DEF[id] ? id : 'basic', true, '');
         const sc = min(size * 0.92 / s.w, size * 0.6 / s.h);
         g.drawImage(s.c, cx - s.w / 2 * sc, cy - (s.h - (s.oy - (s.ph || 20) / 2 - 3.5)) * sc + s.h * sc / 2 - s.h * sc / 2, s.w * sc, s.h * sc);
+      } else if (type === 'skins' && SKIN_DEF[id] && SKIN_DEF[id].pat === 'forma') {
+        // forma kartı: portre forma göğsünü kırptığı için takım renkli forma çizilir, köşede karakterin kendisi
+        jerseyIcon(g, size, SKIN_DEF[id]);
+        const pc = R.portrait(ch, size, { skin: id, ring: false }), ps = size * 0.46;
+        g.drawImage(pc, size - ps * 0.96, size - ps * 0.98, ps, ps);
       } else if (type === 'skins') {
         const pc = R.portrait(ch, size, { skin: SKINS[id] ? id : 'klasik', ring: false });
         g.drawImage(pc, 0, 0, size, size);
